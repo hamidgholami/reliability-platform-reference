@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+config:
+  MD013: false
+  MD024:
+    siblings_only: true
+  MD041: false
+

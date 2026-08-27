@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+.terraform/
+*.tfstate
+*.tfstate.*
+.tofu/
+
+.venv/
+__pycache__/
+node_modules/
+coverage/
+reports/
+

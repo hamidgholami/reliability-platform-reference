@@ -1,0 +1,104 @@
+# Reference Architecture
+
+Status: draft for Phase 0 review
+
+## System intent
+
+Reliability Platform Reference is one delivery and operations system with
+multiple environment profiles. The local Incus implementation is the primary
+low-cost proving ground; cloud profiles reuse the interfaces and operational
+contracts without pretending all providers are identical.
+
+```text
+Developer
+   |
+   v
+Jenkins + approval broker ----> Vault/OpenBao ----> short-lived credentials
+   |                                  |
+   v                                  v
+Artifact and image stores       SSH certificates / TOTP validation
+   |
+   v
+GitOps desired state ----------> Kubernetes workloads
+   |                                  |
+   +---------- evidence <-------------+
+                 |
+                 v
+       Metrics, logs, traces, SLOs
+                 |
+                 v
+       Backup, restore, and game days
+```
+
+## Architectural layers
+
+1. **Workstation and governance** — repository policy, local checks, signed
+   human commits, ADRs, and cost/destruction guardrails.
+2. **Foundation** — networking, DNS, PKI, Incus hosts, and environment inventory.
+3. **Identity and secrets** — Keycloak for human SSO/MFA and Vault/OpenBao for
+   machine identity, dynamic secrets, SSH certificates, and deployment TOTP.
+4. **Delivery** — Jenkins pipelines, an original shared library, artifact stores,
+   policy checks, approvals, and GitOps promotion.
+5. **Runtime** — Kubernetes built with Kubespray, plus selected infrastructure
+   services outside the workload cluster.
+6. **Reliability** — telemetry, SLOs, alerting, backup, restore, failure
+   injection, and measured recovery evidence.
+
+## Service placement
+
+The default placement is deliberately split. Jenkins, the approval broker,
+Keycloak, Vault/OpenBao, PostgreSQL, Pulp, Harbor, observability services, edge
+services, and backup infrastructure run on dedicated Incus instances outside
+the workload Kubernetes cluster. Sample applications, Traefik Gateway API,
+MetalLB, GitOps controllers, cert-manager, agents, and Velero run inside it.
+
+This prevents the workload cluster from becoming the only route to its own
+identity, recovery, and deployment control plane. See
+[ADR-0002](adr/0002-service-placement.md).
+
+## Bootstrap dependency graph
+
+```text
+Human workstation and signed repository
+              |
+              v
+Host OS + network + external DNS delegation
+              |
+              v
+Ansible --> Incus host/cluster --> foundational instances
+              |                         |
+              |                         +--> CoreDNS + internal CA
+              |                         +--> PostgreSQL
+              |                         +--> Keycloak
+              |                         +--> Vault/OpenBao
+              v
+Official Incus OpenTofu provider --> instance/network/storage resources
+              |
+              v
+Kubespray --> Kubernetes --> GitOps --> applications and agents
+              |
+              v
+Jenkins delivery, telemetry, backup, restore, and reliability tests
+```
+
+Ansible owns host installation, prerequisites, and cluster enrollment. The
+official Incus OpenTofu provider owns API-managed Incus resources. Neither tool
+silently takes ownership of the other's objects.
+
+## Failure-domain rules
+
+- An Incus cluster is either one non-HA development member or at least three
+  members; a two-member cluster is rejected.
+- Control-plane dependencies needed for recovery must not exist only inside the
+  failed workload cluster.
+- Backups need a second failure domain and restore evidence. A backup tool's
+  successful exit code is not recovery proof.
+- A cloud provider's managed feature may replace an implementation detail, but
+  it must satisfy the same documented identity, evidence, cost, and recovery
+  contract.
+
+## Explicit non-claims
+
+Phase 0 deploys nothing. The architecture does not yet prove high availability,
+production readiness, secure configuration, RPO/RTO achievement, or portability.
+Those claims require later automated tests and published evidence.
