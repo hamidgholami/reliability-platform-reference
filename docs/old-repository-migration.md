@@ -1,5 +1,8 @@
 # Legacy Repository Review and Migration
 
+Status: deferred until Reliability Platform Reference reaches its stable-release
+outcome. This work is outside Phases 0 through 9 and does not block them.
+
 The earlier lab repositories are research inputs, not codebases to merge
 wholesale. Their history may contain duplicated automation, obsolete versions,
 or material unsuitable for a public flagship repository.

@@ -77,15 +77,13 @@ Acceptance: later plans can attach tests to an objective, threat, and rollback.
 
 Acceptance: local `make check` succeeds and the three CI jobs succeed remotely.
 
-### P0-06 — Legacy-repository security review
+## Deferred work outside Phase 0
 
-- [x] Define the review inventory and clean-room migration process.
-- [ ] Scan all reachable local branches of candidate repositories.
-- [ ] Rotate any discovered live credential before further publication.
-- [ ] Decide archive, retain, or supersede status per old repository.
-
-Acceptance: each old repository has a documented disposition and no known live
-credential remains in its reachable history.
+Reviewing, scanning, migrating, or archiving the legacy repositories is
+explicitly deferred until this repository reaches its stable-release outcome.
+It is not a Phase 0 exit criterion and must not distract from implementing the
+new platform. The clean-room migration policy remains documented for that later
+review.
 
 ## Verification
 
@@ -119,5 +117,4 @@ Phase 0 is complete only when:
 - local checks and required remote checks pass;
 - branch protection and private vulnerability reporting are enabled;
 - domain and address assumptions are validated or explicitly deferred;
-- legacy repositories have a security-review disposition;
 - no substantial Phase 1 infrastructure implementation has started early.

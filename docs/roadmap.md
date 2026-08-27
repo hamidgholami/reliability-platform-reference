@@ -16,6 +16,10 @@ an implementation plan, acceptance evidence, and rollback or teardown path.
 | 8 | AWS profiles and selected Azure integrations with cost controls |
 | 9 | Failure injection, game days, portfolio evidence, and stable release |
 
+After the stable release, legacy repositories can be scanned and individually
+retained, archived, or marked as superseded. That cleanup is not on the critical
+path for this platform.
+
 K3s remains a separate lightweight learning track. Puppet is not a priority
 unless a real legacy-management scenario justifies its maintenance cost. Nomad,
 Ceph, and similar systems are considered only when they close a demonstrated
