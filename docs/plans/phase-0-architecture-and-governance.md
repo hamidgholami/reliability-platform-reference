@@ -1,6 +1,6 @@
 # Phase 0 Plan: Architecture and Governance
 
-- Status: in progress
+- Status: in progress; ADR-0003 acceptance remains
 - Owner: Hamid Gholami
 - Started: 2026-08-27
 - Milestone: create `Phase 0 - Architecture and governance` after publication
@@ -30,7 +30,7 @@ The IDs below become GitHub issues when the local repository is published.
 - [x] Add Apache-2.0 `LICENSE`, `NOTICE`, and `AUTHORS.md`.
 - [x] Add contribution, DCO, security, authorship, and dependency rules.
 - [x] Add ignore and editor policies.
-- [ ] Human reviews and creates the signed initial commit.
+- [x] Human reviews and creates the signed initial commit.
 
 Acceptance: license checks pass and the working tree contains no real secret.
 
@@ -40,7 +40,8 @@ Acceptance: license checks pass and the working tree contains no real secret.
 - [x] Define local/on-prem and AWS environment profiles.
 - [x] Record the integrated-platform boundary in ADR-0001.
 - [x] Record control-service placement in ADR-0002.
-- [ ] Review and accept the draft architecture as the implementation baseline.
+- [x] Review and accept the draft architecture as the implementation baseline.
+- [ ] Review and accept or reject proposed ADR-0003 for the DNS role split.
 
 Acceptance: every planned product maps to a platform capability and environment.
 
@@ -50,8 +51,8 @@ Acceptance: every planned product maps to a platform capability and environment.
 - [x] Draft local address, DHCP, DNS, and cloud-mapping rules.
 - [x] Draft external DNS and internal/public PKI paths.
 - [x] Define the operator trust kit contract.
-- [ ] Confirm domain registration and authoritative delegation.
-- [ ] Validate address ranges against the actual host and VPN networks.
+- [x] Confirm `apadanalab.de` registration and Netcup authoritative delegation.
+- [x] Validate address ranges against the actual host and VPN networks.
 
 Acceptance: a reviewer can identify every bootstrap dependency and the recovery
 route when Kubernetes is unavailable.
@@ -62,7 +63,8 @@ route when Kubernetes is unavailable.
 - [x] Document assets, trust boundaries, priority threats, and initial controls.
 - [x] Define local-first cloud cost and teardown policy.
 - [x] Define naming and clean-room migration policies.
-- [ ] Add a data-flow diagram when implementation interfaces are known.
+- [x] Defer the detailed data-flow diagram until implementation interfaces are
+  known.
 
 Acceptance: later plans can attach tests to an objective, threat, and rollback.
 
@@ -72,8 +74,8 @@ Acceptance: later plans can attach tests to an objective, threat, and rollback.
 - [x] Add Markdown, license, and Gitleaks checks.
 - [x] Add a least-privilege GitHub Actions workflow with pinned dependencies.
 - [x] Document target branch-protection settings.
-- [ ] Create the remote repository and enable private vulnerability reporting.
-- [ ] Apply and capture branch-protection settings after the first human commit.
+- [x] Create the remote repository and enable private vulnerability reporting.
+- [x] Apply and capture branch-protection settings after the first human commit.
 
 Acceptance: local `make check` succeeds and the three CI jobs succeed remotely.
 
@@ -101,11 +103,9 @@ and capture branch-protection evidence.
 
 ## Rollback
 
-Phase 0 creates only local files and Git metadata. Before the human's first
-commit, individual changes can be edited or omitted. After publication, reverse
-an accepted architecture decision with a superseding ADR; do not rewrite shared
-history. Domain and GitHub configuration require their own provider recovery
-procedures.
+Phase 0 creates only local files and Git metadata. Reverse an accepted
+architecture decision with a superseding ADR. Domain and GitHub configuration
+require their own provider recovery procedures.
 
 ## Exit criteria
 

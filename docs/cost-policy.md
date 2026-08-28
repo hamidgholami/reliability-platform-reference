@@ -18,9 +18,9 @@ temporary unless a later ADR establishes a justified standing service.
 
 ## Phase 0 budget
 
-Phase 0 creates no cloud infrastructure. Expected external cost is limited to a
-domain registration if the maintainer completes it. Cloudflare Free DNS and
-local Incus are the default no-additional-subscription path.
+Phase 0 creates no cloud infrastructure. Its external cost is the registered
+`apadanalab.de` domain. Netcup authoritative DNS and local Incus form the
+no-additional-subscription path; a second public DNS provider is not required.
 
 Prices and free-tier terms are volatile. Each cloud execution plan must record a
 fresh estimate rather than relying on values copied into this repository.

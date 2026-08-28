@@ -4,9 +4,10 @@ An open, reproducible reference platform for demonstrating production-minded
 DevOps and site reliability engineering practices across local, on-premises,
 and cloud environments.
 
-The repository is currently in **Phase 0: architecture and governance**. It
-contains decisions, guardrails, and automated repository checks. Deployable
-infrastructure will be added only after the Phase 0 exit criteria are met.
+The repository is currently completing **Phase 0: architecture and
+governance**. It contains decisions, guardrails, and automated repository
+checks. Deployable infrastructure will be added only after the Phase 0 exit
+criteria are met.
 
 ## Intended outcomes
 
@@ -42,9 +43,9 @@ or security boundary changes require an ADR.
 
 ## Current namespace plan
 
-The current public-domain candidate is `apadanalab.de`, with development
-services below `dev.apadanalab.de`. The domain remains configurable and is not
-considered available until registration and DNS validation are complete.
+The registered public domain is `apadanalab.de`, with development services
+below `dev.apadanalab.de`. Netcup currently provides both registration and
+authoritative public DNS. Environment suffixes remain configurable inputs.
 
 ## License
 

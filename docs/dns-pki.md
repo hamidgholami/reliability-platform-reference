@@ -1,10 +1,11 @@
 # DNS and PKI Plan
 
-Status: draft pending domain registration and delegation validation.
+Status: Phase 0 baseline; DNSSEC and certificate automation remain to be
+implemented.
 
 ## Namespace
 
-The current candidate base domain is `apadanalab.de`.
+The registered base domain is `apadanalab.de`.
 
 - `dev.apadanalab.de` — present development and demonstration environment;
 - `prod.apadanalab.de` — reserved for a future production-like environment;
@@ -13,17 +14,23 @@ The current candidate base domain is `apadanalab.de`.
   `jenkins.dev.apadanalab.de`.
 
 The redundant form `*.apps.lab.apadanalab.*` is intentionally not used. Domain
-and suffix values remain configurable until registration succeeds.
+and suffix values remain configurable so profiles can be reproduced elsewhere.
 
-## Cheapest practical external DNS path
+## Public authoritative DNS
 
-1. Register the domain with a reliable registrar that supports the chosen TLD.
-2. Delegate authoritative DNS to Cloudflare Free.
-3. Enable DNSSEC at Cloudflare and publish the DS record through the registrar.
-4. Create a narrowly scoped API token for only the required DNS zone and record
-   operations.
-5. Use ACME DNS-01 for public certificates without publishing private service
-   addresses.
+Netcup is the registrar and authoritative DNS provider. The live delegation is
+to Netcup nameservers, so another DNS provider is not required. The next steps
+are to enable DNSSEC through Netcup and validate the resulting DS chain.
+
+Cloudflare is not part of the baseline. It may be reconsidered only if a later
+requirement justifies moving public authoritative DNS, such as a needed proxy,
+WAF, or a materially safer certificate-automation interface.
+
+ACME DNS-01 automation must use a maintained client or integration that supports
+the Netcup API. Provider credentials must be scoped as narrowly as Netcup
+allows, stored in Vault/OpenBao, and excluded from Git. If direct automation
+cannot meet that security contract, delegate only the ACME challenge namespace
+to a suitable automation provider rather than moving the entire public zone.
 
 Registrar lock, account MFA, recovery codes, and separate recovery contacts are
 part of the trust boundary.
@@ -38,6 +45,12 @@ part of the trust boundary.
   must have a removal date.
 - CA private keys, ACME credentials, and recovery material never enter Git.
 
-Two internal CoreDNS instances serve private answers. Split-horizon records map
-service names to Incus addresses locally, while the public zone contains only
-safe ownership and challenge records unless a service is deliberately exposed.
+The proposed internal DNS design is documented in
+[ADR-0003](adr/0003-separate-platform-and-kubernetes-dns-roles.md). Two BIND 9
+instances serve private authoritative answers for the platform namespace.
+Kubernetes retains CoreDNS for cluster service discovery and forwards the
+platform namespace to BIND. Split-horizon records map service names to Incus
+addresses locally, while the public zone contains only safe ownership and
+challenge records unless a service is deliberately exposed.
+
+Public DNS must never contain RFC 1918 service addresses.

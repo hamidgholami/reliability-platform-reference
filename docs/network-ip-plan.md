@@ -22,8 +22,10 @@ The actual values are inputs, not constants embedded in roles or modules.
 Incus provides its own managed bridge, DHCP, DNS, and NAT for local instances;
 no physical router, switch, or firewall appliance is required. Stable services
 use explicit instance addresses or DHCP reservations managed through the Incus
-API. Two CoreDNS instances provide platform service discovery and forward other
-queries upstream.
+API. Under the proposed DNS role split, two BIND 9 instances serve the private
+platform namespace and forward other queries upstream. Kubernetes CoreDNS
+continues to serve cluster-local discovery and forwards platform-zone queries
+to BIND.
 
 Services communicate by DNS name, never by an address copied into application
 configuration. Public DNS must not publish RFC 1918 addresses.

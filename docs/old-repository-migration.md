@@ -30,5 +30,5 @@ or material unsuitable for a public flagship repository.
 6. Archive superseded repositories with a pointer here only after the replacement
    capability is demonstrably available.
 
-The private Baufi repositories are experience sources only. Their code, naming,
-and internal topology must not be copied into this project.
+Private workplace repositories are never project inputs. Do not copy their code,
+names, topology, documentation, or other identifying details into this project.
