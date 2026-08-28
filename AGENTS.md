@@ -9,9 +9,10 @@ workflow with measured evidence over a catalogue of unrelated tools.
 
 ## Current phase
 
-Phase 0 is complete. Phase 1 is next and requires a reviewed implementation plan
-before deployable infrastructure is added. Do not add implementation or empty
-future-product directories before the relevant phase begins.
+Phase 0 is complete. The Phase 1 implementation plan is accepted. P1-00 is
+complete, and P1-01 repository interfaces and quality gates is the active work
+item. Do not add implementation or empty future-product directories before the
+relevant work item begins.
 
 ## Non-goals and boundaries
 
@@ -21,6 +22,9 @@ future-product directories before the relevant phase begins.
   without a test and evidence.
 - Do not add a tool only to increase the product list. Explain its role in the
   end-to-end platform.
+- For local and on-premises profiles, evaluate native Incus capabilities before
+  adding another infrastructure service. Add a tool only for a documented gap
+  that Incus cannot meet sufficiently under the profile's acceptance criteria.
 - Do not create Git submodules.
 
 ## Sources of truth

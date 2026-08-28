@@ -63,21 +63,21 @@ Git contains the desired Incus network, instance, and zone configuration. Incus
 automatically generates DNS records for instances attached to the zone, so
 those addresses are not duplicated in a hand-written BIND zone.
 
-The future Ansible inventory file
-`ansible/inventories/dev/group_vars/all/dns.yml` is the source of truth only for
-manual records outside Kubernetes. These include service aliases, names that do
-not match an Incus instance, and addresses not derived from the attached Incus
+Future Git-tracked provider inputs are the source of truth only for manual
+records outside Kubernetes. These include service aliases, names that do not
+match an Incus instance, and addresses not derived from the attached Incus
 network. An `A` record maps a name to an address, while a `CNAME` maps an alias
 to another DNS name and never directly to an IP address.
 
 The change flow is:
 
-1. Ansible declares the Incus forward/reverse zones, their network attachment,
-   and approved BIND transfer peers.
+1. The official Incus provider declares the forward/reverse zones, their
+   network attachment, approved BIND transfer peers, and reviewed manual
+   records.
 2. Incus automatically generates records when instances, gateways, and network
    ports change.
-3. For a manual name or alias, add the desired record to the Git-tracked DNS
-   data and let Ansible apply it through the Incus API.
+3. For a manual name or alias, add the desired record to the Git-tracked
+   provider inputs and apply it through the Incus API.
 4. CI validates the data and BIND secondary configuration.
 5. Incus notifies both BIND secondaries, which retrieve the updated zone through
    authenticated AXFR and answer normal DNS queries.

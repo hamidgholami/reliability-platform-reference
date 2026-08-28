@@ -4,10 +4,10 @@ An open, reproducible reference platform for demonstrating production-minded
 DevOps and site reliability engineering practices across local, on-premises,
 and cloud environments.
 
-**Phase 0: architecture and governance** is complete. The repository contains
-the accepted decisions, guardrails, and automated checks that constrain later
-implementation. Phase 1 will add the reproducible Incus and network foundation
-through its own reviewed implementation plan.
+**Phase 0: architecture and governance** is complete. Phase 1 has completed its
+capability and ownership review; repository interfaces and quality gates are
+next. The accepted decisions and guardrails constrain the reproducible Incus
+and network foundation implementation.
 
 ## Intended outcomes
 

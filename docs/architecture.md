@@ -65,16 +65,16 @@ Human workstation and signed repository
 Host OS + network + external DNS delegation
               |
               v
-Ansible --> Incus host/cluster --> foundational instances
+Ansible --> Incus host/cluster
+              |
+              v
+Official Incus OpenTofu provider --> network/storage/DNS-zone resources
               |                         |
-              |                         +--> Incus DNS zones
-              |                         +--> BIND 9 secondaries + internal CA
+              v                         +--> Incus foundational instances
+Ansible guest configuration             +--> BIND 9 secondaries + internal CA
               |                         +--> PostgreSQL
               |                         +--> Keycloak
               |                         +--> Vault/OpenBao
-              v
-Official Incus OpenTofu provider --> instance/network/storage resources
-              |
               v
 Kubespray --> Kubernetes --> GitOps --> applications and agents
                                   |
@@ -87,6 +87,9 @@ Jenkins delivery, telemetry, backup, restore, and reliability tests
 Ansible owns host installation, prerequisites, and cluster enrollment. The
 official Incus OpenTofu provider owns API-managed Incus resources. Neither tool
 silently takes ownership of the other's objects.
+
+The bootstrap, resource, TSIG, and state boundary is defined in
+[ADR-0005](adr/0005-separate-incus-bootstrap-and-resource-ownership.md).
 
 The DNS boundary uses Incus network zones as the hidden primary, BIND 9 outside
 Kubernetes as the query-serving secondaries, and CoreDNS inside Kubernetes for

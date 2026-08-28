@@ -29,6 +29,7 @@ fi
 
 for source_file in Makefile .editorconfig .gitignore .markdownlint-cli2.yaml \
   scripts/doctor.sh scripts/check-license.sh scripts/scan-secrets.sh \
+  scripts/lima-host-probe.sh \
   .github/workflows/quality.yml; do
   if [ -f "$source_file" ] && \
     ! grep -q "SPDX-License-Identifier: Apache-2.0" "$source_file"; then

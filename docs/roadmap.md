@@ -6,7 +6,7 @@ an implementation plan, acceptance evidence, and rollback or teardown path.
 | Phase | Outcome |
 | --- | --- |
 | 0 | Architecture, governance, repository checks, and approved boundaries |
-| 1 | Reproducible Incus and network foundation through an original Ansible role |
+| 1 | Reproducible Incus and network foundation through Ansible and the official Incus provider |
 | 2 | Identity, PKI, Vault/OpenBao, dynamic secrets, SSH certificates, and approvals |
 | 3 | Kubespray Kubernetes foundation and GitOps bootstrap |
 | 4 | Jenkins platform library and end-to-end delivery path using a coherent sample application |
@@ -26,8 +26,10 @@ Ceph, and similar systems are considered only when they close a demonstrated
 capability gap rather than expand the product list.
 
 [Phase 0 architecture and governance](plans/phase-0-architecture-and-governance.md)
-is complete. The next planning task is the Phase 1 Incus and network foundation
-implementation plan.
+is complete. The accepted
+[Phase 1 Incus and network foundation plan](plans/phase-1-incus-and-network-foundation.md)
+has completed its P1-00 capability and ownership spike. P1-01 repository
+interfaces and quality gates is next.
 
 Phase 4 will introduce a small, coherent Java Spring Boot application as the
 system under delivery. It will demonstrate build, unit and integration tests,

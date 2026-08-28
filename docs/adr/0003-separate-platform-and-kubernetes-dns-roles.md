@@ -34,12 +34,17 @@ NOTIFY, answer ordinary client queries, and do not provide general recursive
 resolution. Keep CoreDNS inside Kubernetes for `cluster.local` discovery and
 forward only the private platform namespace to the BIND pair.
 
-Ansible manages the Incus zone declarations, manual records, transfer peers,
-TSIG material references, and BIND secondary configuration. Incus bridge DNS
-forwards the private namespace to BIND and resolves other names through its
-normal upstream path. Trusted workstations and VPN resolvers conditionally
-forward only the private namespace to BIND. None of these DNS endpoints is
-exposed publicly.
+The official Incus provider manages zone declarations, manual records, network
+attachment, and transfer-peer fields. Ansible manages BIND secondary
+configuration and protected key files. Both consume the same TSIG value from a
+bootstrap secret source without reading it from each other's output. The exact
+boundary and state controls are defined in
+[ADR-0005](0005-separate-incus-bootstrap-and-resource-ownership.md).
+
+Incus bridge DNS forwards the private namespace to BIND and resolves other
+names through its normal upstream path. Trusted workstations and VPN resolvers
+conditionally forward only the private namespace to BIND. None of these DNS
+endpoints is exposed publicly.
 
 ## Rationale
 
