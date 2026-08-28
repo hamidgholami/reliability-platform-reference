@@ -25,8 +25,9 @@ unless a real legacy-management scenario justifies its maintenance cost. Nomad,
 Ceph, and similar systems are considered only when they close a demonstrated
 capability gap rather than expand the product list.
 
-The active execution plan is
-[Phase 0 architecture and governance](plans/phase-0-architecture-and-governance.md).
+[Phase 0 architecture and governance](plans/phase-0-architecture-and-governance.md)
+is complete. The next planning task is the Phase 1 Incus and network foundation
+implementation plan.
 
 Phase 4 will introduce a small, coherent Java Spring Boot application as the
 system under delivery. It will demonstrate build, unit and integration tests,

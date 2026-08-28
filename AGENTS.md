@@ -9,8 +9,8 @@ workflow with measured evidence over a catalogue of unrelated tools.
 
 ## Current phase
 
-The repository is in Phase 0. Changes may establish governance, architecture,
-plans, checks, and decisions. Do not add deployable infrastructure or empty
+Phase 0 is complete. Phase 1 is next and requires a reviewed implementation plan
+before deployable infrastructure is added. Do not add implementation or empty
 future-product directories before the relevant phase begins.
 
 ## Non-goals and boundaries
@@ -43,8 +43,8 @@ same change. Architecture and trust-boundary changes require an ADR.
 4. Run `make check` and report exact evidence. If a check cannot run, state why.
 5. Document rollback and destructive behavior before enabling mutations.
 
-Useful Phase 0 targets are `make help`, `make doctor`, `make lint-markdown`,
-`make lint-license`, `make scan-secrets`, and `make check`.
+The repository-wide validation targets are `make help`, `make doctor`,
+`make lint-markdown`, `make lint-license`, `make scan-secrets`, and `make check`.
 
 ## Security and cost
 

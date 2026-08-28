@@ -1,6 +1,6 @@
 # Reference Architecture
 
-Status: Phase 0 baseline; ADR-0003 remains proposed
+Status: accepted Phase 0 baseline
 
 ## System intent
 
@@ -67,7 +67,8 @@ Host OS + network + external DNS delegation
               v
 Ansible --> Incus host/cluster --> foundational instances
               |                         |
-              |                         +--> BIND 9 + internal CA
+              |                         +--> Incus DNS zones
+              |                         +--> BIND 9 secondaries + internal CA
               |                         +--> PostgreSQL
               |                         +--> Keycloak
               |                         +--> Vault/OpenBao
@@ -87,8 +88,9 @@ Ansible owns host installation, prerequisites, and cluster enrollment. The
 official Incus OpenTofu provider owns API-managed Incus resources. Neither tool
 silently takes ownership of the other's objects.
 
-The proposed DNS boundary keeps private platform authority in BIND 9 outside
-Kubernetes and CoreDNS inside Kubernetes for cluster service discovery. See
+The DNS boundary uses Incus network zones as the hidden primary, BIND 9 outside
+Kubernetes as the query-serving secondaries, and CoreDNS inside Kubernetes for
+cluster service discovery. See
 [ADR-0003](adr/0003-separate-platform-and-kubernetes-dns-roles.md).
 
 ## Failure-domain rules

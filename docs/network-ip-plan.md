@@ -1,7 +1,7 @@
 # Network and IP Plan
 
-Status: draft; validate against the actual workstation and cloud networks before
-implementation.
+Status: accepted Phase 0 baseline; cloud ranges still require per-environment
+validation before implementation.
 
 ## Local reference allocation
 
@@ -22,10 +22,25 @@ The actual values are inputs, not constants embedded in roles or modules.
 Incus provides its own managed bridge, DHCP, DNS, and NAT for local instances;
 no physical router, switch, or firewall appliance is required. Stable services
 use explicit instance addresses or DHCP reservations managed through the Incus
-API. Under the proposed DNS role split, two BIND 9 instances serve the private
-platform namespace and forward other queries upstream. Kubernetes CoreDNS
-continues to serve cluster-local discovery and forwards platform-zone queries
-to BIND.
+API.
+
+Incus forward and reverse network zones form the hidden DNS primary and derive
+records automatically from instance and network state. Two BIND 9 instances are
+authoritative secondaries: they receive the zones from Incus through
+authenticated transfer and answer client queries. Incus managed-bridge DNS
+forwards the private platform namespace to BIND and resolves other names through
+its normal upstream path. Kubernetes CoreDNS continues to serve cluster-local
+discovery and forwards only platform-zone queries to the BIND pair.
+
+Trusted workstations use split DNS for the platform namespace. On macOS this can
+be represented by a resolver entry for `dev.apadanalab.de`; Linux clients use an
+equivalent route-only domain or conditional-forwarding configuration. VPN and
+future site networks must provide the same conditional DNS route.
+
+DNS resolution does not create network reachability. A client must also have a
+route to `10.20.0.0/24`, directly through the Incus host or through a trusted
+VPN. This is especially important when the Incus host runs behind a Linux VM on
+a macOS workstation.
 
 Services communicate by DNS name, never by an address copied into application
 configuration. Public DNS must not publish RFC 1918 addresses.

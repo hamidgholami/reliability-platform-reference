@@ -1,6 +1,7 @@
 # Phase 0 Plan: Architecture and Governance
 
-- Status: in progress; ADR-0003 acceptance remains
+- Status: completed
+- Completed: 2026-08-28
 - Owner: Hamid Gholami
 - Started: 2026-08-27
 - Milestone: create `Phase 0 - Architecture and governance` after publication
@@ -41,7 +42,7 @@ Acceptance: license checks pass and the working tree contains no real secret.
 - [x] Record the integrated-platform boundary in ADR-0001.
 - [x] Record control-service placement in ADR-0002.
 - [x] Review and accept the draft architecture as the implementation baseline.
-- [ ] Review and accept or reject proposed ADR-0003 for the DNS role split.
+- [x] Review and accept ADR-0003 for the DNS role split.
 
 Acceptance: every planned product maps to a platform capability and environment.
 
