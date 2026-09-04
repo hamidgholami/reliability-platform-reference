@@ -1,18 +1,25 @@
 # Environment Profiles
 
 Profiles describe intended capability and ownership, not identical topology.
-Only `developer-validation` is expected to run continuously at first.
+The workstation is a control and test environment, not a continuously running
+platform. `single-node-reference` is the first deployment-acceptance profile.
 
 | Profile | Purpose | Foundation | Kubernetes | Cost posture |
 | --- | --- | --- | --- | --- |
-| `developer-validation` | Fast local validation | One Incus member | Small Kubespray cluster | Local-only by default |
-| `onprem-reference` | Full local demonstration | Incus, non-HA or 3+ members | Kubespray | Explicit host capacity budget |
+| `workstation-validation` | Fast checks and optional disposable integration | No persistent foundation; optional one-VM Lima harness | None | Local and ephemeral |
+| `single-node-reference` | First deployable end-to-end increment | One Debian VM with standalone Incus; initially supplied by a minimal AWS root | Deferred to Phase 3 | Ephemeral, tagged, and measured |
+| `onprem-reference` | Later expanded on-premises demonstration | Incus, non-HA or 3+ members | Kubespray | Explicit host capacity budget |
 | `onprem-ha` | Failure-domain experiments | 3+ Incus members | HA control plane | Created only for scheduled tests |
 | `aws-minimal` | Cloud interface validation | Minimal AWS primitives | Reused or compact cluster | TTL and budget required |
 | `aws-eks-ephemeral` | Managed-Kubernetes comparison | AWS/EKS | Ephemeral EKS | Destroy deadline required |
 
 Azure integrations may be introduced after the AWS profiles establish stable
 interfaces. They are not a Phase 0 deployment commitment.
+
+The initial AWS attempt uses `t4g.small` and 30 GiB encrypted `gp3`. It is a
+minimum-cost experiment rather than a capacity promise. Scale only when the
+active acceptance test records a resource failure. The profile uses Incus
+system containers and does not require nested virtualization.
 
 ## Common contract
 

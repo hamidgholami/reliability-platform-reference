@@ -1,370 +1,407 @@
-# Phase 1 Plan: Incus and Network Foundation
+# Phase 1 Plan: Minimal Single-Node Incus Foundation
 
-- Status: accepted on 2026-08-28; P1-00 is complete and P1-01 is next
+- Status: revised and accepted on 2026-09-04; P1-01 is next
 - Owner: Hamid Gholami
-- Proposed start: approved
-- Profile: `developer-validation` first; cluster behavior remains supported and
-  separately tested
+- Default deployment profile: `single-node-reference`, supplied initially by
+  the AWS bootstrap root
+- Optional test profile: `workstation-validation`
 
 ## Outcome
 
-Create one or three reproducible Debian 13 Linux hosts with Lima, apply minimal
-Debian preparation plus a tested upstream hardening profile, and install and
-initialize Incus. Then provision and validate the minimum provider-managed
-substrate: project, storage, managed network, DNS zones, profiles, and
-disposable smoke instances. Prove that the substrate can be rerun, destroyed
-within its declared boundary, and recreated without manual instance
-configuration.
+Create or select one Debian 13 VM, install and initialize standalone Incus, and
+use the official Incus provider to create the smallest useful substrate:
 
-Phase 1 produces a foundation, not the final platform. It must not deploy
-Kubernetes, Vault/OpenBao, Keycloak, Jenkins, artifact services, application
-workloads, public ACME automation, Ceph, or OVN.
+- one restricted development project;
+- one local `dir` storage pool;
+- one Incus-managed bridge with DHCP, DNS, and NAT;
+- one minimal instance profile; and
+- one disposable system container.
 
-Lima is test and developer infrastructure. A three-Lima-member cluster validates
-automation, membership, and quorum behavior but does not represent three
-physical failure domains or justify an HA claim.
+Prove host and provider idempotence, container connectivity, bounded destroy,
+and clean recreation. This is the first deployable platform increment, not a
+production or HA environment.
+
+The AWS bootstrap path starts with a `t4g.small` instance and a 30 GiB encrypted
+`gp3` root volume. This is a deliberately small hypothesis, not a capacity
+claim: record observed usage and move to `t4g.medium` or larger only when the
+active acceptance test demonstrates a resource failure. A pre-existing local
+or hosted VM may satisfy the same target contract. Incus system containers are
+mandatory; nested virtualization and Incus VMs are optional.
+
+Phase 1 does not deploy Kubernetes, DNS secondaries, PKI, Vault/OpenBao,
+Keycloak, Jenkins, artifact services, observability, backup services, Ceph, OVN,
+or application workloads. AWS is used only to supply the single generic Debian
+target; AWS-native platform architecture remains a later phase.
+
+## Delivery principle
+
+Apply [ADR-0006](../adr/0006-use-progressive-single-node-delivery.md). Every
+work item must produce executable evidence before scope expands. Planning or
+research that is not required by the active acceptance criterion moves to the
+backlog.
+
+Use this promotion ladder:
+
+| Level | Purpose | Required environment |
+| --- | --- | --- |
+| Workstation checks | Formatting, linting, syntax, unit tests, and non-mutating IaC validation | macOS and CI |
+| Disposable integration | Optional fast feedback for Ansible and Incus behavior | One Lima Debian VM |
+| Deployment acceptance | Real package, SSH, reboot, Incus, provider, and rebuild evidence | One `single-node-reference` Debian VM, initially EC2 |
+| Expansion tests | Cloud-provider behavior, clustering, and failure domains | Later, requirement-specific infrastructure |
+
+Passing workstation checks does not prove target behavior. Conversely, a Lima
+test is skipped when it requires privileged macOS networking or substantial
+Lima-specific engineering; the same test runs on the reference VM instead.
 
 ## Mandatory design rules
 
-- Apply [ADR-0004](../adr/0004-prefer-native-incus-capabilities.md): investigate
-  native Incus functionality before adding an infrastructure dependency.
-- Use one explicitly non-HA Incus member for the first developer profile. A
-  cluster has at least three members; a two-member mode is invalid.
-- Ansible owns host preparation, Incus installation, daemon initialization,
-  cluster formation, and guest OS/service configuration.
-- A thin local `debian_prepare` role handles only host preparation that upstream
-  hardening does not provide. Pin and invoke `devsec.hardening.os_hardening` and
-  `devsec.hardening.ssh_hardening` instead of reimplementing their controls.
-- Apply an explicit Incus-host variable profile to the upstream roles. Generic
-  hardening must not change firewall, forwarding, bridge, namespace,
-  filesystem, SSH transport, or AppArmor behavior in a way that breaks Lima or
-  Incus; substrate-specific controls belong in `incus_host`.
-- The official Incus Terraform/OpenTofu provider owns API-managed projects,
-  networks, network zones and records, storage, profiles, and instances.
-- Do not split ownership of the same field between Ansible and infrastructure
-  state. Resolve sensitive transfer-peer configuration before implementation.
+- Apply [ADR-0004](../adr/0004-prefer-native-incus-capabilities.md): use native
+  Incus functionality unless a documented gap justifies another service.
+- Use one explicitly non-HA Incus member. Do not implement cluster joins in
+  Phase 1.
+- Ansible owns Debian preparation, hardening integration, Incus installation,
+  standalone initialization, and guest configuration.
+- A thin local `debian_prepare` role handles only preparation that the pinned
+  `devsec.hardening` roles do not provide.
+- Apply explicit Incus-safe hardening overrides. Do not break forwarding,
+  namespaces, AppArmor, bridge services, or the operator's SSH route.
+- The official Incus Terraform/OpenTofu provider owns projects, networks,
+  storage, profiles, and instances after the Incus API is healthy.
 - Terraform/OpenTofu provisioners and `remote-exec` are not configuration
   management.
-- All mutations require explicit profile selection. Destruction must print its
-  exact boundary and require confirmation.
-- No real credentials, client certificates, TSIG keys, state, join tokens, or
-  generated inventories enter Git.
+- AWS VM bootstrap and Incus substrate use separate OpenTofu roots and state.
+- All mutations require explicit profile selection. Apply and destroy show the
+  exact host, project, and resource boundary and remain interactive by default.
+- No credentials, private keys, client certificates, state, plans, or generated
+  inventories enter Git or published evidence.
+- AWS resources require owner, purpose, environment, and expiry tags. No NAT
+  gateway, load balancer, Elastic IP, or paid Marketplace image belongs in the
+  minimum path.
 
-## Review gates before implementation
+## Accepted starting gates
 
-The maintainer must explicitly decide the following in this plan or a linked
-ADR before the affected work begins:
+| Decision | Phase 1 choice |
+| --- | --- |
+| Deployment target | One Debian 13 VM; AWS bootstrap is the initial supplier |
+| Starting AWS resources | `t4g.small` plus 30 GiB encrypted `gp3`; scale from evidence |
+| AMI | Latest official Debian 13 arm64 from owner `136693071363`; no paid image subscription |
+| Workload type | Incus system container; Incus VM optional |
+| Incus release source | Debian 13 native Incus LTS package policy |
+| IaC command | OpenTofu apply; Terraform compatibility validation |
+| Storage | Local `dir` pool |
+| Host hardening | Pinned `devsec.hardening` roles plus thin local preparation |
+| Local virtualization | One disposable Lima VM when useful, never mandatory |
+| AWS region | `eu-central-1` by default; configurable and included in cost checks |
+| AWS networking | Dedicated minimal VPC path; one temporary public IPv4, no NAT gateway or Elastic IP |
+| Clustering | Deferred; not a Phase 1 exit criterion |
+| Private authoritative DNS | Deferred to Phase 2 beside PKI and identity |
 
-| Decision | Recommended starting point | Reason |
-| --- | --- | --- |
-| First execution target | One Debian 13 Lima VM using VZ | Reproducible developer host with no HA claim |
-| Incus release source | Debian 13 native LTS package | Native, supported packaging with minimal repository trust |
-| IaC command | OpenTofu apply; Terraform compatibility validation | Open-source primary path while retaining Terraform-compatible HCL |
-| Developer storage | `dir` unless a suitable dedicated ZFS device exists | Avoid unsafe loop-device or host-disk assumptions |
-| Cluster testing | Three Debian 13 Lima VMs on `user-v2` | VM-to-VM communication without claiming physical HA |
-| Lima nested virtualization | Enable and probe on supported M3+ VZ hosts | Incus containers are baseline; Incus VMs remain capability-gated |
-| Host-reachable Lima network | Defer `socket_vmnet` pending security review | Needed for direct Mac routing, but adds a privileged host helper |
-| Host hardening | Pinned `devsec.hardening` roles plus a thin local preparation role | Reuse maintained controls while testing explicit Incus-safe overrides |
-| TSIG ownership | Provider owns Incus peer fields; Ansible owns BIND files; both consume one runtime secret | Prevent overlapping ownership while acknowledging secret-bearing state |
+## Minimal AWS VM contract
 
-The accepted developer harness uses Lima 2.2 or newer and the tier-one
-`debian-13` template. A versioned Lima YAML file disables the unneeded built-in
-containerd integration, avoids host-directory mounts into Incus hosts, and sets
-explicit CPU, memory, disk, VZ, network, and nested-virtualization inputs.
+The AWS configuration is a separate bootstrap root. It creates only:
 
-One-node testing may use `vzNAT` when direct host access is required. The
-three-node cluster uses `user-v2`, because `vzNAT` addresses are not reachable
-from other guests. `user-v2` provides guest-to-guest communication but not
-direct host routing. Full macOS split-DNS acceptance therefore requires a later
-choice between securely installed `socket_vmnet`, explicit forwarding, or a
-VPN-style route.
+- one dedicated VPC, public subnet, internet gateway, route table, and route
+  association;
+- one security group allowing SSH and the Incus API only from a required
+  operator CIDR;
+- one EC2 key-pair resource from a supplied public key;
+- one `t4g.small` EC2 instance using the current official Debian 13 arm64 AMI;
+  and
+- one encrypted, delete-on-termination, 30 GiB `gp3` root volume.
+
+The instance requires IMDSv2, uses basic rather than paid detailed monitoring,
+and runs on demand for predictable short tests. Spot instances and additional
+AWS services are not part of the first path.
+
+Resolve the latest AMI using an `aws_ami` data source restricted to Debian's
+official AWS account `136693071363`, the `debian-13-arm64-*` name, arm64
+architecture, EBS root device, and HVM virtualization. Do not hard-code a
+region-specific AMI ID or select an unreviewed Marketplace image. The Debian
+image has no paid software subscription, but EC2, EBS, public IPv4, and data
+transfer can still cost money.
+
+The default uses a temporary auto-assigned public IPv4 because the host needs
+outbound package and image downloads and the workstation must reach SSH and the
+Incus API. A public IPv4 is billable outside applicable free-tier allowances.
+Do not add a NAT gateway merely to make the address private: its fixed hourly
+and processing charges would make this one-host path more expensive. A later
+private-access profile may use an EC2 Instance Connect Endpoint plus a reviewed
+egress design.
+
+Before apply, the workflow must:
+
+- verify AWS caller identity, selected region, free-tier eligibility, current
+  instance price, and AMI architecture;
+- verify an active notification-only AWS cost budget; its subscriber address
+  remains outside this repository;
+- require an explicit operator CIDR and reject `0.0.0.0/0`;
+- show every potentially billable resource and an expiry timestamp;
+- require an explicit confirmation; and
+- make `aws-destroy` and an orphan check part of the same session's workflow.
+
+Free-tier and promotions reduce charges but never become correctness
+assumptions. The current cheapest eligible type can change, and `t4g.small` may
+prove too small. The repository keeps the type configurable and records the
+tested value in evidence.
 
 ## Work items
 
-### P1-00 — Incus capability and ownership spike
+### P1-00 — Capability and ownership review
 
-- [x] Create a requirement-to-Incus capability matrix for host, network, DNS,
-  IPAM, storage, images, access, metrics, backup, and clustering.
-- [x] Review current official Incus documentation and `lxc/incus-deploy` as
-  upstream prior art; do not copy its implementation.
-- [x] Confirm the official provider resources needed for networks, zones,
-  records, storage, profiles, and instances.
-- [x] Review how network-zone TSIG configuration is represented by the provider
-  and OpenTofu state, then select one safe owner for it. Retain an empirical
-  disposable plan/state check for P1-05 when the pinned CLI is installed.
-- [x] Record pinned Incus, Ansible, provider, IaC CLI, and test-tool versions.
-- [x] Verify the Lima Debian 13 template, VZ backend, `user-v2` node-to-node
-  network, `vzNAT` host-access boundary, and nested-virtualization probe.
-- [x] Capture only non-secret target-host capability facts; never record serial
-  numbers, hardware UUIDs, device identifiers, or unrelated host configuration.
+Status: complete.
 
-Acceptance: every planned dependency either fills a documented Incus gap or is
-removed, and every resource or sensitive field has exactly one owner.
+The original investigation remains in the
+[P1-00 capability and ownership review](phase-1-capability-and-ownership-review.md).
+[ADR-0006](../adr/0006-use-progressive-single-node-delivery.md) narrows which
+reviewed capabilities are required now. Research into clustering, BIND/TSIG,
+and advanced Lima networking is retained as future context, not implementation
+work.
 
-Evidence and decisions are recorded in the
-[P1-00 capability and ownership review](phase-1-capability-and-ownership-review.md)
-and [ADR-0005](../adr/0005-separate-incus-bootstrap-and-resource-ownership.md).
+### P1-01 — Repository interfaces and fast quality gates
 
-### P1-01 — Repository interfaces and quality gates
+- [ ] Add only the Ansible, inventory, infrastructure, test, and runbook files
+  needed by the single-node increment; do not create empty future directories.
+- [ ] Pin Ansible, `devsec.hardening`, OpenTofu, the Incus provider, test tools,
+  the AWS provider, and CI actions in their normal dependency or lock files.
+- [ ] Add Ansible formatting, syntax, and lint checks plus HCL formatting and
+  non-mutating validation to the local and CI interface.
+- [ ] Add a sanitized example inventory for one remote Debian VM.
+- [ ] Add an isolated AWS bootstrap root matching the minimal AWS VM contract;
+  keep its backend and outputs separate from Incus-substrate state.
+- [ ] Add one reusable Lima Debian 13 YAML and lifecycle wrapper, but keep Lima
+  targets optional.
+- [ ] Extend `make help` with clear local-check, optional-Lima, target
+  preflight, baseline, bootstrap, plan, apply, validate, and destroy commands.
+- [ ] Document which commands are workstation-only and which mutate a selected
+  Linux target.
 
-- [ ] Add real Ansible collection, inventory, infrastructure, test, and runbook
-  files only as they become functional; do not add empty product directories.
-- [ ] Add one reusable Lima Debian 13 node YAML and orchestration that creates
-  either one standalone node or three consistently named cluster nodes.
-- [ ] Extend the root `Makefile` with documented commands for host preflight,
-  Lima lifecycle, baseline, bootstrap, plan, apply, validation, and destroy.
-- [ ] Pin Ansible collections, including `devsec.hardening`, the Incus provider,
-  and CI actions.
-- [ ] Add Ansible and HCL formatting, static validation, and secret scanning to
-  the existing local/CI interface.
-- [ ] Document which checks run on a laptop and which require disposable Linux
-  infrastructure.
+Acceptance: static CI uses no infrastructure credentials, `make help` exposes
+every supported command, and no command silently creates a VM or cloud resource.
 
-Acceptance: a reviewer discovers every supported command through `make help`,
-and static CI needs no infrastructure credentials.
+### P1-02 — Minimal Debian preparation and hardening
 
-### P1-02 — Debian preparation and upstream hardening integration
+- [ ] Validate Debian 13 before mutation.
+- [ ] Add a thin `debian_prepare` role for required updates, approved packages,
+  CA certificates, Python, time synchronization, the operator account, sudo,
+  authorized keys, persistent journal policy, and reboot reporting.
+- [ ] Invoke pinned `devsec.hardening.os_hardening` and
+  `devsec.hardening.ssh_hardening`; do not copy their implementation.
+- [ ] Define only the Incus-safe overrides needed to preserve forwarding,
+  namespaces, filesystems, AppArmor, and the active SSH transport.
+- [ ] Validate generated SSH configuration and a new control connection before
+  closing the original session.
+- [ ] Reboot when required, reconnect, and run the preparation and hardening
+  path twice.
+- [ ] Record unexpected listening services and relevant post-run facts without
+  collecting unrelated host information.
 
-- [ ] Pin a reviewed `devsec.hardening` release and record its supported Ansible
-  and Debian versions, license, changelog, and selected roles.
-- [ ] Add a thin `debian_prepare` role that validates Debian 13 and manages only
-  security/package updates, approved prerequisite packages, CA certificates,
-  Python readiness, time synchronization, the operator account, sudo, SSH
-  authorized keys, persistent journal policy, and reboot-required reporting.
-- [ ] Invoke `devsec.hardening.os_hardening` and
-  `devsec.hardening.ssh_hardening` directly; do not copy, fork, or lightly
-  rewrite their tasks into this repository.
-- [ ] Define a reviewed Incus-host variable profile that preserves required
-  IPv4 and selected IPv6 forwarding, namespaces, filesystems, kernel features,
-  AppArmor integration, Lima's SSH user, and required SSH forwarding behavior.
-- [ ] Leave generic firewall ownership out until an Incus-compatible policy is
-  selected and tested against Incus-managed `nftables`, DHCP, DNS, and NAT.
-- [ ] Validate the generated SSH configuration before reload, open a fresh
-  control connection after hardening, reboot, and reconnect before continuing.
-- [ ] Verify clock health before Incus joins and report unexpected listening
-  services as evidence.
-- [ ] Run preparation and both upstream roles twice, then capture forwarding,
-  namespace, AppArmor, SSH, and reboot-readiness evidence for integration.
-- [ ] Make no CIS compliance claim; reserve benchmark-specific remediation for
-  a separately reviewed optional profile.
+Acceptance: the second run is idempotent, SSH remains reachable after reboot,
+and the host is ready for Incus. No CIS or production-hardening claim is made.
 
-Acceptance: preparation and pinned upstream roles are idempotent, SSH checks
-prevent lockout, required updates and host prerequisites are covered, and the
-reviewed profile does not break Lima access, Incus forwarding, namespaces,
-AppArmor, or managed bridge services.
+### P1-03 — Standalone `incus_host` Ansible role
 
-### P1-03 — Original `incus_host` Ansible role
-
-- [ ] Validate supported OS/release, package source, stable member addresses,
-  time synchronization, required ports, storage inputs, virtualization support,
-  version compatibility, and member count before mutation.
-- [ ] Install the selected Incus package and manage daemon readiness.
-- [ ] Support explicit `standalone` and `cluster` modes, rejecting two members.
+- [ ] Validate OS/release, stable target address, time health, package source,
+  storage inputs, and required ports before mutation.
+- [ ] Install the selected Debian Incus package and manage daemon readiness.
+- [ ] Support standalone mode only and reject cluster-mode input with a clear
+  deferred-scope message.
 - [ ] Render and apply versioned `incus admin init --preseed` input without
-  persisting secret-bearing artifacts.
-- [ ] Bootstrap exactly one cluster member and serialize additional joins using
-  short-lived tokens protected by `no_log`.
-- [ ] Delete join/preseed artifacts unconditionally, including after failure.
-- [ ] Verify daemon/API health and cluster membership through structured output,
-  not human-oriented text matching.
-- [ ] Stop at the healthy Incus API boundary; do not create provider-owned
-  projects, networks, storage, profiles, or instances in this role.
+  persisting generated artifacts.
+- [ ] Verify daemon and API health through structured output.
+- [ ] Stop at the healthy API boundary; do not create provider-owned projects,
+  networks, storage pools, profiles, or instances.
+- [ ] Run twice and verify that no bootstrap artifact remains.
 
-Acceptance: a second run is idempotent, no join material remains, standalone and
-three-member modes report healthy, and a failed preflight makes no mutation.
+Acceptance: standalone initialization is idempotent, the Incus API is healthy,
+and failed preflight makes no mutation.
 
-### P1-04 — Lima role integration and recovery tests
+### P1-04 — Reference VM bootstrap and promotion
 
-- [ ] Create one standalone Debian 13 Lima VM from the versioned YAML and apply
-  `debian_prepare`, the pinned upstream hardening roles, and then `incus_host`.
-- [ ] Create three Debian 13 Lima VMs on `user-v2`, apply preparation and the
-  upstream hardening profile, and test bootstrap plus serialized Incus joins.
-- [ ] Probe `/dev/kvm` and an Incus VM smoke test only when Lima nested
-  virtualization is enabled and the guest kernel reports support.
-- [ ] Treat an Incus system container with working DHCP, DNS, NAT, and outbound
-  connectivity as the mandatory nested workload for the Lima acceptance path.
-- [ ] Test invalid two-member input, incompatible versions, failed joins, token
-  cleanup, rerun behavior, and safe recovery entry points.
-- [ ] Document that nested tests prove automation behavior, not physical failure
-  domains or production HA.
+- [ ] Run all fast workstation checks first.
+- [ ] When useful, create one disposable Debian 13 Lima VM and exercise P1-02
+  and P1-03 without adding privileged host networking.
+- [ ] Skip Lima cleanly when unavailable or when the test would require
+  Mac-specific routing work.
+- [ ] Plan the AWS bootstrap root and show identity, region, selected official
+  AMI, instance type, disk, public IPv4, estimated price, tags, and expiry.
+- [ ] Apply the AWS root only after explicit confirmation and generate a
+  non-secret target inventory from its outputs.
+- [ ] Apply the same P1-02 and P1-03 paths to the selected
+  `single-node-reference` VM.
+- [ ] Confirm resource capacity, reboot/reconnect behavior, Incus API access,
+  and absence of unintended listeners on the reference VM.
 
-Acceptance: test evidence shows idempotence and cleanup on both success and
-failure without publishing credentials or host-identifying data.
+Acceptance: the real reference VM, not merely mocks or Lima, reaches the
+healthy standalone Incus API boundary. The AWS root has no resources outside
+its declared boundary. Optional Lima failure does not block deployment when the
+reference-target tests pass.
 
-### P1-05 — Provider-managed Incus substrate
+### P1-05 — Minimal provider-managed substrate
 
-- [ ] Configure the pinned official `lxc/incus` provider without auto-generated
-  long-lived credentials.
-- [ ] Inspect a disposable plan and state file with a synthetic TSIG value to
-  confirm representation and redaction before creating the persistent zone.
-- [ ] Create the development project and its limits/restrictions.
-- [ ] Create the `platform0` managed bridge with `10.20.0.0/24`, NAT, DHCP,
-  non-overlapping stable/dynamic/MetalLB ranges, and IPv6 policy.
-- [ ] Create forward and reverse Incus network zones and attach them to the
-  network.
-- [ ] Create the selected storage pool and minimal instance profile.
-- [ ] Create one disposable system container and one VM only when host
-  virtualization capability permits.
-- [ ] Export a non-secret machine-readable inventory for later Ansible stages.
-- [ ] Keep initial state on a protected local filesystem, ignored by Git, with
-  operator-only permissions and no state or saved-plan publication. Document
-  backup and later encrypted-backend migration paths.
+- [ ] Pin and configure the official `lxc/incus` provider against an explicitly
+  trusted remote; disable automatic client-certificate generation and automatic
+  server-certificate acceptance.
+- [ ] Create the development project and only the restrictions needed now.
+- [ ] Create a local `dir` storage pool.
+- [ ] Create the `platform0` managed bridge with configurable `10.20.0.0/24`,
+  NAT, DHCP, Incus DNS, and a documented IPv6 policy.
+- [ ] Create one minimal profile and one disposable system container.
+- [ ] Verify container DHCP, name resolution, outbound connectivity, and
+  structured health information.
+- [ ] Export only a non-secret machine-readable inventory for later Ansible.
+- [ ] Keep state on an ignored operator-only local path and never publish state
+  or saved plans as evidence.
+- [ ] Apply twice and explain or eliminate all drift.
 
-Acceptance: plan/apply is deterministic, a second apply has no drift, address
-ranges match the approved plan, and provider-owned resources can be destroyed
-without uninstalling or de-initializing Incus.
+Acceptance: the provider creates a working container deterministically, the
+second apply has no unexplained drift, and provider destroy does not uninstall
+or de-initialize Incus.
 
-### P1-06 — Private DNS serving path
+### P1-06 — Operator workflow, teardown, and evidence
 
-- [ ] Prove automatic forward/reverse records for Incus-managed instances.
-- [ ] Provision two minimal BIND instances with stable Incus reservations.
-- [ ] Configure both as authoritative secondaries of the Incus hidden primary.
-- [ ] Let the provider own Incus transfer-peer fields while Ansible owns BIND
-  key files; supply both from the same protected runtime TSIG source. Verify
-  AXFR, NOTIFY, SOA serial, refresh, and expiry behavior.
-- [ ] Configure Incus managed-bridge DNS and Kubernetes's future forwarding
-  contract without deploying Kubernetes early.
-- [ ] Add a macOS split-DNS and `10.20.0.0/24` routing runbook; DNS success must
-  not be confused with network reachability.
-- [ ] Test automatic instance records plus one reviewed manual `A` record and
-  one `CNAME` applied through the Incus API.
-- [ ] Stop either BIND instance and temporarily stop the hidden primary while
-  recording the observed resolution behavior.
+- [ ] Implement the public `preflight`, `baseline`, `bootstrap-incus`, `plan`,
+  `apply`, `validate`, and `destroy` Make targets.
+- [ ] Implement distinct `aws-plan`, `aws-apply`, `aws-destroy`, and
+  `aws-orphan-check` targets so VM lifecycle cannot be confused with Incus
+  resource lifecycle.
+- [ ] Require `PROFILE=single-node-reference` and show the exact boundary before
+  each mutation.
+- [ ] Verify clean rebuild from documented inputs after provider destroy.
+- [ ] Publish redacted evidence for hardening idempotence, Incus health,
+  provider no-drift, container connectivity, destroy, and recreation.
+- [ ] Record duration, peak observed resource use, limitations, and final
+  cleanup state.
 
-Acceptance: trusted clients resolve the private zone through either BIND
-secondary, public Netcup DNS contains no RFC 1918 records, and Incus remains the
-record authority.
+Acceptance: another operator can create, validate, destroy, and recreate the
+minimal foundation with the documented commands and no orphaned
+provider-managed resources.
 
-### P1-07 — Baseline guest configuration
+## Deferred backlog
 
-- [ ] Generate Ansible inventory from provider outputs without embedding
-  secrets or fixed addresses in application configuration.
-- [ ] Apply `debian_prepare` and the pinned upstream hardening roles with a
-  service-guest variable profile, preserving the same safety and idempotence
-  contract used on Incus hosts.
-- [ ] Configure BIND through a narrowly scoped role; do not add unrelated
-  platform services.
-- [ ] Verify that a workload-cluster outage cannot remove the Phase 1 DNS
-  serving path.
+These are valid target capabilities, but none blocks Phase 1:
 
-Acceptance: guests are configured without Terraform/OpenTofu provisioners, and
-rerunning Ansible reports no unintended changes.
+- three-member Incus clustering, quorum, join-token, and recovery tests;
+- BIND secondaries, Incus network zones, TSIG, split DNS, and friendly external
+  service names;
+- `socket_vmnet`, direct macOS routing, and persistent local hosting;
+- Incus VM tests and nested-virtualization tuning;
+- Ceph, OVN, HA storage/networking, and physical failure-domain claims; and
+- broader cloud networking, managed services, and provider-specific platform
+  topology beyond the single EC2 bootstrap host.
 
-### P1-08 — Operator workflows, teardown, and evidence
-
-- [ ] Provide explicit `preflight`, `bootstrap-incus`, `plan`, `apply`,
-  `validate`, and `destroy` Make targets.
-- [ ] Require profile selection and show the target host/project/resource
-  boundary before apply or destroy.
-- [ ] Verify clean rebuild from the documented bootstrap inputs.
-- [ ] Publish redacted evidence for role idempotence, provider no-drift,
-  instance/container health, DNS resolution, failure tests, and teardown.
-- [ ] Record duration, host requirements, known limitations, and cleanup state.
-
-Acceptance: an operator can create, validate, destroy, and recreate the Phase 1
-substrate using documented commands, and the final cleanup check finds no
-orphaned instances, volumes, networks, zone records, state copies, or join
-artifacts inside the declared test boundary.
+Private DNS moves to Phase 2 because it should be implemented together with the
+internal CA, certificates, identity, and secret delivery. Clustering is added
+only when a later test has real independent failure domains or a specific
+cluster-automation learning objective.
 
 ## Implementation order
 
 ```text
-Capability/Lima network review
+Fast workstation checks
         |
         v
-Debian 13 Lima VM(s)
+Minimal Debian preparation + hardening
         |
         v
-Debian preparation + upstream hardening + lockout test
+Standalone Incus role
+        |
+        +--> optional one-VM Lima feedback
         |
         v
-incus_host role + standalone tests
+AWS plan/apply -> single reference Debian VM acceptance
         |
         v
-cluster-mode tests
+Minimal provider substrate + one container
         |
         v
-official provider substrate
-        |
-        v
-Incus zones -> BIND secondaries -> split DNS
-        |
-        v
-guest baseline + destroy/recreate evidence
+Destroy/recreate evidence -> Phase 1 complete
 ```
 
-Each arrow is a review gate. Do not start the next block while the previous
-block has unresolved ownership, secret-handling, or recovery failures.
+Do not begin a later block while the current acceptance test fails. Do not add
+a deferred component merely because its future design is already documented.
 
 ## Verification interface
 
-The exact targets are implemented during P1-01, but the intended public
-interface is:
+P1-01 implements these targets:
 
 ```sh
 make doctor
 make check
-make lima-up NODES=1
-make preflight PROFILE=developer-validation
-make baseline PROFILE=developer-validation
-make bootstrap-incus PROFILE=developer-validation
-make plan PROFILE=developer-validation
-make apply PROFILE=developer-validation
-make validate PROFILE=developer-validation
-make destroy PROFILE=developer-validation
-make lima-down NODES=1
+make test-local
+make lima-up                 # optional
+make aws-plan PROFILE=single-node-reference
+make aws-apply PROFILE=single-node-reference
+make preflight PROFILE=single-node-reference
+make baseline PROFILE=single-node-reference
+make bootstrap-incus PROFILE=single-node-reference
+make plan PROFILE=single-node-reference
+make apply PROFILE=single-node-reference
+make validate PROFILE=single-node-reference
+make destroy PROFILE=single-node-reference
+make aws-destroy PROFILE=single-node-reference
+make aws-orphan-check PROFILE=single-node-reference
+make lima-down               # optional
 ```
 
-Apply and destroy remain interactive by default. CI runs static validation and
-disposable integration tests; it does not mutate the maintainer's persistent
-Incus environment.
+Static CI performs no infrastructure mutation. Target integration requires
+explicit inventory and credentials supplied outside Git. Apply and destroy are
+interactive by default.
 
 ## Rollback boundaries
 
-- Before Incus initialization, the role may remove only packages and files it
+- Before Incus initialization, Ansible may remove only files and packages it
   created and must preserve unrelated host configuration.
-- Lima teardown targets only explicitly named project instances and preserves
-  unrelated Lima VMs, networks, cached images, and host configuration.
-- After initialization, uninstalling Incus or removing a cluster member is a
-  separate explicit recovery operation, never an automatic rollback.
-- Provider destroy removes only provider-owned Phase 1 resources in the selected
-  project. It must not remove Incus itself, unrelated projects, shared images,
-  or protected state backups.
-- DNS rollback removes manual records and transfer configuration in dependency
-  order while preserving the public Netcup zone.
-- Any destructive cluster, storage, or state recovery procedure requires a
-  dedicated runbook and explicit human confirmation.
+- Lima teardown targets only the explicitly named disposable project VM.
+- Incus uninstall or de-initialization is a separate manual recovery action,
+  never part of provider destroy.
+- Provider destroy removes only resources in the selected Phase 1 project and
+  preserves Incus, unrelated projects, and protected state backups.
+- AWS bootstrap destroy removes only the dedicated VPC, network, key-pair,
+  instance, and storage resources declared by that root. It runs only after
+  Incus-substrate destroy and preserves unrelated account resources.
+- A pre-existing reference VM remains outside this repository's destruction
+  boundary.
 
 ## Phase 1 exit criteria
 
 Phase 1 is complete only when:
 
-- the maintainer accepts all review-gate decisions;
-- native Incus capabilities are used unless a documented gap justifies another
-  component;
-- one- and three-node Lima harnesses are reproducible from the reviewed YAML;
-- Debian preparation and pinned upstream hardening are idempotent,
-  lockout-safe, and Incus-compatible;
-- standalone and three-member automation contracts pass at their declared test
-  level, with no two-member topology;
-- the role and guest configuration are idempotent and leave no secret artifacts;
-- official-provider apply is repeatable and reports no unexplained drift;
-- Incus-generated and manual DNS records resolve through either BIND secondary;
-- failure, teardown, and clean-rebuild evidence is reviewed;
-- local and required remote CI checks pass; and
-- no Phase 2 identity, secrets, or PKI implementation starts early.
+- all fast local and CI checks pass;
+- the selected Debian 13 reference VM meets the documented starting contract;
+- the AWS bootstrap path resolves an official Debian image, passes its cost and
+  exposure gates, and leaves no orphan after final destroy;
+- preparation and hardening are idempotent and SSH-safe;
+- standalone Incus bootstrap is idempotent and healthy;
+- provider apply creates the minimal project, storage, bridge, profile, and
+  system container with no unexplained second-apply drift;
+- the container demonstrates DHCP, DNS, NAT, and outbound connectivity;
+- bounded destroy and clean recreation pass;
+- runtime, resource usage, limitations, and redacted evidence are recorded; and
+- no deferred DNS, clustering, broader cloud architecture, Kubernetes, or Phase
+  2 service begins early.
 
-## Maintainer review checklist
+## Maintainer decisions
 
-- [x] Accept the recommended starting gates.
-- [x] Use Debian 13 Lima VMs as the first execution targets.
-- [x] Use the Debian-native Incus LTS package policy initially.
-- [x] Use OpenTofu for apply and validate Terraform compatibility.
-- [x] Use `dir` storage unless the host review identifies a suitable ZFS device.
-- [x] Use three Lima VMs for disposable cluster-contract testing.
-- [x] Accept the `user-v2`/`vzNAT` split and later host-network review.
-- [x] Use pinned `devsec.hardening` roles with a thin `debian_prepare` role and
-  explicit Incus-safety overrides.
-- [x] Accept the provider/Ansible TSIG boundary and protected local state
-  controls recorded by P1-00.
-- [x] Accept the work-item order and Phase 1 exit criteria.
+- [x] Use the workstation primarily for fast checks and optional disposable
+  integration.
+- [x] Use one Debian 13 VM as the default deployment target.
+- [x] Include a separate minimal AWS OpenTofu root to supply that VM initially.
+- [x] Start AWS with `t4g.small` and 30 GiB encrypted `gp3`, then scale only
+  from measured failure.
+- [x] Use the official Debian 13 arm64 AMI and never depend on a paid image.
+- [x] Accept a temporary restricted public IPv4 instead of a NAT gateway for
+  the cheapest straightforward bootstrap path.
+- [x] Require system containers and keep nested Incus VMs optional.
+- [x] Remove three-member clustering from the Phase 1 exit path.
+- [x] Move private authoritative DNS and TSIG beside PKI and identity in Phase
+  2.
+- [x] Finish the minimal apply/destroy/recreate slice before expanding scope.
+
+## References
+
+- [Debian 13 EC2 images](https://wiki.debian.org/Cloud/AmazonEC2Image/Trixie)
+- [AWS EC2 Free Tier eligibility](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-free-tier-usage.html)
+- [AWS T4g specifications and current promotion](https://aws.amazon.com/ec2/instance-types/t4/)
+- [AWS public IPv4 pricing](https://aws.amazon.com/vpc/pricing/)
+- [AWS Budgets pricing](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/)
+- [EC2 Instance Connect Endpoint](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/connect-with-ec2-instance-connect-endpoint.html)

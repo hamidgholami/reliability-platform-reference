@@ -17,10 +17,10 @@ criteria.
 
 ## Decision
 
-For `developer-validation` and on-premises profiles, investigate the native
-Incus capability before proposing another infrastructure service. Evaluate it
-against the actual requirement, including automation, security, availability,
-observability, backup, recovery, and operational cost.
+For `workstation-validation`, `single-node-reference`, and on-premises profiles,
+investigate the native Incus capability before proposing another infrastructure
+service. Evaluate it against the actual requirement, including automation,
+security, availability, observability, backup, recovery, and operational cost.
 
 Use the Incus capability when it is sufficiently fit for the profile, even if a
 specialized product offers more features. Add an external tool only when the

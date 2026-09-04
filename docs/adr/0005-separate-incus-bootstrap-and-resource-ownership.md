@@ -32,11 +32,12 @@ Use these non-overlapping ownership boundaries:
 - Ansible owns BIND configuration and protected key files, but not Incus zone
   or record objects.
 
-A bootstrap secret source generates one synthetic TSIG key for the disposable
-development zone. The provider and BIND automation consume that value directly
-at runtime; neither reads it from the other's output. The provider owns all
-Incus transfer-peer fields, including the key. Phase 2 replaces the bootstrap
-secret source with Vault/OpenBao without changing resource ownership.
+When the private-DNS milestone begins, one secret source generates the TSIG key.
+The provider and BIND automation consume that value directly at runtime; neither
+reads it from the other's output. The provider owns all Incus transfer-peer
+fields, including the key. Use Vault/OpenBao once it is available; any earlier
+bootstrap value must be synthetic and disposable. This does not change resource
+ownership.
 
 Treat local OpenTofu state and saved plans as secret-bearing. Keep them in an
 ignored operator-only directory, never publish them as evidence, and use no

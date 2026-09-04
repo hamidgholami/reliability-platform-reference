@@ -1,7 +1,9 @@
 # Cost and Resource Policy
 
-Local validation is the default. Cloud resources are exceptional, explicit, and
-temporary unless a later ADR establishes a justified standing service.
+Workstation validation is the default. Cloud resources are explicit and
+temporary unless an ADR establishes a justified standing service. Phase 1 may
+create one minimal EC2 reference host under ADR-0006; it must be destroyed after
+the implementation session and is not a standing environment.
 
 ## Required safeguards
 
@@ -24,3 +26,12 @@ no-additional-subscription path; a second public DNS provider is not required.
 
 Prices and free-tier terms are volatile. Each cloud execution plan must record a
 fresh estimate rather than relying on values copied into this repository.
+
+## Phase 1 AWS ceiling
+
+The initial plan contains one `t4g.small`, one 30 GiB encrypted `gp3` root
+volume, and one temporary public IPv4 in `eu-central-1`. It excludes NAT
+gateways, Elastic IPs, load balancers, and paid Marketplace images. A live cost
+and free-tier check, notification-only AWS budget, expiry tag, explicit apply
+confirmation, destroy, and orphan check are mandatory. An existing suitable
+account budget may satisfy the budget requirement.

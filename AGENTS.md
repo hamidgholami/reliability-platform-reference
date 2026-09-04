@@ -10,9 +10,11 @@ workflow with measured evidence over a catalogue of unrelated tools.
 ## Current phase
 
 Phase 0 is complete. The Phase 1 implementation plan is accepted. P1-00 is
-complete, and P1-01 repository interfaces and quality gates is the active work
-item. Do not add implementation or empty future-product directories before the
-relevant work item begins.
+complete, and P1-01 repository interfaces and quality gates is active. Phase 1
+targets one standalone Incus host on a Debian 13 VM, initially supplied by a
+separate minimal AWS bootstrap root. The workstation provides fast checks and
+optional one-VM Lima integration. Do not add implementation or empty
+future-product directories before the relevant work item begins.
 
 ## Non-goals and boundaries
 
@@ -22,6 +24,10 @@ relevant work item begins.
   without a test and evidence.
 - Do not add a tool only to increase the product list. Explain its role in the
   end-to-end platform.
+- Finish the active vertical slice with executable evidence before expanding
+  topology or starting another product.
+- Do not make Lima, three-node clustering, private DNS, or cloud provisioning a
+  Phase 1 prerequisite.
 - For local and on-premises profiles, evaluate native Incus capabilities before
   adding another infrastructure service. Add a tool only for a documented gap
   that Incus cannot meet sufficiently under the profile's acceptance criteria.

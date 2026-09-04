@@ -4,10 +4,11 @@ An open, reproducible reference platform for demonstrating production-minded
 DevOps and site reliability engineering practices across local, on-premises,
 and cloud environments.
 
-**Phase 0: architecture and governance** is complete. Phase 1 has completed its
-capability and ownership review; repository interfaces and quality gates are
-next. The accepted decisions and guardrails constrain the reproducible Incus
-and network foundation implementation.
+**Phase 0: architecture and governance** is complete. Phase 1 now delivers one
+minimal standalone Incus foundation on a Debian 13 VM, initially supplied by a
+small isolated AWS OpenTofu root. Repository interfaces and fast quality gates
+are next; the Mac workstation is used for checks and optional disposable
+integration rather than persistent platform hosting.
 
 ## Intended outcomes
 

@@ -6,8 +6,8 @@ an implementation plan, acceptance evidence, and rollback or teardown path.
 | Phase | Outcome |
 | --- | --- |
 | 0 | Architecture, governance, repository checks, and approved boundaries |
-| 1 | Reproducible Incus and network foundation through Ansible and the official Incus provider |
-| 2 | Identity, PKI, Vault/OpenBao, dynamic secrets, SSH certificates, and approvals |
+| 1 | Minimal standalone Incus foundation on one Debian VM, with AWS VM bootstrap, Ansible, and the official Incus provider |
+| 2 | Private DNS, PKI, identity, Vault/OpenBao, dynamic secrets, SSH certificates, and approvals |
 | 3 | Kubespray Kubernetes foundation and GitOps bootstrap |
 | 4 | Jenkins platform library and end-to-end delivery path using a coherent sample application |
 | 5 | Artifact and supply-chain controls with Pulp and Harbor |
@@ -29,7 +29,9 @@ capability gap rather than expand the product list.
 is complete. The accepted
 [Phase 1 Incus and network foundation plan](plans/phase-1-incus-and-network-foundation.md)
 has completed its P1-00 capability and ownership spike. P1-01 repository
-interfaces and quality gates is next.
+interfaces and quality gates is next. The revised plan intentionally finishes a
+single-node apply/destroy/recreate slice before adding private DNS, clustering,
+or broader cloud platform topology.
 
 Phase 4 will introduce a small, coherent Java Spring Boot application as the
 system under delivery. It will demonstrate build, unit and integration tests,

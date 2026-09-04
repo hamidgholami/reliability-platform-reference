@@ -5,9 +5,12 @@ Status: accepted Phase 0 baseline
 ## System intent
 
 Reliability Platform Reference is one delivery and operations system with
-multiple environment profiles. The local Incus implementation is the primary
-low-cost proving ground; cloud profiles reuse the interfaces and operational
-contracts without pretending all providers are identical.
+multiple environment profiles. The first deployment target is a standalone
+Incus host on one Debian VM, initially supplied by a minimal isolated AWS
+bootstrap root. The maintainer workstation supplies fast checks and optional
+disposable integration; it is not required to host the platform. Later cloud
+profiles reuse the interfaces and operational contracts without pretending all
+providers are identical.
 
 ```text
 Developer
@@ -43,6 +46,12 @@ GitOps desired state ----------> Kubernetes workloads
    services outside the workload cluster.
 6. **Reliability** — telemetry, SLOs, alerting, backup, restore, failure
    injection, and measured recovery evidence.
+
+Implementation follows
+[ADR-0006](adr/0006-use-progressive-single-node-delivery.md): complete one
+working vertical increment before expanding topology. The initial VM runs only
+the services needed by the active increment; the full architecture is not a
+promise that every planned service runs concurrently on the minimum host.
 
 ## Service placement
 
