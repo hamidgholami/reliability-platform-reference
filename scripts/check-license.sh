@@ -27,9 +27,21 @@ if [ -f NOTICE ] && ! grep -q "Copyright 2026 Hamid Gholami" NOTICE; then
   failures=$((failures + 1))
 fi
 
-for source_file in Makefile .editorconfig .gitignore .markdownlint-cli2.yaml \
+for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
+  .markdownlint-cli2.yaml \
+  .ansible-lint ansible.cfg requirements.txt ansible/requirements.yml \
+  ansible/inventories/single-node-reference/hosts.example.yml \
+  lima/single-node.yaml \
   scripts/doctor.sh scripts/check-license.sh scripts/scan-secrets.sh \
-  scripts/lima-host-probe.sh \
+  scripts/lima-host-probe.sh scripts/lima-lifecycle.sh \
+  scripts/init-hcl.sh scripts/validate-hcl.sh scripts/not-implemented.sh \
+  infrastructure/bootstrap/aws-single-node/versions.tf \
+  infrastructure/bootstrap/aws-single-node/variables.tf \
+  infrastructure/bootstrap/aws-single-node/main.tf \
+  infrastructure/bootstrap/aws-single-node/outputs.tf \
+  infrastructure/bootstrap/aws-single-node/terraform.tfvars.example \
+  infrastructure/bootstrap/aws-single-node/tests/safety.tftest.hcl \
+  infrastructure/incus/versions.tf \
   .github/workflows/quality.yml; do
   if [ -f "$source_file" ] && \
     ! grep -q "SPDX-License-Identifier: Apache-2.0" "$source_file"; then

@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Generated dependency and provider working directories"
+paths = [
+  '''(^|/)\.cache/''',
+  '''(^|/)\.terraform/''',
+  '''(^|/)\.venv/''',
+]

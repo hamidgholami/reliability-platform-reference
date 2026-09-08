@@ -1,6 +1,6 @@
 # Phase 1 Plan: Minimal Single-Node Incus Foundation
 
-- Status: revised and accepted on 2026-09-04; P1-01 is next
+- Status: revised and accepted on 2026-09-04; P1-01 complete, P1-02 next
 - Owner: Hamid Gholami
 - Default deployment profile: `single-node-reference`, supplied initially by
   the AWS bootstrap root
@@ -52,6 +52,14 @@ Use this promotion ladder:
 Passing workstation checks does not prove target behavior. Conversely, a Lima
 test is skipped when it requires privileged macOS networking or substantial
 Lima-specific engineering; the same test runs on the reference VM instead.
+
+The workstation runs the pinned Ansible toolchain from a repository-local
+Python virtual environment. Standard Ansible SSH is the Phase 1 execution path.
+Mitogen is not a default dependency: this phase manages one host, most elapsed
+time is expected inside package and image operations, and Mitogen currently
+depends on the third-party strategy-plugin interface deprecated by Ansible.
+Reconsider it only after a multi-node benchmark identifies controller transport
+as a meaningful bottleneck.
 
 ## Mandatory design rules
 
@@ -159,20 +167,20 @@ work.
 
 ### P1-01 — Repository interfaces and fast quality gates
 
-- [ ] Add only the Ansible, inventory, infrastructure, test, and runbook files
+- [x] Add only the Ansible, inventory, infrastructure, test, and runbook files
   needed by the single-node increment; do not create empty future directories.
-- [ ] Pin Ansible, `devsec.hardening`, OpenTofu, the Incus provider, test tools,
+- [x] Pin Ansible, `devsec.hardening`, OpenTofu, the Incus provider, test tools,
   the AWS provider, and CI actions in their normal dependency or lock files.
-- [ ] Add Ansible formatting, syntax, and lint checks plus HCL formatting and
+- [x] Add Ansible formatting, syntax, and lint checks plus HCL formatting and
   non-mutating validation to the local and CI interface.
-- [ ] Add a sanitized example inventory for one remote Debian VM.
-- [ ] Add an isolated AWS bootstrap root matching the minimal AWS VM contract;
+- [x] Add a sanitized example inventory for one remote Debian VM.
+- [x] Add an isolated AWS bootstrap root matching the minimal AWS VM contract;
   keep its backend and outputs separate from Incus-substrate state.
-- [ ] Add one reusable Lima Debian 13 YAML and lifecycle wrapper, but keep Lima
+- [x] Add one reusable Lima Debian 13 YAML and lifecycle wrapper, but keep Lima
   targets optional.
-- [ ] Extend `make help` with clear local-check, optional-Lima, target
+- [x] Extend `make help` with clear local-check, optional-Lima, target
   preflight, baseline, bootstrap, plan, apply, validate, and destroy commands.
-- [ ] Document which commands are workstation-only and which mutate a selected
+- [x] Document which commands are workstation-only and which mutate a selected
   Linux target.
 
 Acceptance: static CI uses no infrastructure credentials, `make help` exposes
@@ -277,6 +285,10 @@ minimal foundation with the documented commands and no orphaned
 provider-managed resources.
 
 ## Deferred backlog
+
+- Benchmark standard Ansible SSH against Mitogen only when a multi-node profile
+  demonstrates that controller transport, rather than remote work, is a
+  material part of elapsed time.
 
 These are valid target capabilities, but none blocks Phase 1:
 

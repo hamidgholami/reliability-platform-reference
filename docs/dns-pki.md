@@ -1,7 +1,7 @@
 # DNS and PKI Plan
 
-Status: Phase 0 baseline; DNSSEC and certificate automation remain to be
-implemented.
+Status: Phase 0 baseline; DNSSEC is active and certificate automation remains
+to be implemented.
 
 ## Namespace
 
@@ -19,8 +19,21 @@ and suffix values remain configurable so profiles can be reproduced elsewhere.
 ## Public authoritative DNS
 
 Netcup is the registrar and authoritative DNS provider. The live delegation is
-to Netcup nameservers, so another DNS provider is not required. The next steps
-are to enable DNSSEC through Netcup and validate the resulting DS chain.
+to Netcup nameservers, so another DNS provider is not required.
+
+DNSSEC was enabled in the Netcup administration portal and externally validated
+on 2026-09-08. The parent publishes DS key tag `34303`, algorithm `13`, digest
+type `2`; a validating lookup returned `NOERROR`, the authenticated-data flag,
+and signed records. Recheck after any nameserver, registrar, or DNSSEC key
+change:
+
+```sh
+dig +short DS apadanalab.de
+dig +dnssec apadanalab.de SOA
+```
+
+An empty DS answer or a `SERVFAIL` from validating resolvers is an operational
+incident until the delegation and key state are reconciled.
 
 Cloudflare is not part of the baseline. It may be reconsidered only if a later
 requirement justifies moving public authoritative DNS, such as a needed proxy,

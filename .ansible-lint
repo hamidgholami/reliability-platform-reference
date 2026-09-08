@@ -1,0 +1,9 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+profile: production
+offline: true
+exclude_paths:
+  - .cache/
+  - .venv/

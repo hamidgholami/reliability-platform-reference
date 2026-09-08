@@ -17,11 +17,15 @@
 .terraform/
 *.tfstate
 *.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example
+crash.log
 .tofu/
 
 .venv/
+.cache/
 __pycache__/
 node_modules/
 coverage/
 reports/
-

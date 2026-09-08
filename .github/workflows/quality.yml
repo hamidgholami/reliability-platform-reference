@@ -26,7 +26,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Run markdownlint-cli2
-        run: npx --yes markdownlint-cli2@0.23.2 "**/*.md" "#node_modules" "#.git"
+        run: make lint-markdown
 
   secrets:
     name: Secrets
@@ -49,3 +49,30 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Check license and attribution
         run: ./scripts/check-license.sh
+
+  ansible:
+    name: Ansible
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Create pinned Python environment
+        run: make setup-python
+      - name: Run Ansible static checks
+        run: make lint-ansible syntax-ansible
+
+  hcl:
+    name: OpenTofu
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Install pinned OpenTofu
+        uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: 1.12.6
+          tofu_wrapper: false
+      - name: Run OpenTofu static checks
+        run: make setup-hcl lint-hcl validate-hcl

@@ -29,9 +29,10 @@ capability gap rather than expand the product list.
 is complete. The accepted
 [Phase 1 Incus and network foundation plan](plans/phase-1-incus-and-network-foundation.md)
 has completed its P1-00 capability and ownership spike. P1-01 repository
-interfaces and quality gates is next. The revised plan intentionally finishes a
-single-node apply/destroy/recreate slice before adding private DNS, clustering,
-or broader cloud platform topology.
+interfaces and quality gates is complete; P1-02 minimal Debian preparation and
+hardening is next. The revised plan intentionally finishes a single-node
+apply/destroy/recreate slice before adding private DNS, clustering, or broader
+cloud platform topology.
 
 Phase 4 will introduce a small, coherent Java Spring Boot application as the
 system under delivery. It will demonstrate build, unit and integration tests,
