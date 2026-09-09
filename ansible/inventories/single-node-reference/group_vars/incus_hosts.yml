@@ -47,3 +47,17 @@ network_ipv6_enable: true
 # service. Extend this list only with an explicit host-level requirement.
 debian_baseline_expected_tcp_ports:
   - "{{ ansible_port | default(22) | int }}"
+
+# P1-03 installs only the Debian-native container daemon. OpenTofu owns all
+# storage, network, project, profile, and instance resources in P1-05.
+incus_host_mode: standalone
+incus_host_package: incus-base
+incus_host_package_version_pattern: '^6\.0\.'
+incus_host_storage_owner: opentofu
+incus_host_storage_source: ""
+incus_host_api_address: 0.0.0.0
+incus_host_api_port: 8443
+incus_host_preseed_schema_version: 1
+incus_host_minimum_root_available_bytes: 2147483648
+incus_host_require_controller_api: >-
+  {{ rpr_deployment_profile == 'single-node-reference' }}

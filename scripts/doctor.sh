@@ -40,3 +40,9 @@ if command -v limactl >/dev/null 2>&1; then
 else
   echo "Optional Lima is not installed; reference-target testing remains available."
 fi
+
+if command -v incus >/dev/null 2>&1; then
+  echo "Optional Incus workstation client detected: $(incus --version)"
+else
+  echo "Optional Incus client is not installed; run 'brew install incus' before P1-05."
+fi

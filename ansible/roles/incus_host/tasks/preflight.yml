@@ -1,0 +1,119 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Confirm the standalone Incus input boundary
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution == 'Debian'
+      - ansible_distribution_major_version == '13'
+      - ansible_service_mgr == 'systemd'
+      - debian_prepare_stable_target | bool
+      - incus_host_mode == 'standalone'
+      - incus_host_package == 'incus-base'
+      - incus_host_storage_owner == 'opentofu'
+      - incus_host_storage_source | length == 0
+      - incus_host_preseed_schema_version == 1
+      - incus_host_api_address == '0.0.0.0'
+      - incus_host_api_port == 8443
+    fail_msg: >-
+      P1-03 supports only standalone, container-only Incus with an OpenTofu-owned
+      resource layer and the reviewed API boundary. Cluster input is deferred.
+
+- name: Read root filesystem capacity
+  ansible.builtin.set_fact:
+    incus_host_root_mount: >-
+      {{ ansible_mounts | selectattr('mount', 'equalto', '/') | first }}
+
+- name: Require minimum free root filesystem capacity
+  ansible.builtin.assert:
+    that:
+      - incus_host_root_mount.size_available >= incus_host_minimum_root_available_bytes
+    fail_msg: >-
+      The root filesystem needs at least
+      {{ incus_host_minimum_root_available_bytes }} available bytes before
+      installing Incus.
+
+- name: Read candidate Incus package policy
+  ansible.builtin.command:
+    argv:
+      - apt-cache
+      - policy
+      - "{{ incus_host_package }}"
+  register: incus_host_package_policy
+  changed_when: false
+
+- name: Require the Debian Incus LTS package source
+  ansible.builtin.assert:
+    that:
+      - >-
+        (incus_host_package_policy.stdout |
+        regex_findall('Candidate:\\s+(\\S+)') | first) is
+        match(incus_host_package_version_pattern)
+      - >-
+        incus_host_package_policy.stdout is
+        search('https?://[^ ]*debian\\.org/')
+    fail_msg: >-
+      The candidate incus-base package must be from a debian.org repository and
+      match the reviewed Incus 6.0 LTS series.
+
+- name: Verify synchronized system time
+  ansible.builtin.command: chronyc tracking
+  register: incus_host_time_status
+  changed_when: false
+  failed_when: >-
+    incus_host_time_status.rc != 0 or
+    'Not synchronised' in incus_host_time_status.stdout
+
+- name: Verify baseline forwarding state
+  ansible.builtin.command: sysctl -n net.ipv4.ip_forward
+  register: incus_host_forwarding
+  changed_when: false
+  failed_when: incus_host_forwarding.stdout | trim != '1'
+
+- name: Verify kernel user namespace support
+  ansible.builtin.stat:
+    path: /proc/self/ns/user
+  register: incus_host_user_namespace
+  failed_when: not incus_host_user_namespace.stat.exists
+
+- name: Read listeners on the future Incus API port
+  ansible.builtin.command: ss -H -lntp
+  register: incus_host_preflight_listeners
+  changed_when: false
+
+- name: Derive listeners on the future Incus API port
+  ansible.builtin.set_fact:
+    incus_host_api_port_listeners: >-
+      {{ incus_host_preflight_listeners.stdout_lines |
+         select('search', ':' ~ incus_host_api_port ~ '\\s') | list }}
+
+- name: Reject an unrelated API port listener
+  ansible.builtin.assert:
+    that:
+      - >-
+        (incus_host_api_port_listeners | length) == 0 or
+        (incus_host_api_port_listeners | select('search', 'incusd') | list |
+        length) == (incus_host_api_port_listeners | length)
+    fail_msg: >-
+      TCP port {{ incus_host_api_port }} is already owned by a process other
+      than Incus; no Incus mutation was attempted.
+
+- name: Query an existing local Incus API when available
+  ansible.builtin.command: incus query /1.0
+  register: incus_host_existing_api
+  changed_when: false
+  failed_when: false
+
+- name: Reject an existing clustered Incus daemon
+  ansible.builtin.assert:
+    that:
+      - >-
+        not ((incus_host_existing_api.stdout | from_json).
+        metadata.environment.server_clustered | bool)
+    fail_msg: >-
+      This host already belongs to an Incus cluster. P1-03 never converts,
+      joins, or changes a cluster.
+  when:
+    - incus_host_existing_api.rc == 0
+    - incus_host_existing_api.stdout | trim | length > 0

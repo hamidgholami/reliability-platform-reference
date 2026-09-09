@@ -63,6 +63,12 @@ P1-02 enables `make preflight`, `make baseline-check`, `make baseline`, and
 `make validate-baseline` for one explicit target. Follow the
 [Debian baseline runbook](debian-baseline.md); the mutating baseline requires an
 exact confirmation string, while target inventory and key material stay
-outside Git. Later commands remain disabled until their named Phase 1 work
-items implement the corresponding safety and acceptance checks. `make help` is
-the authoritative list and labels unavailable commands.
+outside Git. P1-03 likewise enables `make preflight-incus`,
+`make bootstrap-incus`, and `make validate-incus`; follow the
+[standalone Incus host runbook](incus-host.md).
+
+The [end-to-end milestone runbook](end-to-end-milestones.md) defines when local
+checks are insufficient and a disposable real environment must be exercised.
+Later commands remain disabled until their named Phase 1 work items implement
+the corresponding safety and acceptance checks. `make help` is the
+authoritative list and labels unavailable commands.

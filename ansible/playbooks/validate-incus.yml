@@ -1,0 +1,14 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Validate standalone Incus and record bounded local evidence
+  hosts: incus_hosts
+  gather_facts: true
+  any_errors_fatal: true
+  become: true
+  tasks:
+    - name: Run Incus host validation
+      ansible.builtin.import_role:
+        name: incus_host
+        tasks_from: validate

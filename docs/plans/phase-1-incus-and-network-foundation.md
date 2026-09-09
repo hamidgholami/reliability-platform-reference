@@ -1,7 +1,7 @@
 # Phase 1 Plan: Minimal Single-Node Incus Foundation
 
-- Status: revised and accepted on 2026-09-04; P1-02 automation implemented,
-  real-target acceptance pending
+- Status: revised and accepted on 2026-09-04; P1-02 and P1-03 automation
+  implemented, real-target acceptance pending
 - Owner: Hamid Gholami
 - Default deployment profile: `single-node-reference`, supplied initially by
   the AWS bootstrap root
@@ -27,7 +27,7 @@ The AWS bootstrap path starts with a `t4g.small` instance and a 30 GiB encrypted
 claim: record observed usage and move to `t4g.medium` or larger only when the
 active acceptance test demonstrates a resource failure. A pre-existing local
 or hosted VM may satisfy the same target contract. Incus system containers are
-mandatory; nested virtualization and Incus VMs are optional.
+the only Phase 1 guest type; nested virtualization and Incus VMs are deferred.
 
 Phase 1 does not deploy Kubernetes, DNS secondaries, PKI, Vault/OpenBao,
 Keycloak, Jenkins, artifact services, observability, backup services, Ceph, OVN,
@@ -53,6 +53,13 @@ Use this promotion ladder:
 Passing workstation checks does not prove target behavior. Conversely, a Lima
 test is skipped when it requires privileged macOS networking or substantial
 Lima-specific engineering; the same test runs on the reference VM instead.
+
+The [end-to-end execution milestones](../runbooks/end-to-end-milestones.md)
+define the mandatory reality checks and human handoffs. P1-02 and P1-03 trigger
+the host-foundation integration checkpoint. Completion of P1-06 triggers one
+full create, configure, validate, destroy, recreate, and final-cleanup session.
+Before any paid run, stop and give the operator a current, step-by-step account,
+credential, cost, expiry, execution, and cleanup checklist.
 
 The workstation runs the pinned Ansible toolchain from a repository-local
 Python virtual environment. Standard Ansible SSH is the Phase 1 execution path.
@@ -94,8 +101,8 @@ as a meaningful bottleneck.
 | Deployment target | One Debian 13 VM; AWS bootstrap is the initial supplier |
 | Starting AWS resources | `t4g.small` plus 30 GiB encrypted `gp3`; scale from evidence |
 | AMI | Latest official Debian 13 arm64 from owner `136693071363`; no paid image subscription |
-| Workload type | Incus system container; Incus VM optional |
-| Incus release source | Debian 13 native Incus LTS package policy |
+| Workload type | Incus system containers only; Incus VMs deferred |
+| Incus release source | Debian 13 native `incus-base` 6.0 LTS policy; security patch updates allowed |
 | IaC command | OpenTofu apply; Terraform compatibility validation |
 | Storage | Local `dir` pool |
 | Host hardening | Pinned `devsec.hardening` roles plus thin local preparation |
@@ -209,15 +216,15 @@ and the host is ready for Incus. No CIS or production-hardening claim is made.
 
 ### P1-03 — Standalone `incus_host` Ansible role
 
-- [ ] Validate OS/release, stable target address, time health, package source,
+- [x] Validate OS/release, stable target address, time health, package source,
   storage inputs, and required ports before mutation.
-- [ ] Install the selected Debian Incus package and manage daemon readiness.
-- [ ] Support standalone mode only and reject cluster-mode input with a clear
+- [x] Install the selected Debian Incus package and manage daemon readiness.
+- [x] Support standalone mode only and reject cluster-mode input with a clear
   deferred-scope message.
-- [ ] Render and apply versioned `incus admin init --preseed` input without
+- [x] Render and apply versioned `incus admin init --preseed` input without
   persisting generated artifacts.
-- [ ] Verify daemon and API health through structured output.
-- [ ] Stop at the healthy API boundary; do not create provider-owned projects,
+- [x] Verify daemon and API health through structured output.
+- [x] Stop at the healthy API boundary; do not create provider-owned projects,
   networks, storage pools, profiles, or instances.
 - [ ] Run twice and verify that no bootstrap artifact remains.
 
@@ -250,13 +257,20 @@ reference-target tests pass.
 - [ ] Pin and configure the official `lxc/incus` provider against an explicitly
   trusted remote; disable automatic client-certificate generation and automatic
   server-certificate acceptance.
+- [ ] Install or validate the macOS Incus client and configure separate,
+  explicitly trusted identities for the human operator and OpenTofu.
 - [ ] Create the development project and only the restrictions needed now.
 - [ ] Create a local `dir` storage pool.
 - [ ] Create the `platform0` managed bridge with configurable `10.20.0.0/24`,
   NAT, DHCP, Incus DNS, and a documented IPv6 policy.
-- [ ] Create one minimal profile and one disposable system container.
+- [ ] Create one minimal profile and one disposable system container; do not
+  install VM-only host dependencies or create an Incus VM.
+- [ ] Keep the container image reference configurable and document the
+  image-change replacement or rollout path for stateful services.
 - [ ] Verify container DHCP, name resolution, outbound connectivity, and
   structured health information.
+- [ ] Prove `incus list`, `incus info`, and operation inspection from the
+  MacBook without bypassing OpenTofu ownership for routine mutations.
 - [ ] Export only a non-secret machine-readable inventory for later Ansible.
 - [ ] Keep state on an ignored operator-only local path and never publish state
   or saved plans as evidence.
@@ -335,8 +349,9 @@ a deferred component merely because its future design is already documented.
 
 ## Verification interface
 
-P1-01 establishes this interface. P1-02 has enabled its baseline commands;
-commands for later work items still fail closed and identify their phase:
+P1-01 establishes this interface. P1-02 and P1-03 have enabled their host
+commands; commands for later work items still fail closed and identify their
+phase:
 
 ```sh
 make doctor
@@ -349,7 +364,9 @@ make preflight               # explicit inventory, target, and public key
 make baseline-check          # explicit inventory, target, and public key
 make baseline                # same inputs plus exact confirmation
 make validate-baseline       # writes ignored local evidence
-make bootstrap-incus PROFILE=single-node-reference
+make preflight-incus         # read-only host and package-source gates
+make bootstrap-incus         # same inputs plus exact confirmation
+make validate-incus          # structured health and ignored evidence
 make plan PROFILE=single-node-reference
 make apply PROFILE=single-node-reference
 make validate PROFILE=single-node-reference
@@ -407,7 +424,7 @@ Phase 1 is complete only when:
 - [x] Use the official Debian 13 arm64 AMI and never depend on a paid image.
 - [x] Accept a temporary restricted public IPv4 instead of a NAT gateway for
   the cheapest straightforward bootstrap path.
-- [x] Require system containers and keep nested Incus VMs optional.
+- [x] Use system containers only in Phase 1 and defer Incus VMs.
 - [x] Remove three-member clustering from the Phase 1 exit path.
 - [x] Move private authoritative DNS and TSIG beside PKI and identity in Phase
   2.

@@ -30,8 +30,9 @@ is complete. The accepted
 [Phase 1 Incus and network foundation plan](plans/phase-1-incus-and-network-foundation.md)
 has completed its P1-00 capability and ownership spike. P1-01 repository
 interfaces and quality gates is complete. P1-02 baseline automation is ready
-for real-target acceptance, and P1-03 standalone Incus automation is next. The
-revised plan intentionally finishes a single-node
+for real-target acceptance, P1-03 standalone Incus automation is implemented,
+and P1-04 reference-VM promotion is next. The revised plan intentionally
+finishes a single-node
 apply/destroy/recreate slice before adding private DNS, clustering, or broader
 cloud platform topology.
 

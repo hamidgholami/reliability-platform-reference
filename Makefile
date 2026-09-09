@@ -10,7 +10,8 @@ ANSIBLE_ENV = ANSIBLE_CONFIG=$(CURDIR)/ansible.cfg ANSIBLE_HOME=$(CURDIR)/.cache
 .PHONY: help setup setup-python setup-hcl doctor lint lint-markdown lint-license lint-ansible \
 	syntax-ansible lint-hcl validate-hcl test-hcl scan-secrets check test-local \
 	lima-validate lima-up lima-stop lima-delete preflight baseline-check baseline \
-	validate-baseline test-ansible-safety \
+	validate-baseline preflight-incus bootstrap-incus validate-incus \
+	test-ansible-safety \
 	bootstrap-incus plan apply validate destroy aws-plan aws-apply \
 	aws-destroy aws-orphan-check
 
@@ -47,6 +48,9 @@ syntax-ansible: ## Syntax-check the Phase 1 Ansible inventory and playbooks offl
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/preflight.yml >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/baseline.yml >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/validate-baseline.yml >/dev/null
+	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/preflight-incus.yml >/dev/null
+	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/bootstrap-incus.yml >/dev/null
+	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/validate-incus.yml >/dev/null
 
 lint-hcl: ## Check OpenTofu formatting without changing files.
 	@tofu fmt -check -recursive infrastructure
@@ -91,8 +95,14 @@ baseline: ## Prepare and harden a selected target (requires exact CONFIRM).
 validate-baseline: ## Validate the baseline and write ignored local evidence.
 	@./scripts/ansible-target.sh validate-baseline
 
-bootstrap-incus: ## Unavailable until P1-03: install and initialize Incus.
-	@./scripts/not-implemented.sh bootstrap-incus P1-03
+preflight-incus: ## Read-only validation before installing or configuring Incus.
+	@./scripts/ansible-target.sh preflight-incus
+
+bootstrap-incus: ## Install and initialize standalone Incus (requires exact CONFIRM).
+	@./scripts/ansible-target.sh bootstrap-incus
+
+validate-incus: ## Validate Incus API health and write ignored local evidence.
+	@./scripts/ansible-target.sh validate-incus
 
 plan: ## Unavailable until P1-05: plan provider-owned Incus resources.
 	@./scripts/not-implemented.sh plan P1-05

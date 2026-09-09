@@ -1,0 +1,59 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Run non-mutating Incus preflight
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Install the Incus host package
+  ansible.builtin.apt:
+    name: "{{ [incus_host_package] + incus_host_support_packages }}"
+    state: present
+
+- name: Add the operator to the Incus administrator group
+  ansible.builtin.user:
+    name: "{{ debian_prepare_operator_user }}"
+    groups:
+      - incus-admin
+    append: true
+
+- name: Enable the Incus socket
+  ansible.builtin.systemd_service:
+    name: incus.socket
+    enabled: true
+    state: started
+
+- name: Start the Incus daemon
+  ansible.builtin.systemd_service:
+    name: incus.service
+    state: started
+
+- name: Wait for the local Incus daemon
+  ansible.builtin.command: incus admin waitready --timeout=60
+  changed_when: false
+
+- name: Read the current Incus API listen address
+  ansible.builtin.command: incus config get core.https_address
+  register: incus_host_current_api_address
+  changed_when: false
+
+- name: Render the versioned preseed in controller memory
+  ansible.builtin.set_fact:
+    incus_host_rendered_preseed: >-
+      {{ lookup('ansible.builtin.template', 'incus-preseed-v1.yml.j2') }}
+
+- name: Apply the versioned standalone preseed over standard input
+  ansible.builtin.command:
+    argv:
+      - incus
+      - admin
+      - init
+      - --preseed
+    stdin: "{{ incus_host_rendered_preseed }}"
+  when: >-
+    incus_host_current_api_address.stdout | trim !=
+    incus_host_api_address ~ ':' ~ incus_host_api_port
+  changed_when: true
+
+- name: Run Incus health validation
+  ansible.builtin.import_tasks: validate.yml

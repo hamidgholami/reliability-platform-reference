@@ -222,7 +222,7 @@ Observed on 2026-08-28:
 | Debian template | Installed `debian-13` template validates | P1-01 can derive a versioned local YAML |
 | Debian arm64 image | Dated image and SHA-512 digest resolve from the template | Preserve the reviewed source and digest in implementation evidence |
 | Existing Lima instances | Zero | No pre-existing instance can be confused with project-owned resources |
-| Nested virtualization | Host eligible and CLI flag present | `/dev/kvm` and an Incus VM remain runtime-gated tests |
+| Nested virtualization | Host eligible and CLI flag present | Deferred; Phase 1 requires neither `/dev/kvm` nor an Incus VM |
 | `socket_vmnet` | Secure-path binary and Lima sudoers absent | Keep it deferred; it is not needed for initial `user-v2` tests |
 
 Official Lima behavior establishes the network contract:
@@ -236,8 +236,9 @@ Official Lima behavior establishes the network contract:
   root-owned helper and reviewed sudoers policy. It remains deferred.
 
 The probe proves host eligibility and configuration availability, not nested
-KVM execution. Under ADR-0006, Lima and Incus VM checks are optional; Phase 1
-deployment acceptance requires a system container on the reference Debian VM.
+KVM execution. Under ADR-0006, Incus VM checks are deferred; Phase 1 deployment
+acceptance requires a system container on the reference Debian VM. Lima remains
+an optional outer host for integration feedback.
 
 ## P1-00 acceptance record
 

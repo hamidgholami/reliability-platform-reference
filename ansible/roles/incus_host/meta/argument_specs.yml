@@ -1,0 +1,43 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+argument_specs:
+  main:
+    short_description: Install and initialize one standalone Incus host
+    options: &incus_host_options
+      incus_host_mode:
+        type: str
+        choices:
+          - standalone
+      incus_host_package:
+        type: str
+        choices:
+          - incus-base
+      incus_host_support_packages:
+        type: list
+        elements: str
+      incus_host_package_version_pattern:
+        type: str
+      incus_host_storage_owner:
+        type: str
+        choices:
+          - opentofu
+      incus_host_storage_source:
+        type: str
+      incus_host_api_address:
+        type: str
+      incus_host_api_port:
+        type: int
+      incus_host_preseed_schema_version:
+        type: int
+      incus_host_minimum_root_available_bytes:
+        type: int
+      incus_host_require_controller_api:
+        type: bool
+  preflight:
+    short_description: Validate an Incus host before mutation
+    options: *incus_host_options
+  validate:
+    short_description: Validate the initialized Incus host
+    options: *incus_host_options

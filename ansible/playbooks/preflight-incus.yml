@@ -1,0 +1,14 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Validate a Debian host before Incus bootstrap
+  hosts: incus_hosts
+  gather_facts: true
+  any_errors_fatal: true
+  become: true
+  tasks:
+    - name: Run Incus host preflight
+      ansible.builtin.import_role:
+        name: incus_host
+        tasks_from: preflight

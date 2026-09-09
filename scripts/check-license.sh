@@ -35,6 +35,9 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   ansible/tasks/target_preflight.yml \
   ansible/playbooks/preflight.yml ansible/playbooks/baseline.yml \
   ansible/playbooks/validate-baseline.yml \
+  ansible/playbooks/preflight-incus.yml \
+  ansible/playbooks/bootstrap-incus.yml \
+  ansible/playbooks/validate-incus.yml \
   ansible/roles/debian_prepare/defaults/main.yml \
   ansible/roles/debian_prepare/handlers/main.yml \
   ansible/roles/debian_prepare/meta/argument_specs.yml \
@@ -42,6 +45,12 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   ansible/roles/debian_prepare/tasks/packages.yml \
   ansible/roles/debian_prepare/tasks/operator.yml \
   ansible/roles/debian_prepare/tasks/journald.yml \
+  ansible/roles/incus_host/defaults/main.yml \
+  ansible/roles/incus_host/meta/argument_specs.yml \
+  ansible/roles/incus_host/tasks/main.yml \
+  ansible/roles/incus_host/tasks/preflight.yml \
+  ansible/roles/incus_host/tasks/validate.yml \
+  ansible/roles/incus_host/templates/incus-preseed-v1.yml.j2 \
   lima/single-node.yaml \
   scripts/doctor.sh scripts/check-license.sh scripts/scan-secrets.sh \
   scripts/lima-host-probe.sh scripts/lima-lifecycle.sh \

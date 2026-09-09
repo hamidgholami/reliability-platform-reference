@@ -1,0 +1,114 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Wait for the local Incus daemon
+  ansible.builtin.command: incus admin waitready --timeout=60
+  changed_when: false
+
+- name: Query structured local Incus API health
+  ansible.builtin.command: incus query /1.0
+  register: incus_host_api_query
+  changed_when: false
+
+- name: Decode Incus API health
+  ansible.builtin.set_fact:
+    incus_host_api_health: "{{ incus_host_api_query.stdout | from_json }}"
+
+- name: Read installed Incus package version
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - --show
+      - "--showformat=${Version}"
+      - "{{ incus_host_package }}"
+  register: incus_host_installed_version
+  changed_when: false
+
+- name: Read effective Incus API listen address
+  ansible.builtin.command: incus config get core.https_address
+  register: incus_host_effective_api_address
+  changed_when: false
+
+- name: Check Incus socket and daemon state
+  ansible.builtin.service_facts:
+
+- name: Validate the local HTTPS API endpoint
+  ansible.builtin.uri:
+    url: "https://127.0.0.1:{{ incus_host_api_port }}/1.0"
+    method: GET
+    status_code: 200
+    validate_certs: false
+    return_content: true
+  register: incus_host_local_https
+
+- name: Assert standalone Incus health boundary
+  ansible.builtin.assert:
+    that:
+      - incus_host_installed_version.stdout is match(incus_host_package_version_pattern)
+      - >-
+        incus_host_effective_api_address.stdout | trim ==
+        incus_host_api_address ~ ':' ~ incus_host_api_port
+      - incus_host_api_health.type == 'sync'
+      - incus_host_api_health.status == 'Success'
+      - incus_host_api_health.metadata.auth == 'trusted'
+      - not incus_host_api_health.metadata.environment.server_clustered | bool
+      - ansible_facts.services['incus.socket'].state == 'running'
+      - ansible_facts.services['incus.service'].state == 'running'
+      - (incus_host_local_https.content | from_json).type == 'sync'
+
+- name: Check Incus API reachability from the controller
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host }}"
+    port: "{{ incus_host_api_port }}"
+    connect_timeout: 5
+    timeout: 60
+  delegate_to: localhost
+  become: false
+  when: incus_host_require_controller_api | bool
+
+- name: Read Incus server certificate fingerprint
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - x509
+      - -in
+      - /var/lib/incus/server.crt
+      - -noout
+      - -fingerprint
+      - -sha256
+  register: incus_host_server_fingerprint
+  changed_when: false
+
+- name: Create ignored local Incus evidence directory
+  ansible.builtin.file:
+    path: "{{ playbook_dir }}/../../reports/p1-03"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+
+- name: Write bounded Incus validation evidence locally
+  ansible.builtin.copy:
+    dest: >-
+      {{ playbook_dir }}/../../reports/p1-03/{{ inventory_hostname |
+      regex_replace('[^A-Za-z0-9_.-]', '_') }}.json
+    mode: "0600"
+    content: >-
+      {{ {
+        'schema_version': 1,
+        'target': inventory_hostname,
+        'deployment_profile': rpr_deployment_profile,
+        'package': incus_host_package,
+        'package_version': incus_host_installed_version.stdout,
+        'api_version': incus_host_api_health.metadata.api_version,
+        'server_version': incus_host_api_health.metadata.environment.server_version,
+        'server_clustered': incus_host_api_health.metadata.environment.server_clustered,
+        'https_address': incus_host_effective_api_address.stdout | trim,
+        'controller_api_reachability_required': incus_host_require_controller_api,
+        'server_certificate_sha256': incus_host_server_fingerprint.stdout,
+        'preseed_transport': 'stdin',
+        'provider_resources_created': false
+      } | to_nice_json }}
+  delegate_to: localhost
+  become: false

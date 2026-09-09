@@ -43,4 +43,13 @@ expect_failure \
   CONFIRM= \
   ./scripts/ansible-target.sh baseline
 
+expect_failure \
+  "set CONFIRM=bootstrap-incus-single-node-reference-incus-reference-01" \
+  env PROFILE=single-node-reference \
+  INVENTORY=ansible/inventories/single-node-reference/hosts.example.yml \
+  TARGET_HOST=incus-reference-01 \
+  OPERATOR_PUBLIC_KEY_FILE=/dev/null \
+  CONFIRM= \
+  ./scripts/ansible-target.sh bootstrap-incus
+
 echo "Ansible target safety checks passed."

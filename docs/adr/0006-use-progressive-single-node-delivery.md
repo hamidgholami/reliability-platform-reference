@@ -30,7 +30,7 @@ then scales only if measured integration tests fail for lack of capacity. It
 resolves the latest official Debian 13 arm64 AMI with an owner-verified query
 instead of pinning a regional AMI ID. Free-tier or promotional eligibility is
 checked at execution time and is never assumed. Incus system containers are the
-baseline, so nested virtualization is not required.
+only Phase 1 guest type, so nested virtualization and Incus VMs are deferred.
 
 Use this promotion path:
 
@@ -51,9 +51,9 @@ explicit boundary. If a test requires extensive macOS routing,
 Phase 1 ends after Ansible configures the host, Incus runs standalone, the
 official provider creates a minimal project/storage/network/profile/container
 substrate, and the documented destroy/recreate path passes. Three-member Incus,
-BIND/TSIG private DNS, macOS split DNS, and Incus VM testing do not block that
-milestone. Private authoritative DNS moves beside PKI and identity in Phase 2;
-cluster behavior remains a later optional failure-domain experiment.
+BIND/TSIG private DNS, macOS split DNS, and Incus VM testing are deferred beyond
+that milestone. Private authoritative DNS moves beside PKI and identity in
+Phase 2; cluster behavior remains a later optional failure-domain experiment.
 
 ## Consequences
 
