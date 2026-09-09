@@ -152,8 +152,9 @@ egress design.
 
 Before apply, the workflow must:
 
-- verify AWS caller identity, selected region, free-tier eligibility, current
-  instance price, and AMI architecture;
+- verify AWS caller identity, selected region, current instance price, and AMI
+  architecture; query the account-plan status when available and otherwise
+  assume no Free Tier discount;
 - verify an active notification-only AWS cost budget; its subscriber address
   remains outside this repository;
 - require an explicit operator CIDR and reject `0.0.0.0/0`;

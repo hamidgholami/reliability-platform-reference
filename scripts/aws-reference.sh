@@ -146,6 +146,7 @@ plan()
     eu-central-1) pricing_location="EU (Frankfurt)" ;;
     *) fail "P1-04 currently supports AWS_REGION=eu-central-1 only" ;;
   esac
+  billing_region="us-east-1"
 
   for tool in aws jq ssh-keygen tofu; do
     require_tool "$tool"
@@ -157,13 +158,32 @@ plan()
 
   read_identity
 
-  free_tier=$(aws_call us-east-1 freetier get-account-plan-state --output json)
-  free_tier_account=$(printf '%s' "$free_tier" | jq -er '.accountId') ||
-    fail "could not read the AWS account plan state"
-  [ "$free_tier_account" = "$account_id" ] ||
-    fail "Free Tier status belongs to a different AWS account"
+  if free_tier=$(aws_call "$billing_region" freetier \
+    get-account-plan-state --output json 2>&1); then
+    free_tier_account=$(printf '%s' "$free_tier" | jq -er '.accountId') ||
+      fail "could not read the AWS account plan state"
+    [ "$free_tier_account" = "$account_id" ] ||
+      fail "Free Tier status belongs to a different AWS account"
+    free_tier_summary=$(printf '%s' "$free_tier" | jq -c '{
+      type: .accountPlanType,
+      status: .accountPlanStatus,
+      expires: .accountPlanExpirationDate,
+      credits: .accountPlanRemainingCredits,
+      discount_assumption: "eligibility-only"
+    }')
+  else
+    case "$free_tier" in
+      *ResourceNotFoundException*)
+        free_tier_summary='{"type":"unavailable","status":"NO_ACCOUNT_PLAN_RECORD","discount_assumption":"none"}'
+        ;;
+      *)
+        printf '%s\n' "$free_tier" >&2
+        fail "could not query the AWS account plan state"
+        ;;
+    esac
+  fi
 
-  budget=$(aws_call us-east-1 budgets describe-budget \
+  budget=$(aws_call "$billing_region" budgets describe-budget \
     --account-id "$account_id" --budget-name "$budget_name" --output json)
   [ "$(printf '%s' "$budget" | jq -er '.Budget.BudgetType')" = "COST" ] ||
     fail "AWS_BUDGET_NAME must identify a COST budget"
@@ -175,7 +195,7 @@ plan()
     jq -er '.Budget.BudgetLimit | "\(.Amount) \(.Unit)"') ||
     fail "the selected budget has no fixed budget limit"
 
-  notifications=$(aws_call us-east-1 budgets describe-notifications-for-budget \
+  notifications=$(aws_call "$billing_region" budgets describe-notifications-for-budget \
     --account-id "$account_id" --budget-name "$budget_name" --output json)
   notification_count=$(printf '%s' "$notifications" |
     jq -er '.Notifications | length') || fail "could not inspect budget alerts"
@@ -192,7 +212,7 @@ plan()
         Threshold,
         ThresholdType: (.ThresholdType // \"PERCENTAGE\")
       }")
-    subscribers=$(aws_call us-east-1 budgets \
+    subscribers=$(aws_call "$billing_region" budgets \
       describe-subscribers-for-notification \
       --account-id "$account_id" --budget-name "$budget_name" \
       --notification "$notification" --output json)
@@ -204,7 +224,7 @@ plan()
   [ "$subscriber_count" -gt 0 ] ||
     fail "the selected AWS budget has no notification subscriber"
 
-  actions=$(aws_call us-east-1 budgets describe-budget-actions-for-budget \
+  actions=$(aws_call "$billing_region" budgets describe-budget-actions-for-budget \
     --account-id "$account_id" --budget-name "$budget_name" --output json)
   [ "$(printf '%s' "$actions" | jq -er '.Actions | length')" -eq 0 ] ||
     fail "the selected budget has mutation actions; use a notification-only budget"
@@ -218,7 +238,7 @@ plan()
       {Type:"TERM_MATCH",Field:"preInstalledSw",Value:"NA"},
       {Type:"TERM_MATCH",Field:"capacitystatus",Value:"Used"}
     ]')
-  instance_prices=$(aws_call us-east-1 pricing get-products \
+  instance_prices=$(aws_call "$aws_region" pricing get-products \
     --service-code AmazonEC2 --filters "$instance_filters" \
     --max-results 100 --output json)
   instance_hourly=$(printf '%s' "$instance_prices" | extract_rate Hrs) ||
@@ -229,7 +249,7 @@ plan()
     {Type:"TERM_MATCH",Field:"productFamily",Value:"Storage"},
     {Type:"TERM_MATCH",Field:"volumeApiName",Value:"gp3"}
   ]')
-  storage_prices=$(aws_call us-east-1 pricing get-products \
+  storage_prices=$(aws_call "$aws_region" pricing get-products \
     --service-code AmazonEC2 --filters "$storage_filters" \
     --max-results 100 --output json)
   storage_gib_month=$(printf '%s' "$storage_prices" | extract_rate GB-Mo) ||
@@ -239,7 +259,7 @@ plan()
     {Type:"TERM_MATCH",Field:"location",Value:$location},
     {Type:"TERM_MATCH",Field:"productFamily",Value:"IP Address"}
   ]')
-  ipv4_prices=$(aws_call us-east-1 pricing get-products \
+  ipv4_prices=$(aws_call "$aws_region" pricing get-products \
     --service-code AmazonVPC --filters "$ipv4_filters" \
     --max-results 100 --output json)
   ipv4_hourly=$(printf '%s' "$ipv4_prices" | jq -er '
@@ -297,6 +317,7 @@ plan()
     --arg region "$aws_region" \
     --arg budget "$budget_name" \
     --arg expires "$expires_at" \
+    --argjson free_tier "$free_tier_summary" \
     --argjson estimated "$estimated_cost" '{
       schema_version: 1,
       aws_profile: $profile,
@@ -304,6 +325,7 @@ plan()
       caller_arn: $arn,
       aws_region: $region,
       budget_name: $budget,
+      free_tier: $free_tier,
       expires_at: $expires,
       estimated_cost_usd_before_tax_and_transfer: $estimated
     }' >"$session_file"
@@ -313,7 +335,7 @@ AWS reference-VM gate passed
   caller:          $caller_arn
   account:         $account_id
   region:          $aws_region
-  Free Tier plan:  $(printf '%s' "$free_tier" | jq -c '{type:.accountPlanType,status:.accountPlanStatus,expires:.accountPlanExpirationDate,credits:.accountPlanRemainingCredits}')
+  Free Tier plan:  $free_tier_summary
   budget:          $budget_name ($budget_limit, $notification_count alert(s), $subscriber_count subscriber(s), no actions)
   instance:        $instance_type at USD $instance_hourly/hour
   root volume:     $root_volume_size GiB gp3 at USD $storage_gib_month/GiB-month

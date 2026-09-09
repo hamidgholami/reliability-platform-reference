@@ -15,29 +15,64 @@ temporary public IPv4 address.
 
 1. Protect the AWS root user with MFA and do not use root credentials here.
 2. Install AWS CLI v2 on the Mac with `brew install awscli`.
-3. Configure a named, non-root CLI profile. Prefer a short-lived IAM Identity
-   Center session; do not put access keys in this repository.
-4. Give that principal the EC2 lifecycle permissions for the declared boundary
-   and read permissions for STS identity, Price List, Free Tier, Budgets, and
-   Resource Groups Tagging. Keep billing-console access enabled for the budget
-   checks.
+3. For a standalone account, attach AWS's managed
+   `SignInLocalDevelopmentAccess` policy to a named, non-root IAM user. Use
+   `aws login` to obtain temporary credentials; do not create access keys for
+   this workflow or put credentials in this repository.
+4. Give that principal the planning permissions below. They are read-only and
+   intentionally cannot create the reference VM. Add the separately reviewed
+   lifecycle policy only immediately before the paid apply milestone.
 5. In AWS Billing, create a small monthly `COST` budget with at least one email
    notification and no automated budget action. Confirm the subscription email.
 
 The workflow reads the existing budget; it never creates, changes, or deletes
 account-level billing controls.
 
+Do not enable AWS Organizations or IAM Identity Center only for this small lab
+account. If they are already configured, an Identity Center profile is also a
+valid short-lived authentication path.
+
+### Planning policy
+
+Create a customer-managed policy such as `RprP1PlanReadOnly` with this document
+and attach it to the operator. `DescribeBudgetActionsForBudget` is required so
+the gate can prove that the chosen budget has no automated mutation action.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadPlanningGates",
+      "Effect": "Allow",
+      "Action": [
+        "sts:GetCallerIdentity",
+        "freetier:GetAccountPlanState",
+        "budgets:ViewBudget",
+        "budgets:DescribeBudgetActionsForBudget",
+        "aws-portal:ViewBilling",
+        "pricing:GetProducts",
+        "tag:GetResources",
+        "ec2:Describe*",
+        "ec2:GetConsoleOutput"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
 ## Per-session preparation
 
 Authenticate and verify that the profile is not the root user:
 
 ```sh
-aws sso login --profile rpr-p1
+aws login --profile rpr-p1 --region eu-central-1
 aws sts get-caller-identity --profile rpr-p1
 ```
 
-If the profile does not use IAM Identity Center, use its normal short-lived
-credential process instead of `aws sso login`.
+The identity must be the intended non-root operator. For an existing IAM
+Identity Center profile, use `aws sso login --profile rpr-p1` instead.
 
 Create a dedicated Ed25519 key if one does not already exist:
 
@@ -66,6 +101,11 @@ defaults to the currently reviewed `eu-central-1`; the first implementation
 rejects other regions until their AMI availability and pricing mapping are
 tested.
 
+All EC2, VPC, AMI, and EBS discovery and resources stay in Frankfurt
+(`eu-central-1`). AWS Budgets and Free Tier are account-level APIs queried
+through `us-east-1`. Price List queries use its Frankfurt API endpoint, while
+their product filter explicitly selects `EU (Frankfurt)`.
+
 ## Plan and apply
 
 Run all workstation checks, then run the live read-only gates and plan:
@@ -80,7 +120,9 @@ credentials, inspects the current Free Tier plan, requires a notification-only
 cost budget, queries current EC2, `gp3`, and public IPv4 list prices, enforces a
 maximum 12-hour lifetime, and writes its plan and inputs only below the ignored
 `.cache/aws-single-node/` directory. Treat credits and Free Tier eligibility as
-possible discounts, never as a guarantee of zero cost.
+possible discounts, never as a guarantee of zero cost. Some established
+accounts have no record in the newer Account Plan API; that response is
+recorded as `NO_ACCOUNT_PLAN_RECORD` and the estimate assumes no discount.
 
 Review the plan. It must show the official Debian owner `136693071363`, arm64,
 the expected tags and expiry, and only the documented resource boundary. Use

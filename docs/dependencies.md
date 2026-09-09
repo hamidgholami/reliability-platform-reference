@@ -26,7 +26,9 @@ listed with exact versions in `ansible/requirements.yml`.
 AWS CLI v2 is an operator-side integration client rather than a vendored or CI
 dependency. Install the current v2 with Homebrew before a paid P1-04 session;
 `make doctor` records the detected version. The live gates fail closed when the
-required Free Tier, Budgets, or Price List commands are unavailable.
+Budgets or Price List commands are unavailable or unauthorized. A Free Tier
+`ResourceNotFoundException` is recorded explicitly and means that planning
+assumes no discount.
 
 Mitogen is not included in the Phase 1 default. Its current release supports
 the pinned Ansible generation, but relies on Ansible's deprecated third-party
