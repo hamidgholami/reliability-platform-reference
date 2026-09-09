@@ -62,6 +62,72 @@ the gate can prove that the chosen budget has no automated mutation action.
 }
 ```
 
+### Temporary lifecycle policy
+
+Immediately before an approved apply, attach a second customer-managed policy
+such as `RprP1FrankfurtLifecycle`. Keep it attached until `aws-destroy` and the
+orphan check succeed, then detach it. It permits only the EC2/VPC operations
+needed by this root and only through the Frankfurt endpoint; it grants no IAM,
+S3, Route 53, load-balancer, NAT gateway, or billing mutations.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageReferenceBoundaryInFrankfurt",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:AssociateRouteTable",
+        "ec2:AttachInternetGateway",
+        "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:CreateInternetGateway",
+        "ec2:CreateRoute",
+        "ec2:CreateRouteTable",
+        "ec2:CreateSecurityGroup",
+        "ec2:CreateSubnet",
+        "ec2:CreateTags",
+        "ec2:CreateVpc",
+        "ec2:DeleteInternetGateway",
+        "ec2:DeleteKeyPair",
+        "ec2:DeleteRoute",
+        "ec2:DeleteRouteTable",
+        "ec2:DeleteSecurityGroup",
+        "ec2:DeleteSubnet",
+        "ec2:DeleteTags",
+        "ec2:DeleteVpc",
+        "ec2:DetachInternetGateway",
+        "ec2:DisassociateRouteTable",
+        "ec2:ImportKeyPair",
+        "ec2:ModifyInstanceAttribute",
+        "ec2:ModifyInstanceMetadataOptions",
+        "ec2:ModifySubnetAttribute",
+        "ec2:ModifyVpcAttribute",
+        "ec2:ReplaceRoute",
+        "ec2:ReplaceRouteTableAssociation",
+        "ec2:RevokeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupIngress",
+        "ec2:RunInstances",
+        "ec2:TerminateInstances"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-central-1"
+        }
+      }
+    }
+  ]
+}
+```
+
+The wildcard resource is intentional because EC2 launch and VPC topology
+operations span several resource types, and some do not support resource-level
+authorization. The explicit action list, Frankfurt condition, isolated
+OpenTofu state, exact confirmation, and short attachment window form the
+boundary for this single-account exercise.
+
 ## Per-session preparation
 
 Authenticate and verify that the profile is not the root user:

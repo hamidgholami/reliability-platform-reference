@@ -108,6 +108,20 @@ extract_rate()
   '
 }
 
+timestamp_to_epoch()
+{
+  python3 - "$1" <<'PY'
+from datetime import datetime
+import sys
+
+value = sys.argv[1]
+try:
+    print(int(float(value)))
+except ValueError:
+    print(int(datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()))
+PY
+}
+
 plan()
 {
   aws_profile=${AWS_PROFILE:-}
@@ -143,12 +157,15 @@ plan()
   esac
 
   case "$aws_region" in
-    eu-central-1) pricing_location="EU (Frankfurt)" ;;
+    eu-central-1)
+      pricing_location="EU (Frankfurt)"
+      pricing_ipv4_usage="EUC1-PublicIPv4:InUseAddress"
+      ;;
     *) fail "P1-04 currently supports AWS_REGION=eu-central-1 only" ;;
   esac
   billing_region="us-east-1"
 
-  for tool in aws jq ssh-keygen tofu; do
+  for tool in aws jq python3 ssh-keygen tofu; do
     require_tool "$tool"
   done
   [ -d "$terraform_root/.terraform" ] ||
@@ -187,10 +204,20 @@ plan()
     --account-id "$account_id" --budget-name "$budget_name" --output json)
   [ "$(printf '%s' "$budget" | jq -er '.Budget.BudgetType')" = "COST" ] ||
     fail "AWS_BUDGET_NAME must identify a COST budget"
+  budget_start=$(printf '%s' "$budget" |
+    jq -er '.Budget.TimePeriod.Start | tostring') ||
+    fail "the selected AWS budget has no start time"
+  budget_end=$(printf '%s' "$budget" |
+    jq -er '.Budget.TimePeriod.End | tostring') ||
+    fail "the selected AWS budget has no end time"
+  budget_start_epoch=$(timestamp_to_epoch "$budget_start" 2>/dev/null) ||
+    fail "could not parse the selected AWS budget start time"
+  budget_end_epoch=$(timestamp_to_epoch "$budget_end" 2>/dev/null) ||
+    fail "could not parse the selected AWS budget end time"
   now_epoch=$(date -u +%s)
-  printf '%s' "$budget" | jq -e --argjson now "$now_epoch" \
-    '.Budget.TimePeriod.Start <= $now and .Budget.TimePeriod.End > $now' \
-    >/dev/null || fail "the selected AWS budget is not active"
+  [ "$budget_start_epoch" -le "$now_epoch" ] &&
+    [ "$budget_end_epoch" -gt "$now_epoch" ] ||
+    fail "the selected AWS budget is not active"
   budget_limit=$(printf '%s' "$budget" |
     jq -er '.Budget.BudgetLimit | "\(.Amount) \(.Unit)"') ||
     fail "the selected budget has no fixed budget limit"
@@ -255,9 +282,11 @@ plan()
   storage_gib_month=$(printf '%s' "$storage_prices" | extract_rate GB-Mo) ||
     fail "could not resolve the current gp3 storage price"
 
-  ipv4_filters=$(jq -nc --arg location "$pricing_location" '[
+  ipv4_filters=$(jq -nc \
+    --arg location "$pricing_location" \
+    --arg usage "$pricing_ipv4_usage" '[
     {Type:"TERM_MATCH",Field:"location",Value:$location},
-    {Type:"TERM_MATCH",Field:"productFamily",Value:"IP Address"}
+    {Type:"TERM_MATCH",Field:"usagetype",Value:$usage}
   ]')
   ipv4_prices=$(aws_call "$aws_region" pricing get-products \
     --service-code AmazonVPC --filters "$ipv4_filters" \
