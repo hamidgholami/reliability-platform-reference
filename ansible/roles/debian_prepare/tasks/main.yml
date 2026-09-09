@@ -1,0 +1,49 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Confirm the gathered target contract
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution == 'Debian'
+      - ansible_distribution_major_version == '13'
+      - ansible_service_mgr == 'systemd'
+      - debian_prepare_stable_target | bool
+      - debian_prepare_operator_user == ansible_user
+    fail_msg: The target no longer satisfies the validated Debian 13 contract.
+
+- name: Prepare approved packages
+  ansible.builtin.import_tasks: packages.yml
+
+- name: Preserve the operator access path
+  ansible.builtin.import_tasks: operator.yml
+
+- name: Configure persistent system journal
+  ansible.builtin.import_tasks: journald.yml
+
+- name: Create the baseline backup directory
+  ansible.builtin.file:
+    path: /var/backups/reliability-platform-reference
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Back up the original SSH server configuration once
+  ansible.builtin.copy:
+    src: /etc/ssh/sshd_config
+    dest: /var/backups/reliability-platform-reference/sshd_config.pre-hardening
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0600"
+    force: false
+
+- name: Check whether Debian requests a reboot after preparation
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: debian_prepare_reboot_marker
+
+- name: Report preparation reboot status
+  ansible.builtin.debug:
+    msg: "Reboot required after preparation: {{ debian_prepare_reboot_marker.stat.exists }}"

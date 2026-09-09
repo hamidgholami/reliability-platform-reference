@@ -1,6 +1,7 @@
 # Phase 1 Plan: Minimal Single-Node Incus Foundation
 
-- Status: revised and accepted on 2026-09-04; P1-01 complete, P1-02 next
+- Status: revised and accepted on 2026-09-04; P1-02 automation implemented,
+  real-target acceptance pending
 - Owner: Hamid Gholami
 - Default deployment profile: `single-node-reference`, supplied initially by
   the AWS bootstrap root
@@ -188,19 +189,19 @@ every supported command, and no command silently creates a VM or cloud resource.
 
 ### P1-02 — Minimal Debian preparation and hardening
 
-- [ ] Validate Debian 13 before mutation.
-- [ ] Add a thin `debian_prepare` role for required updates, approved packages,
+- [x] Validate Debian 13 before mutation.
+- [x] Add a thin `debian_prepare` role for required updates, approved packages,
   CA certificates, Python, time synchronization, the operator account, sudo,
   authorized keys, persistent journal policy, and reboot reporting.
-- [ ] Invoke pinned `devsec.hardening.os_hardening` and
+- [x] Invoke pinned `devsec.hardening.os_hardening` and
   `devsec.hardening.ssh_hardening`; do not copy their implementation.
-- [ ] Define only the Incus-safe overrides needed to preserve forwarding,
+- [x] Define only the Incus-safe overrides needed to preserve forwarding,
   namespaces, filesystems, AppArmor, and the active SSH transport.
-- [ ] Validate generated SSH configuration and a new control connection before
+- [x] Validate generated SSH configuration and a new control connection before
   closing the original session.
 - [ ] Reboot when required, reconnect, and run the preparation and hardening
   path twice.
-- [ ] Record unexpected listening services and relevant post-run facts without
+- [x] Record unexpected listening services and relevant post-run facts without
   collecting unrelated host information.
 
 Acceptance: the second run is idempotent, SSH remains reachable after reboot,
@@ -334,7 +335,8 @@ a deferred component merely because its future design is already documented.
 
 ## Verification interface
 
-P1-01 implements these targets:
+P1-01 establishes this interface. P1-02 has enabled its baseline commands;
+commands for later work items still fail closed and identify their phase:
 
 ```sh
 make doctor
@@ -343,8 +345,10 @@ make test-local
 make lima-up                 # optional
 make aws-plan PROFILE=single-node-reference
 make aws-apply PROFILE=single-node-reference
-make preflight PROFILE=single-node-reference
-make baseline PROFILE=single-node-reference
+make preflight               # explicit inventory, target, and public key
+make baseline-check          # explicit inventory, target, and public key
+make baseline                # same inputs plus exact confirmation
+make validate-baseline       # writes ignored local evidence
 make bootstrap-incus PROFILE=single-node-reference
 make plan PROFILE=single-node-reference
 make apply PROFILE=single-node-reference
@@ -352,7 +356,7 @@ make validate PROFILE=single-node-reference
 make destroy PROFILE=single-node-reference
 make aws-destroy PROFILE=single-node-reference
 make aws-orphan-check PROFILE=single-node-reference
-make lima-down               # optional
+make lima-delete             # optional and explicitly confirmed
 ```
 
 Static CI performs no infrastructure mutation. Target integration requires

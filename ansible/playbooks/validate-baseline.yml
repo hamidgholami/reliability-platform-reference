@@ -1,0 +1,130 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Validate the Debian baseline and record bounded local evidence
+  hosts: incus_hosts
+  gather_facts: true
+  any_errors_fatal: true
+  become: true
+  tasks:
+    - name: Validate SSH server configuration
+      ansible.builtin.command: /usr/sbin/sshd -t
+      changed_when: false
+
+    - name: Read effective SSH settings
+      ansible.builtin.command: /usr/sbin/sshd -T
+      register: baseline_sshd_effective
+      changed_when: false
+
+    - name: Read service state
+      ansible.builtin.service_facts:
+
+    - name: Read Incus capability sysctls
+      ansible.builtin.command: "sysctl -n {{ item }}"
+      loop:
+        - net.ipv4.ip_forward
+        - net.ipv4.conf.all.forwarding
+      register: baseline_sysctl_status
+      changed_when: false
+
+    - name: Wait for synchronized system time
+      ansible.builtin.command: chronyc tracking
+      register: baseline_time_status
+      changed_when: false
+      retries: 12
+      delay: 5
+      until:
+        - baseline_time_status.rc == 0
+        - "'Not synchronised' not in baseline_time_status.stdout"
+
+    - name: Read listening TCP sockets
+      ansible.builtin.command: ss -H -lnt
+      register: baseline_listening_tcp
+      changed_when: false
+
+    - name: Check kernel user namespace support
+      ansible.builtin.stat:
+        path: /proc/self/ns/user
+      register: baseline_user_namespace
+
+    - name: Check whether Debian still requests a reboot
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: baseline_reboot_marker
+
+    - name: Derive listening and unexpected TCP ports
+      ansible.builtin.set_fact:
+        baseline_listening_tcp_ports: >-
+          {{ baseline_listening_tcp.stdout_lines
+             | map('regex_search', ':[0-9]+')
+             | reject('equalto', none)
+             | map('regex_replace', '^:', '')
+             | map('int') | unique | sort | list }}
+        baseline_unexpected_tcp_ports: >-
+          {{ baseline_listening_tcp.stdout_lines
+             | map('regex_search', ':[0-9]+')
+             | reject('equalto', none)
+             | map('regex_replace', '^:', '')
+             | map('int') | unique | sort
+             | difference(debian_baseline_expected_tcp_ports | map('int') | list)
+             | list }}
+
+    - name: Assert baseline invariants
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '13'
+          - ansible_facts.services['apparmor.service'].state == 'running'
+          - ansible_facts.services['chrony.service'].state == 'running'
+          - ansible_facts.services['ssh.service'].state == 'running'
+          - (baseline_sysctl_status.results | map(attribute='stdout') | unique | list) == ['1']
+          - baseline_user_namespace.stat.exists
+          - "'passwordauthentication no' in baseline_sshd_effective.stdout"
+          - "'permitrootlogin no' in baseline_sshd_effective.stdout"
+          - "'pubkeyauthentication yes' in baseline_sshd_effective.stdout"
+
+    - name: Create ignored local evidence directory
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/../../reports/p1-02"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+
+    - name: Write bounded validation evidence locally
+      ansible.builtin.copy:
+        dest: >-
+          {{ playbook_dir }}/../../reports/p1-02/{{ inventory_hostname |
+          regex_replace('[^A-Za-z0-9_.-]', '_') }}.json
+        mode: "0600"
+        content: >-
+          {{ {
+            'schema_version': 1,
+            'target': inventory_hostname,
+            'distribution': ansible_distribution,
+            'distribution_version': ansible_distribution_version,
+            'architecture': ansible_architecture,
+            'kernel': ansible_kernel,
+            'user_namespace_supported': baseline_user_namespace.stat.exists,
+            'time_synchronized': 'Not synchronised' not in baseline_time_status.stdout,
+            'services': {
+              'apparmor': ansible_facts.services['apparmor.service'].state,
+              'chrony': ansible_facts.services['chrony.service'].state,
+              'ssh': ansible_facts.services['ssh.service'].state
+            },
+            'sysctls': dict(baseline_sysctl_status.results
+              | map(attribute='item')
+              | zip(baseline_sysctl_status.results | map(attribute='stdout'))),
+            'listening_tcp_ports': baseline_listening_tcp_ports,
+            'unexpected_tcp_ports': baseline_unexpected_tcp_ports,
+            'reboot_required': baseline_reboot_marker.stat.exists
+          } | to_nice_json }}
+      delegate_to: localhost
+      become: false
+
+    - name: Report unexpected listening TCP ports
+      ansible.builtin.debug:
+        msg: >-
+          Unexpected listening TCP ports:
+          {{ baseline_unexpected_tcp_ports | default([]) }}

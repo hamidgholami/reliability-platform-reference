@@ -1,0 +1,31 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Preserve the existing operator account
+  ansible.builtin.user:
+    name: "{{ debian_prepare_operator_user }}"
+    groups:
+      - sudo
+    append: true
+    create_home: true
+    shell: /bin/bash
+
+- name: Preserve the operator public key
+  ansible.posix.authorized_key:
+    user: "{{ debian_prepare_operator_user }}"
+    key: "{{ debian_prepare_operator_public_key }}"
+    state: present
+    exclusive: false
+  no_log: true
+
+- name: Allow the operator to use non-interactive sudo
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/90-{{ debian_prepare_operator_user }}"
+    owner: root
+    group: root
+    mode: "0440"
+    content: >-
+      {{ debian_prepare_operator_user }} ALL=(ALL:ALL) NOPASSWD: ALL
+
+    validate: /usr/sbin/visudo -cf %s

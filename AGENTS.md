@@ -10,7 +10,8 @@ workflow with measured evidence over a catalogue of unrelated tools.
 ## Current phase
 
 Phase 0 is complete. The Phase 1 implementation plan is accepted. P1-00 and
-P1-01 are complete; P1-02 minimal Debian preparation and hardening is next.
+P1-01 are complete. P1-02 automation is implemented; P1-03 is next, while
+P1-02 real-target and second-run acceptance will be exercised during P1-04.
 Phase 1 targets one standalone Incus host on a Debian 13 VM, initially supplied
 by a separate minimal AWS bootstrap root. The workstation provides fast checks
 and optional one-VM Lima integration. Do not add implementation or empty future

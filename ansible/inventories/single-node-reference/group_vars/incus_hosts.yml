@@ -1,0 +1,49 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+# These exceptions preserve capabilities required by a standalone Incus host.
+# Keep them narrow and revisit them when the host contract changes.
+sysctl_overwrite:
+  net.ipv4.ip_forward: 1
+  net.ipv4.conf.all.forwarding: 1
+
+# Incus images may use SquashFS. The upstream role disables unused filesystem
+# modules unless they are explicitly retained.
+os_filesystem_whitelist:
+  - squashfs
+
+# Let Incus own its nftables namespace and bridge rules instead of changing UFW
+# defaults underneath it.
+ufw_manage_defaults: false
+
+# Protect the active automation identity from generic account-aging changes.
+os_ignore_users:
+  - "{{ debian_prepare_operator_user }}"
+os_ignore_home_folder_users:
+  - "{{ debian_prepare_operator_user }}"
+os_users_without_password_ageing:
+  - "{{ debian_prepare_operator_user }}"
+
+# Harden the server only. Local TCP forwarding retains a bounded route to the
+# Incus API without enabling remote forwarding, agent forwarding, or tunneling.
+ssh_client_hardening: false
+ssh_server_hardening: true
+ssh_server_ports:
+  - "{{ ansible_port | default(22) | string }}"
+ssh_listen_to:
+  - 0.0.0.0
+ssh_server_password_login: false
+ssh_permit_root_login: "no"
+ssh_pubkey_authentication: true
+sshd_authenticationmethods: publickey
+ssh_allow_tcp_forwarding: local
+ssh_gateway_ports: false
+ssh_allow_agent_forwarding: false
+ssh_x11_forwarding: false
+network_ipv6_enable: true
+
+# Before Incus is installed, SSH is the only expected remotely reachable TCP
+# service. Extend this list only with an explicit host-level requirement.
+debian_baseline_expected_tcp_ports:
+  - "{{ ansible_port | default(22) | int }}"

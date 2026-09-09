@@ -1,0 +1,23 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+debian_prepare_operator_user: "{{ ansible_user }}"
+debian_prepare_operator_public_key_file: ""
+debian_prepare_stable_target: false
+debian_prepare_apply_upgrades: true
+debian_prepare_reboot_when_required: true
+debian_prepare_apt_cache_valid_time: 3600
+debian_prepare_packages:
+  - apparmor
+  - apparmor-utils
+  - ca-certificates
+  - chrony
+  - curl
+  - iproute2
+  - jq
+  - python3
+  - python3-apt
+  - sudo
+debian_prepare_journal_system_max_use: 512M
+debian_prepare_journal_runtime_max_use: 128M

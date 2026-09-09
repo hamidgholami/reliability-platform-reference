@@ -9,3 +9,6 @@ all:
         incus-reference-01:
           ansible_host: 192.0.2.10
           ansible_user: admin
+          # Replace the documentation address, then explicitly attest that the
+          # target is stable enough to survive SSH hardening.
+          debian_prepare_stable_target: false

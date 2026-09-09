@@ -1,0 +1,87 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Require explicit target stability attestation
+  ansible.builtin.assert:
+    that:
+      - debian_prepare_stable_target | default(false) | bool
+      - ansible_host | default('') | length > 0
+      - ansible_host != '192.0.2.10'
+      - ansible_user | default('') | length > 0
+    fail_msg: >-
+      Set a real stable ansible_host, ansible_user, and
+      debian_prepare_stable_target=true in an ignored inventory before using
+      this target.
+
+- name: Read target operating system identity without Python
+  ansible.builtin.raw: >-
+    . /etc/os-release &&
+    printf '%s\n%s\n' "$ID" "$VERSION_ID"
+  register: target_os_release
+  changed_when: false
+  check_mode: false
+
+- name: Read target architecture without Python
+  ansible.builtin.raw: dpkg --print-architecture
+  register: target_architecture
+  changed_when: false
+  check_mode: false
+
+- name: Confirm supported Debian target before mutation
+  ansible.builtin.assert:
+    that:
+      - target_os_release.stdout_lines | length >= 2
+      - target_os_release.stdout_lines[0] == 'debian'
+      - target_os_release.stdout_lines[1] == '13'
+      - target_architecture.stdout | trim in ['amd64', 'arm64']
+    fail_msg: >-
+      This phase supports only Debian 13 on amd64 or arm64; no mutation was
+      attempted.
+
+- name: Confirm privilege escalation works before mutation
+  ansible.builtin.raw: id -u
+  become: true
+  register: target_effective_uid
+  changed_when: false
+  check_mode: false
+
+- name: Require effective root privileges
+  ansible.builtin.assert:
+    that:
+      - target_effective_uid.stdout | trim == '0'
+    fail_msg: Privilege escalation must succeed before baseline changes begin.
+
+- name: Check the operator public key on the controller
+  ansible.builtin.stat:
+    path: "{{ debian_prepare_operator_public_key_file | default('') }}"
+  delegate_to: localhost
+  become: false
+  register: operator_public_key_file_status
+
+- name: Require a readable operator public key
+  ansible.builtin.assert:
+    that:
+      - debian_prepare_operator_public_key_file | default('') | length > 0
+      - operator_public_key_file_status.stat.exists
+      - operator_public_key_file_status.stat.isreg
+      - operator_public_key_file_status.stat.readable
+    fail_msg: >-
+      OPERATOR_PUBLIC_KEY_FILE must name a readable OpenSSH public key on the
+      controller.
+
+- name: Read the operator public key
+  ansible.builtin.set_fact:
+    debian_prepare_operator_public_key: >-
+      {{ lookup('ansible.builtin.file', debian_prepare_operator_public_key_file)
+         | trim }}
+  no_log: true
+
+- name: Validate the operator public key format
+  ansible.builtin.assert:
+    that:
+      - >-
+        debian_prepare_operator_public_key is
+        match('^(ssh-ed25519|sk-ssh-ed25519@openssh.com|ecdsa-sha2-nistp(256|384|521)|sk-ecdsa-sha2-nistp256@openssh.com|ssh-rsa) [A-Za-z0-9+/]+={0,3}( .*)?$')
+    fail_msg: OPERATOR_PUBLIC_KEY_FILE is not a supported OpenSSH public key.
+  no_log: true

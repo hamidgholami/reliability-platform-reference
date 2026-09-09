@@ -9,7 +9,8 @@ ANSIBLE_ENV = ANSIBLE_CONFIG=$(CURDIR)/ansible.cfg ANSIBLE_HOME=$(CURDIR)/.cache
 
 .PHONY: help setup setup-python setup-hcl doctor lint lint-markdown lint-license lint-ansible \
 	syntax-ansible lint-hcl validate-hcl test-hcl scan-secrets check test-local \
-	lima-validate lima-up lima-stop lima-delete preflight baseline \
+	lima-validate lima-up lima-stop lima-delete preflight baseline-check baseline \
+	validate-baseline test-ansible-safety \
 	bootstrap-incus plan apply validate destroy aws-plan aws-apply \
 	aws-destroy aws-orphan-check
 
@@ -41,8 +42,11 @@ lint-license: ## Verify repository license and attribution policy.
 lint-ansible: ## Lint Ansible content with the pinned virtual environment.
 	@$(ANSIBLE_ENV) .venv/bin/ansible-lint ansible
 
-syntax-ansible: ## Parse the sanitized YAML inventory without contacting a host.
+syntax-ansible: ## Syntax-check the Phase 1 Ansible inventory and playbooks offline.
 	@$(ANSIBLE_ENV) .venv/bin/ansible-inventory --inventory ansible/inventories/single-node-reference/hosts.example.yml --list >/dev/null
+	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/preflight.yml >/dev/null
+	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/baseline.yml >/dev/null
+	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/validate-baseline.yml >/dev/null
 
 lint-hcl: ## Check OpenTofu formatting without changing files.
 	@tofu fmt -check -recursive infrastructure
@@ -53,10 +57,13 @@ validate-hcl: ## Validate initialized HCL without credentials or network access.
 test-hcl: ## Test the AWS safety contract with a mocked provider only.
 	@tofu -chdir=infrastructure/bootstrap/aws-single-node test
 
+test-ansible-safety: ## Test target selection and confirmation fail-closed behavior.
+	@./tests/ansible-target-safety.sh
+
 scan-secrets: ## Scan Git content and the working tree with Gitleaks.
 	@./scripts/scan-secrets.sh
 
-check: lint syntax-ansible validate-hcl test-hcl scan-secrets ## Run every non-mutating repository check.
+check: lint syntax-ansible validate-hcl test-hcl test-ansible-safety scan-secrets ## Run every non-mutating repository check.
 
 test-local: check ## Run the complete workstation-only test suite.
 
@@ -72,11 +79,17 @@ lima-stop: ## Stop the optional Lima VM without deleting it.
 lima-delete: ## Delete the optional VM (requires PROFILE and CONFIRM).
 	@./scripts/lima-lifecycle.sh delete
 
-preflight: ## Unavailable until P1-02: validate a selected Debian target.
-	@./scripts/not-implemented.sh preflight P1-02
+preflight: ## Read-only validation of an explicitly selected Debian target.
+	@./scripts/ansible-target.sh preflight
 
-baseline: ## Unavailable until P1-02: prepare and harden the Debian target.
-	@./scripts/not-implemented.sh baseline P1-02
+baseline-check: ## Preview the selected target baseline in Ansible check mode.
+	@./scripts/ansible-target.sh baseline-check
+
+baseline: ## Prepare and harden a selected target (requires exact CONFIRM).
+	@./scripts/ansible-target.sh baseline
+
+validate-baseline: ## Validate the baseline and write ignored local evidence.
+	@./scripts/ansible-target.sh validate-baseline
 
 bootstrap-incus: ## Unavailable until P1-03: install and initialize Incus.
 	@./scripts/not-implemented.sh bootstrap-incus P1-03

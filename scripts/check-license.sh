@@ -31,10 +31,23 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   .markdownlint-cli2.yaml \
   .ansible-lint ansible.cfg requirements.txt ansible/requirements.yml \
   ansible/inventories/single-node-reference/hosts.example.yml \
+  ansible/inventories/single-node-reference/group_vars/incus_hosts.yml \
+  ansible/tasks/target_preflight.yml \
+  ansible/playbooks/preflight.yml ansible/playbooks/baseline.yml \
+  ansible/playbooks/validate-baseline.yml \
+  ansible/roles/debian_prepare/defaults/main.yml \
+  ansible/roles/debian_prepare/handlers/main.yml \
+  ansible/roles/debian_prepare/meta/argument_specs.yml \
+  ansible/roles/debian_prepare/tasks/main.yml \
+  ansible/roles/debian_prepare/tasks/packages.yml \
+  ansible/roles/debian_prepare/tasks/operator.yml \
+  ansible/roles/debian_prepare/tasks/journald.yml \
   lima/single-node.yaml \
   scripts/doctor.sh scripts/check-license.sh scripts/scan-secrets.sh \
   scripts/lima-host-probe.sh scripts/lima-lifecycle.sh \
   scripts/init-hcl.sh scripts/validate-hcl.sh scripts/not-implemented.sh \
+  scripts/ansible-target.sh \
+  tests/ansible-target-safety.sh \
   infrastructure/bootstrap/aws-single-node/versions.tf \
   infrastructure/bootstrap/aws-single-node/variables.tf \
   infrastructure/bootstrap/aws-single-node/main.tf \

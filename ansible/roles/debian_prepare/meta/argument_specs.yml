@@ -1,0 +1,36 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+argument_specs:
+  main:
+    short_description: Prepare a minimal Debian 13 host for Incus hardening
+    options:
+      debian_prepare_operator_user:
+        type: str
+        required: true
+      debian_prepare_operator_public_key_file:
+        type: path
+        required: true
+      debian_prepare_operator_public_key:
+        type: str
+        required: true
+      debian_prepare_stable_target:
+        type: bool
+        required: true
+      debian_prepare_apply_upgrades:
+        type: bool
+        default: true
+      debian_prepare_reboot_when_required:
+        type: bool
+        default: true
+      debian_prepare_apt_cache_valid_time:
+        type: int
+        default: 3600
+      debian_prepare_packages:
+        type: list
+        elements: str
+      debian_prepare_journal_system_max_use:
+        type: str
+      debian_prepare_journal_runtime_max_use:
+        type: str

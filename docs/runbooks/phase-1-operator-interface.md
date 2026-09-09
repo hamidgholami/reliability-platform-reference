@@ -59,6 +59,10 @@ only when P1-04 starts. The example values are intentionally unusable. AWS plan,
 apply, destroy, and orphan checks remain disabled until identity, price, budget,
 expiry, boundary display, and confirmation checks are implemented.
 
-The general target commands remain disabled until their named Phase 1 work
+P1-02 enables `make preflight`, `make baseline-check`, `make baseline`, and
+`make validate-baseline` for one explicit target. Follow the
+[Debian baseline runbook](debian-baseline.md); the mutating baseline requires an
+exact confirmation string, while target inventory and key material stay
+outside Git. Later commands remain disabled until their named Phase 1 work
 items implement the corresponding safety and acceptance checks. `make help` is
 the authoritative list and labels unavailable commands.

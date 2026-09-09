@@ -29,3 +29,7 @@ __pycache__/
 node_modules/
 coverage/
 reports/
+ansible/inventories/**/*.yml
+!ansible/inventories/**/hosts.example.yml
+!ansible/inventories/**/group_vars/
+!ansible/inventories/**/group_vars/*.yml

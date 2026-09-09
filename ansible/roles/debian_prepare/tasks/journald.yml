@@ -1,0 +1,37 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Create persistent journal storage
+  ansible.builtin.file:
+    path: /var/log/journal
+    state: directory
+    owner: root
+    group: systemd-journal
+    mode: "2755"
+
+- name: Create journald drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure bounded persistent journal storage
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/60-reliability-platform.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible.
+      [Journal]
+      Storage=persistent
+      SystemMaxUse={{ debian_prepare_journal_system_max_use }}
+      RuntimeMaxUse={{ debian_prepare_journal_runtime_max_use }}
+  notify: Restart systemd-journald
+
+- name: Read the merged journald configuration
+  ansible.builtin.command: systemd-analyze cat-config systemd/journald.conf
+  changed_when: false

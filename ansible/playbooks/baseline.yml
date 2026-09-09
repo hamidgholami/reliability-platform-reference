@@ -1,0 +1,99 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Validate target and make Python available
+  hosts: incus_hosts
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Run target preflight gates
+      ansible.builtin.import_tasks: ../tasks/target_preflight.yml
+
+    - name: Check Python and the APT binding
+      ansible.builtin.raw: /usr/bin/python3 -c 'import apt'
+      become: true
+      register: python_bootstrap_probe
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Reject a Python bootstrap during check mode
+      ansible.builtin.assert:
+        that:
+          - not ansible_check_mode or python_bootstrap_probe.rc == 0
+        fail_msg: >-
+          Python or python3-apt is absent. Run the confirmed baseline to
+          bootstrap it; baseline-check never mutates a host.
+
+    - name: Install Python when absent
+      ansible.builtin.raw: >-
+        apt-get update && DEBIAN_FRONTEND=noninteractive
+        apt-get install -y python3 python3-apt
+      become: true
+      when:
+        - not ansible_check_mode
+        - python_bootstrap_probe.rc != 0
+      changed_when: true
+
+- name: Prepare and harden the Debian Incus host
+  hosts: incus_hosts
+  gather_facts: true
+  any_errors_fatal: true
+  become: true
+  roles:
+    - role: debian_prepare
+    - role: devsec.hardening.os_hardening
+    - role: devsec.hardening.ssh_hardening
+  tasks:
+    - name: Validate generated SSH server configuration before restart
+      ansible.builtin.command: /usr/sbin/sshd -t
+      changed_when: false
+
+    - name: Apply pending service handlers
+      ansible.builtin.meta: flush_handlers
+
+    - name: Wait for the SSH socket from the controller
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ ansible_port | default(22) | int }}"
+        connect_timeout: 5
+        timeout: 60
+      delegate_to: localhost
+      become: false
+
+    - name: Close the original Ansible control connection
+      ansible.builtin.meta: reset_connection
+
+    - name: Prove a new authenticated control connection
+      ansible.builtin.wait_for_connection:
+        connect_timeout: 5
+        sleep: 2
+        timeout: 60
+
+    - name: Check whether Debian requests a reboot
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: debian_reboot_required
+
+    - name: Report reboot requirement
+      ansible.builtin.debug:
+        msg: >-
+          Reboot required: {{ debian_reboot_required.stat.exists }};
+          automatic reboot enabled:
+          {{ debian_prepare_reboot_when_required | bool }}
+
+    - name: Reboot when required and explicitly enabled
+      ansible.builtin.reboot:
+        connect_timeout: 10
+        post_reboot_delay: 10
+        reboot_timeout: 600
+      when:
+        - debian_reboot_required.stat.exists
+        - debian_prepare_reboot_when_required | bool
+
+    - name: Prove SSH after the optional reboot
+      ansible.builtin.wait_for_connection:
+        connect_timeout: 5
+        sleep: 2
+        timeout: 60
