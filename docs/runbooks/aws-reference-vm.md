@@ -79,12 +79,17 @@ Create a dedicated Ed25519 key if one does not already exist:
 ```sh
 ssh-keygen -t ed25519 -a 64 -f ~/.ssh/rpr-p1 -C rpr-p1
 chmod 600 ~/.ssh/rpr-p1
-ssh-add --apple-use-keychain ~/.ssh/rpr-p1
+gpg-connect-agent updatestartuptty /bye >/dev/null
+ssh-add -t 43200 ~/.ssh/rpr-p1
+ssh-add -l
 ```
 
 Enter a strong passphrase when `ssh-keygen` prompts. The private key stays on
-the workstation; OpenTofu sends only the `.pub` file to AWS. The macOS SSH
-agent supplies the unlocked key to SSH and Ansible.
+the workstation; OpenTofu sends only the `.pub` file to AWS. This workstation
+uses GnuPG's OpenSSH-agent interface, so `ssh-add` imports the protected key
+into `gpg-agent` and makes it available to SSH and Ansible for the bounded
+session. Do not use the macOS-specific `--apple-use-keychain` option while
+`SSH_AUTH_SOCK` points to the GnuPG agent.
 
 Find the Mac's current public IPv4 from a trusted network. The security group
 accepts exactly one `/32`; if the address changes, create and apply a fresh
