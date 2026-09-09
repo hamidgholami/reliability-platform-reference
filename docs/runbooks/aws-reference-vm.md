@@ -77,13 +77,24 @@ Identity Center profile, use `aws sso login --profile rpr-p1` instead.
 Create a dedicated Ed25519 key if one does not already exist:
 
 ```sh
-ssh-keygen -t ed25519 -f ~/.ssh/rpr-p1 -C rpr-p1
+ssh-keygen -t ed25519 -a 64 -f ~/.ssh/rpr-p1 -C rpr-p1
 chmod 600 ~/.ssh/rpr-p1
+ssh-add --apple-use-keychain ~/.ssh/rpr-p1
 ```
+
+Enter a strong passphrase when `ssh-keygen` prompts. The private key stays on
+the workstation; OpenTofu sends only the `.pub` file to AWS. The macOS SSH
+agent supplies the unlocked key to SSH and Ansible.
 
 Find the Mac's current public IPv4 from a trusted network. The security group
 accepts exactly one `/32`; if the address changes, create and apply a fresh
-plan. Then export the non-secret execution inputs:
+plan:
+
+```sh
+dig +short myip.opendns.com @resolver1.opendns.com
+```
+
+Then export the non-secret execution inputs:
 
 ```sh
 export PROFILE=single-node-reference
