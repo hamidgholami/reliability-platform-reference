@@ -21,6 +21,7 @@ mock_provider "aws" {
 }
 
 variables {
+  aws_account_id = "123456789012"
   created_at     = "2026-09-08T12:00:00Z"
   expires_at     = "2026-09-08T20:00:00Z"
   operator_cidr  = "192.0.2.1/32"
@@ -82,4 +83,32 @@ run "reject_noncanonical_world_open_cidr" {
   }
 
   expect_failures = [var.operator_cidr]
+}
+
+run "reject_operator_network_wider_than_one_address" {
+  command = plan
+
+  providers = {
+    aws = aws.mock
+  }
+
+  variables {
+    operator_cidr = "192.0.2.0/24"
+  }
+
+  expect_failures = [var.operator_cidr]
+}
+
+run "reject_lifetime_longer_than_twelve_hours" {
+  command = plan
+
+  providers = {
+    aws = aws.mock
+  }
+
+  variables {
+    expires_at = "2026-09-09T00:00:01Z"
+  }
+
+  expect_failures = [aws_instance.incus_host]
 }

@@ -10,8 +10,8 @@ workflow with measured evidence over a catalogue of unrelated tools.
 ## Current phase
 
 Phase 0 is complete. The Phase 1 implementation plan is accepted. P1-00 and
-P1-01 are complete. P1-02 and P1-03 host automation are implemented; P1-04 is
-next, and their real-target, reboot, and second-run acceptance remains pending.
+P1-01 are complete. P1-02 through P1-04 automation is implemented; real-target,
+reboot, second-run, and AWS cleanup acceptance remains pending.
 Phase 1 targets one standalone Incus host on a Debian 13 VM, initially supplied
 by a separate minimal AWS bootstrap root. The workstation provides fast checks
 and optional one-VM Lima integration. Do not add implementation or empty future
@@ -53,6 +53,9 @@ same change. Architecture and trust-boundary changes require an ADR.
    internal command a prerequisite for reviewers.
 4. Run `make check` and report exact evidence. If a check cannot run, state why.
 5. Document rollback and destructive behavior before enabling mutations.
+6. Prefer explicit, narrowly scoped playbooks and Make targets over broad
+   Ansible tag matrices. Add a tag only for a demonstrated operational need;
+   never let one bypass preflight, access-safety, or post-change validation.
 
 The repository-wide validation targets are `make help`, `make doctor`,
 `make lint-markdown`, `make lint-license`, `make scan-secrets`, and `make check`.

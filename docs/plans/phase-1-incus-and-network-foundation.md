@@ -1,6 +1,6 @@
 # Phase 1 Plan: Minimal Single-Node Incus Foundation
 
-- Status: revised and accepted on 2026-09-04; P1-02 and P1-03 automation
+- Status: revised and accepted on 2026-09-04; P1-02 through P1-04 automation
   implemented, real-target acceptance pending
 - Owner: Hamid Gholami
 - Default deployment profile: `single-node-reference`, supplied initially by
@@ -68,6 +68,12 @@ time is expected inside package and image operations, and Mitogen currently
 depends on the third-party strategy-plugin interface deprecated by Ansible.
 Reconsider it only after a multi-node benchmark identifies controller transport
 as a meaningful bottleneck.
+
+Broad Ansible tags are also deferred. They are useful in large operational
+playbooks when measured workflows need safe subsets, but this phase has small,
+ordered playbooks whose preflight, access protection, and validation must not be
+skipped. Explicit playbooks and Make targets are the supported boundaries; add
+only narrowly justified tags later, with safety tests.
 
 ## Mandatory design rules
 
@@ -233,12 +239,14 @@ and failed preflight makes no mutation.
 
 ### P1-04 — Reference VM bootstrap and promotion
 
+- [x] Implement the guarded AWS plan, apply, inventory, destroy, and orphan
+  workflow with offline safety tests.
 - [ ] Run all fast workstation checks first.
 - [ ] When useful, create one disposable Debian 13 Lima VM and exercise P1-02
   and P1-03 without adding privileged host networking.
 - [ ] Skip Lima cleanly when unavailable or when the test would require
   Mac-specific routing work.
-- [ ] Plan the AWS bootstrap root and show identity, region, selected official
+- [ ] Execute the AWS bootstrap plan and show identity, region, selected official
   AMI, instance type, disk, public IPv4, estimated price, tags, and expiry.
 - [ ] Apply the AWS root only after explicit confirmation and generate a
   non-secret target inventory from its outputs.
@@ -284,7 +292,7 @@ or de-initialize Incus.
 
 - [ ] Implement the public `preflight`, `baseline`, `bootstrap-incus`, `plan`,
   `apply`, `validate`, and `destroy` Make targets.
-- [ ] Implement distinct `aws-plan`, `aws-apply`, `aws-destroy`, and
+- [x] Implement distinct `aws-plan`, `aws-apply`, `aws-destroy`, and
   `aws-orphan-check` targets so VM lifecycle cannot be confused with Incus
   resource lifecycle.
 - [ ] Require `PROFILE=single-node-reference` and show the exact boundary before

@@ -7,6 +7,16 @@ variable "aws_region" {
   default     = "eu-central-1"
 }
 
+variable "aws_account_id" {
+  description = "Reviewed AWS account ID bound to this disposable root."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]{12}$", var.aws_account_id))
+    error_message = "aws_account_id must contain exactly 12 digits."
+  }
+}
+
 variable "owner" {
   description = "Human owner recorded on every resource."
   type        = string
@@ -44,10 +54,9 @@ variable "operator_cidr" {
   validation {
     condition = (
       can(cidrhost(var.operator_cidr, 0)) &&
-      can(regex("^[0-9.]+/[0-9]+$", var.operator_cidr)) &&
-      !can(regex("/0$", var.operator_cidr))
+      can(regex("^[0-9.]+/32$", var.operator_cidr))
     )
-    error_message = "operator_cidr must be a valid restricted IPv4 CIDR and cannot be 0.0.0.0/0."
+    error_message = "operator_cidr must be one valid public IPv4 /32."
   }
 }
 
@@ -56,8 +65,8 @@ variable "ssh_public_key" {
   type        = string
 
   validation {
-    condition     = can(regex("^(ssh-ed25519|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh.com) ", trimspace(var.ssh_public_key)))
-    error_message = "ssh_public_key must be an Ed25519, ECDSA, or security-key OpenSSH public key."
+    condition     = can(regex("^ssh-ed25519 ", trimspace(var.ssh_public_key)))
+    error_message = "ssh_public_key must be an Ed25519 OpenSSH public key."
   }
 }
 

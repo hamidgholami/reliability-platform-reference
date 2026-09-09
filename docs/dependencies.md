@@ -23,6 +23,11 @@ automation components are available without a license fee.
 The transitive Ansible collections resolved by `devsec.hardening` are also
 listed with exact versions in `ansible/requirements.yml`.
 
+AWS CLI v2 is an operator-side integration client rather than a vendored or CI
+dependency. Install the current v2 with Homebrew before a paid P1-04 session;
+`make doctor` records the detected version. The live gates fail closed when the
+required Free Tier, Budgets, or Price List commands are unavailable.
+
 Mitogen is not included in the Phase 1 default. Its current release supports
 the pinned Ansible generation, but relies on Ansible's deprecated third-party
 strategy-plugin interface. One-host measurements must first show a meaningful

@@ -15,7 +15,8 @@ locals {
 }
 
 provider "aws" {
-  region = var.aws_region
+  allowed_account_ids = [var.aws_account_id]
+  region              = var.aws_region
 
   default_tags {
     tags = local.common_tags
@@ -183,6 +184,18 @@ resource "aws_instance" "incus_host" {
 
   tags = {
     Name = local.name
+  }
+
+  lifecycle {
+    precondition {
+      condition     = timecmp(var.expires_at, var.created_at) > 0
+      error_message = "expires_at must be later than created_at."
+    }
+
+    precondition {
+      condition     = timecmp(var.expires_at, timeadd(var.created_at, "12h")) <= 0
+      error_message = "the disposable reference VM lifetime cannot exceed 12 hours."
+    }
   }
 
   depends_on = [aws_route_table_association.public]

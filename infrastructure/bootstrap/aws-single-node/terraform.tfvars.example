@@ -1,10 +1,11 @@
 # SPDX-FileCopyrightText: 2026 Hamid Gholami
 # SPDX-License-Identifier: Apache-2.0
 
-# Copy this file to terraform.tfvars, which Git ignores, and replace every
-# example value. Use the narrowest practical operator CIDR, normally /32.
+# Documentation only. The supported make aws-plan workflow generates equivalent
+# ignored runtime input after its identity, budget, price, CIDR, and expiry gates.
+aws_account_id = "000000000000"
 owner          = "replace-with-your-github-handle"
-created_at     = "2026-09-08T12:00:00Z"
-expires_at     = "2026-09-08T20:00:00Z"
+created_at     = "2099-01-01T08:00:00Z"
+expires_at     = "2099-01-01T16:00:00Z"
 operator_cidr  = "192.0.2.1/32"
 ssh_public_key = "ssh-ed25519 replace-with-public-key-material"

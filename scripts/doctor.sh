@@ -46,3 +46,9 @@ if command -v incus >/dev/null 2>&1; then
 else
   echo "Optional Incus client is not installed; run 'brew install incus' before P1-05."
 fi
+
+if command -v aws >/dev/null 2>&1; then
+  echo "AWS CLI detected for the optional paid reference-VM workflow: $(aws --version 2>&1)"
+else
+  echo "AWS CLI is not installed; run 'brew install awscli' before a P1-04 AWS session."
+fi

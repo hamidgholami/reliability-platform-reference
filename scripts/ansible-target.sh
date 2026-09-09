@@ -9,6 +9,7 @@ profile=${PROFILE:-}
 inventory=${INVENTORY:-}
 target_host=${TARGET_HOST:-}
 public_key_file=${OPERATOR_PUBLIC_KEY_FILE:-}
+ssh_identity_file=${OPERATOR_SSH_IDENTITY_FILE:-}
 
 fail() {
   echo "Error: $*" >&2
@@ -35,11 +36,16 @@ esac
 
 [ -n "$public_key_file" ] || fail "set OPERATOR_PUBLIC_KEY_FILE to a public key"
 [ -r "$public_key_file" ] || fail "public key is not readable: $public_key_file"
+[ -z "$ssh_identity_file" ] || [ -r "$ssh_identity_file" ] ||
+  fail "SSH identity file is not readable: $ssh_identity_file"
 [ -x .venv/bin/ansible-playbook ] || fail "run 'make setup-python' first"
 
 extra_vars="debian_prepare_operator_public_key_file=$public_key_file rpr_deployment_profile=$profile"
 
 run_playbook() {
+  if [ -n "$ssh_identity_file" ]; then
+    set -- --private-key "$ssh_identity_file" "$@"
+  fi
   ANSIBLE_CONFIG="$PWD/ansible.cfg" \
   ANSIBLE_HOME="$PWD/.cache/ansible" \
   ANSIBLE_COLLECTIONS_PATH="$PWD/.cache/ansible/collections" \

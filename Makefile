@@ -13,7 +13,7 @@ ANSIBLE_ENV = ANSIBLE_CONFIG=$(CURDIR)/ansible.cfg ANSIBLE_HOME=$(CURDIR)/.cache
 	validate-baseline preflight-incus bootstrap-incus validate-incus \
 	test-ansible-safety \
 	bootstrap-incus plan apply validate destroy aws-plan aws-apply \
-	aws-destroy aws-orphan-check
+	aws-destroy aws-orphan-check test-aws-safety
 
 help: ## Show the Phase 1 operator interface and availability.
 	@awk 'BEGIN {FS = ":.*## "; printf "Usage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -61,13 +61,16 @@ validate-hcl: ## Validate initialized HCL without credentials or network access.
 test-hcl: ## Test the AWS safety contract with a mocked provider only.
 	@tofu -chdir=infrastructure/bootstrap/aws-single-node test
 
-test-ansible-safety: ## Test target selection and confirmation fail-closed behavior.
+test-ansible-safety: ## Test Ansible target and confirmation fail-closed behavior.
 	@./tests/ansible-target-safety.sh
+
+test-aws-safety: ## Test AWS profile, exposure, TTL, and confirmation guards offline.
+	@./tests/aws-reference-safety.sh
 
 scan-secrets: ## Scan Git content and the working tree with Gitleaks.
 	@./scripts/scan-secrets.sh
 
-check: lint syntax-ansible validate-hcl test-hcl test-ansible-safety scan-secrets ## Run every non-mutating repository check.
+check: lint syntax-ansible validate-hcl test-hcl test-ansible-safety test-aws-safety scan-secrets ## Run every non-mutating repository check.
 
 test-local: check ## Run the complete workstation-only test suite.
 
@@ -116,14 +119,14 @@ validate: ## Unavailable until P1-05: validate the Incus substrate.
 destroy: ## Unavailable until P1-05: destroy provider-owned Incus resources.
 	@./scripts/not-implemented.sh destroy P1-05
 
-aws-plan: ## Unavailable until P1-04: plan the minimal AWS VM boundary.
-	@./scripts/not-implemented.sh aws-plan P1-04
+aws-plan: ## Verify AWS safety/cost gates and save the minimal VM plan.
+	@./scripts/aws-reference.sh plan
 
-aws-apply: ## Unavailable until P1-04: create the minimal AWS VM boundary.
-	@./scripts/not-implemented.sh aws-apply P1-04
+aws-apply: ## Apply the reviewed AWS plan and generate ignored inventory.
+	@./scripts/aws-reference.sh apply
 
-aws-destroy: ## Unavailable until P1-04: destroy the minimal AWS VM boundary.
-	@./scripts/not-implemented.sh aws-destroy P1-04
+aws-destroy: ## Destroy only the state-owned AWS bootstrap boundary.
+	@./scripts/aws-reference.sh destroy
 
-aws-orphan-check: ## Unavailable until P1-04: query tagged AWS leftovers.
-	@./scripts/not-implemented.sh aws-orphan-check P1-04
+aws-orphan-check: ## Check local state and AWS for tagged leftovers.
+	@./scripts/aws-reference.sh orphan-check

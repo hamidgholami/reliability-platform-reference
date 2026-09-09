@@ -8,7 +8,8 @@ and cloud environments.
 minimal standalone Incus foundation on a Debian 13 VM, initially supplied by a
 small isolated AWS OpenTofu root. P1-01 provides pinned repository interfaces
 and fast quality gates; the Mac workstation is used for checks and optional
-disposable integration rather than persistent platform hosting.
+disposable integration rather than persistent platform hosting. P1-04 now
+provides a guarded AWS reference-VM lifecycle for real host acceptance.
 
 ## Intended outcomes
 
@@ -42,7 +43,9 @@ make check
 ```
 
 See the [Phase 1 operator interface](docs/runbooks/phase-1-operator-interface.md)
-before any optional VM work. No AWS lifecycle command is enabled yet.
+before any optional VM work. The enabled AWS lifecycle is documented in the
+[AWS reference VM runbook](docs/runbooks/aws-reference-vm.md); no cloud apply is
+automatic.
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing a change. Architecture
 or security boundary changes require an ADR.

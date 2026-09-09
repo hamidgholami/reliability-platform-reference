@@ -29,10 +29,9 @@ capability gap rather than expand the product list.
 is complete. The accepted
 [Phase 1 Incus and network foundation plan](plans/phase-1-incus-and-network-foundation.md)
 has completed its P1-00 capability and ownership spike. P1-01 repository
-interfaces and quality gates is complete. P1-02 baseline automation is ready
-for real-target acceptance, P1-03 standalone Incus automation is implemented,
-and P1-04 reference-VM promotion is next. The revised plan intentionally
-finishes a single-node
+interfaces and quality gates is complete. P1-02 and P1-03 host automation plus
+the guarded P1-04 AWS lifecycle are ready for real-target acceptance. The
+revised plan intentionally finishes a single-node
 apply/destroy/recreate slice before adding private DNS, clustering, or broader
 cloud platform topology.
 

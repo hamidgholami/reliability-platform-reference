@@ -45,6 +45,9 @@ estimated billable resources, and verified destroy and orphan-check commands.
 Also state which passwords, secrets, or certificates are not needed yet. No
 cloud apply occurs merely because this milestone exists.
 
+The [AWS reference VM runbook](aws-reference-vm.md) is the executable P1-04
+handoff for these prerequisites, guarded lifecycle commands, and final cleanup.
+
 ## Milestone C — Complete Phase 1 deployment acceptance
 
 Trigger: P1-04 through P1-06 implementation is ready and all workstation checks

@@ -54,10 +54,11 @@ cannot identify a real host. Later work generates operator-local inventory from
 the selected target.
 
 The AWS root is independently stateful and defines the accepted minimal VM
-contract. Copy its `terraform.tfvars.example` to the ignored `terraform.tfvars`
-only when P1-04 starts. The example values are intentionally unusable. AWS plan,
-apply, destroy, and orphan checks remain disabled until identity, price, budget,
-expiry, boundary display, and confirmation checks are implemented.
+contract. P1-04 enables its guarded plan, apply, destroy, and orphan-check
+commands. The wrapper generates ignored runtime variables and inventory; do not
+copy example values into a committed file. Follow the
+[AWS reference VM runbook](aws-reference-vm.md) for account preparation, cost
+checks, exact confirmations, target promotion, and cleanup.
 
 P1-02 enables `make preflight`, `make baseline-check`, `make baseline`, and
 `make validate-baseline` for one explicit target. Follow the
@@ -69,6 +70,6 @@ outside Git. P1-03 likewise enables `make preflight-incus`,
 
 The [end-to-end milestone runbook](end-to-end-milestones.md) defines when local
 checks are insufficient and a disposable real environment must be exercised.
-Later commands remain disabled until their named Phase 1 work items implement
-the corresponding safety and acceptance checks. `make help` is the
+Incus-provider commands remain disabled until their named Phase 1 work item
+implements the corresponding safety and acceptance checks. `make help` is the
 authoritative list and labels unavailable commands.
