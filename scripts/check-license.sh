@@ -45,6 +45,7 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   ansible/roles/debian_prepare/tasks/packages.yml \
   ansible/roles/debian_prepare/tasks/operator.yml \
   ansible/roles/debian_prepare/tasks/journald.yml \
+  ansible/roles/debian_prepare/tasks/resolver.yml \
   ansible/roles/incus_host/defaults/main.yml \
   ansible/roles/incus_host/meta/argument_specs.yml \
   ansible/roles/incus_host/tasks/main.yml \

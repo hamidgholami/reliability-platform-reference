@@ -44,7 +44,19 @@
   register: incus_host_package_policy
   changed_when: false
 
-- name: Require the Debian Incus LTS package source
+- name: Derive Debian cloud-image mirror files
+  ansible.builtin.set_fact:
+    incus_host_package_mirror_files: >-
+      {{ incus_host_package_policy.stdout |
+         regex_findall('mirror\+file:(\S+)') | unique | list }}
+
+- name: Read Debian cloud-image mirror files
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop: "{{ incus_host_package_mirror_files }}"
+  register: incus_host_package_mirrors
+
+- name: Require the Debian Incus LTS package version and source shape
   ansible.builtin.assert:
     that:
       - >-
@@ -53,10 +65,24 @@
         match(incus_host_package_version_pattern)
       - >-
         incus_host_package_policy.stdout is
-        search('https?://[^ ]*debian\\.org/')
+        search('https?://[^ ]*debian\\.org/') or
+        (incus_host_package_mirror_files | length) > 0
     fail_msg: >-
       The candidate incus-base package must be from a debian.org repository and
       match the reviewed Incus 6.0 LTS series.
+
+- name: Require official Debian cloud-image mirrors
+  ansible.builtin.assert:
+    that:
+      - >-
+        (item.content | b64decode | trim) is
+        match('^https?://([A-Za-z0-9-]+\\.)*debian\\.org/\\S+$')
+    fail_msg: >-
+      Every mirror+file package source must resolve to an official debian.org
+      repository.
+  loop: "{{ incus_host_package_mirrors.results }}"
+  loop_control:
+    label: "{{ item.item }}"
 
 - name: Verify synchronized system time
   ansible.builtin.command: chronyc tracking

@@ -1,0 +1,25 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Create systemd-resolved drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Disable multicast name-resolution listeners
+  ansible.builtin.copy:
+    dest: /etc/systemd/resolved.conf.d/60-reliability-platform.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible.
+      [Resolve]
+      LLMNR=no
+      MulticastDNS=no
+  when: not ansible_check_mode
+  notify: Restart systemd-resolved

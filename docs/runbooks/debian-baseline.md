@@ -21,10 +21,11 @@ The baseline preserves the active inventory user as the operator, grants that
 user passwordless sudo for automation, disables SSH password and root login,
 and retains local-only SSH TCP forwarding. The pinned upstream hardening roles
 apply the remaining policy. Explicit exceptions retain IPv4 forwarding,
-SquashFS, AppArmor, and Incus-managed firewall behavior. The stricter upstream
-setting that prevents arbitrary host users from creating user namespaces stays
-enabled; validation instead confirms that the kernel namespace facility needed
-by the privileged Incus daemon exists.
+SquashFS, AppArmor, and Incus-managed firewall behavior. The baseline also
+disables LLMNR and multicast DNS listeners while retaining the loopback DNS
+stub. The stricter upstream setting that prevents arbitrary host users from
+creating user namespaces stays enabled; validation instead confirms that the
+kernel namespace facility needed by the privileged Incus daemon exists.
 
 Export the same values for every command:
 

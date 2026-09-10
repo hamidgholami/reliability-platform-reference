@@ -20,6 +20,18 @@
     - name: Read service state
       ansible.builtin.service_facts:
 
+    - name: Read AppArmor unit state
+      ansible.builtin.systemd_service:
+        name: apparmor.service
+      register: baseline_apparmor_unit
+      changed_when: false
+
+    - name: Confirm AppArmor is enabled in the kernel
+      ansible.builtin.command: aa-status --enabled
+      register: baseline_apparmor_kernel
+      changed_when: false
+      failed_when: false
+
     - name: Read Incus capability sysctls
       ansible.builtin.command: "sysctl -n {{ item }}"
       loop:
@@ -53,6 +65,14 @@
         path: /var/run/reboot-required
       register: baseline_reboot_marker
 
+    - name: Select non-loopback TCP listeners
+      ansible.builtin.set_fact:
+        baseline_exposed_tcp_lines: >-
+          {{ baseline_listening_tcp.stdout_lines
+             | reject('search', '\s127\.[^ ]+:')
+             | reject('search', '\s\[::1\]:')
+             | list }}
+
     - name: Derive listening and unexpected TCP ports
       ansible.builtin.set_fact:
         baseline_listening_tcp_ports: >-
@@ -62,20 +82,27 @@
              | map('regex_replace', '^:', '')
              | map('int') | unique | sort | list }}
         baseline_unexpected_tcp_ports: >-
-          {{ baseline_listening_tcp.stdout_lines
+          {{ baseline_exposed_tcp_lines
              | map('regex_search', ':[0-9]+')
              | reject('equalto', none)
              | map('regex_replace', '^:', '')
              | map('int') | unique | sort
              | difference(debian_baseline_expected_tcp_ports | map('int') | list)
              | list }}
+        baseline_exposed_tcp_ports: >-
+          {{ baseline_exposed_tcp_lines
+             | map('regex_search', ':[0-9]+')
+             | reject('equalto', none)
+             | map('regex_replace', '^:', '')
+             | map('int') | unique | sort | list }}
 
     - name: Assert baseline invariants
       ansible.builtin.assert:
         that:
           - ansible_facts['distribution'] == 'Debian'
           - ansible_facts['distribution_major_version'] == '13'
-          - ansible_facts.services['apparmor.service'].state == 'running'
+          - baseline_apparmor_unit.status.ActiveState == 'active'
+          - baseline_apparmor_kernel.rc == 0
           - ansible_facts.services['chrony.service'].state == 'running'
           - ansible_facts.services['ssh.service'].state == 'running'
           - (baseline_sysctl_status.results | map(attribute='stdout') | unique | list) == ['1']
@@ -109,7 +136,7 @@
             'user_namespace_supported': baseline_user_namespace.stat.exists,
             'time_synchronized': 'Not synchronised' not in baseline_time_status.stdout,
             'services': {
-              'apparmor': ansible_facts.services['apparmor.service'].state,
+              'apparmor': baseline_apparmor_unit.status.ActiveState,
               'chrony': ansible_facts.services['chrony.service'].state,
               'ssh': ansible_facts.services['ssh.service'].state
             },
@@ -117,6 +144,7 @@
               | map(attribute='item')
               | zip(baseline_sysctl_status.results | map(attribute='stdout'))),
             'listening_tcp_ports': baseline_listening_tcp_ports,
+            'exposed_tcp_ports': baseline_exposed_tcp_ports,
             'unexpected_tcp_ports': baseline_unexpected_tcp_ports,
             'reboot_required': baseline_reboot_marker.stat.exists
           } | to_nice_json }}

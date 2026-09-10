@@ -21,6 +21,9 @@
 - name: Configure persistent system journal
   ansible.builtin.import_tasks: journald.yml
 
+- name: Configure the host resolver
+  ansible.builtin.import_tasks: resolver.yml
+
 - name: Create the baseline backup directory
   ansible.builtin.file:
     path: /var/backups/reliability-platform-reference

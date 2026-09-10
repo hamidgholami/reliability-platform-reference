@@ -213,13 +213,17 @@ every supported command, and no command silently creates a VM or cloud resource.
   namespaces, filesystems, AppArmor, and the active SSH transport.
 - [x] Validate generated SSH configuration and a new control connection before
   closing the original session.
-- [ ] Reboot when required, reconnect, and run the preparation and hardening
+- [x] Reboot when required, reconnect, and run the preparation and hardening
   path twice.
 - [x] Record unexpected listening services and relevant post-run facts without
   collecting unrelated host information.
 
 Acceptance: the second run is idempotent, SSH remains reachable after reboot,
 and the host is ready for Incus. No CIS or production-hardening claim is made.
+
+Deployment evidence on 2026-09-10 used Debian 13.6 on ARM64. Debian requested
+no reboot, fresh authenticated SSH reconnection passed, the final baseline run
+reported zero changes, and validation found only TCP 22 exposed.
 
 ### P1-03 — Standalone `incus_host` Ansible role
 
@@ -242,14 +246,14 @@ and failed preflight makes no mutation.
 
 - [x] Implement the guarded AWS plan, apply, inventory, destroy, and orphan
   workflow with offline safety tests.
-- [ ] Run all fast workstation checks first.
+- [x] Run all fast workstation checks first.
 - [ ] When useful, create one disposable Debian 13 Lima VM and exercise P1-02
   and P1-03 without adding privileged host networking.
 - [ ] Skip Lima cleanly when unavailable or when the test would require
   Mac-specific routing work.
-- [ ] Execute the AWS bootstrap plan and show identity, region, selected official
+- [x] Execute the AWS bootstrap plan and show identity, region, selected official
   AMI, instance type, disk, public IPv4, estimated price, tags, and expiry.
-- [ ] Apply the AWS root only after explicit confirmation and generate a
+- [x] Apply the AWS root only after explicit confirmation and generate a
   non-secret target inventory from its outputs.
 - [ ] Apply the same P1-02 and P1-03 paths to the selected
   `single-node-reference` VM.
