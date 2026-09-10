@@ -25,8 +25,11 @@ Trigger: P1-02 and P1-03 automation are implemented.
 Status: passed on 2026-09-10 against the AWS-supplied Debian 13 reference VM.
 The final baseline, Incus bootstrap, and Incus validation runs reported zero
 changes. No persisted preseed, unexpected exposed listener, or provider-owned
-Incus resource was found. The temporary VM is retained for Milestone C and is
-not final cleanup evidence.
+Incus resource was found. OpenTofu then destroyed all 11 AWS bootstrap resources
+and left empty state. Direct EC2 API checks found the instance terminated and
+its volume, network, and access resources absent. The AWS tagging index still
+returned recently deleted ARNs immediately afterward, so Milestone C must use a
+new short-lived VM and obtain a clean final orphan-check result.
 
 Use one disposable Debian 13 VM. Try the existing one-VM Lima profile first
 when it can faithfully exercise system containers, SSH restart, and reboot. If

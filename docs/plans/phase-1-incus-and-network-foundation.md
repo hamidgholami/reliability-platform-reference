@@ -276,8 +276,12 @@ The AWS reference VM passed this acceptance on 2026-09-10. Lima was skipped
 because the real Debian target already exercised the required host boundary
 without adding macOS-specific networking work. The minimum disk-capacity gate,
 baseline reconnection, Incus controller and operator access, listener allowlist,
-and second-run convergence all passed. The VM remains intentionally live for
-P1-05; final provider teardown, AWS destroy, and orphan checks belong to P1-06.
+and second-run convergence all passed. OpenTofu then destroyed all 11 bootstrap
+resources and left empty state. Direct EC2 API checks confirmed the instance
+terminated and its volume, network, and access resources absent. AWS's tagging
+index still returned recently deleted ARNs immediately afterward, so the final
+clean orphan-check proof remains a P1-06 requirement. P1-05 live acceptance
+will use a new short-lived reference VM.
 
 ### P1-05 — Minimal provider-managed substrate
 

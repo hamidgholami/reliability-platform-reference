@@ -10,8 +10,10 @@ workflow with measured evidence over a catalogue of unrelated tools.
 ## Current phase
 
 Phase 0 is complete. The Phase 1 implementation plan is accepted. P1-00 through
-P1-04 are complete on the AWS-supplied reference VM; P1-05 is active. Provider
-destroy/recreate evidence and final AWS cleanup remain P1-06 acceptance work.
+P1-04 are complete on an AWS-supplied reference VM, which was destroyed after
+Milestone B; P1-05 is active. A new short-lived reference VM is required for
+provider acceptance. Destroy/recreate evidence and final AWS cleanup remain
+P1-06 acceptance work.
 Phase 1 targets one standalone Incus host on a Debian 13 VM, initially supplied
 by a separate minimal AWS bootstrap root. The workstation provides fast checks
 and optional one-VM Lima integration. Do not add implementation or empty future
