@@ -5,9 +5,9 @@
 - name: Confirm the gathered target contract
   ansible.builtin.assert:
     that:
-      - ansible_distribution == 'Debian'
-      - ansible_distribution_major_version == '13'
-      - ansible_service_mgr == 'systemd'
+      - ansible_facts['distribution'] == 'Debian'
+      - ansible_facts['distribution_major_version'] == '13'
+      - ansible_facts['service_mgr'] == 'systemd'
       - debian_prepare_stable_target | bool
       - debian_prepare_operator_user == ansible_user
     fail_msg: The target no longer satisfies the validated Debian 13 contract.
@@ -38,6 +38,7 @@
     group: root
     mode: "0600"
     force: false
+  when: not ansible_check_mode
 
 - name: Check whether Debian requests a reboot after preparation
   ansible.builtin.stat:

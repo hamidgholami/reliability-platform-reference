@@ -35,17 +35,24 @@ export TARGET_HOST=incus-reference-01
 export OPERATOR_PUBLIC_KEY_FILE=/absolute/path/to/operator.pub
 ```
 
+The `make` wrapper explicitly loads the committed Incus-host policy variables.
+This keeps the same forwarding, firewall, filesystem, and SSH exceptions when
+the selected runtime inventory lives outside the committed inventory directory,
+as the generated AWS inventory does.
+
 ## Apply and prove the baseline
 
-Run the non-mutating gate first:
+Run the target gate and package-state preview first:
 
 ```shell
 make preflight
 make baseline-check
 ```
 
-Review the check-mode diff. Then use the exact confirmation printed by the
-wrapper:
+`baseline-check` refreshes APT repository metadata when the target cache is
+stale so package availability can be evaluated on minimal cloud images. It does
+not install, upgrade, reconfigure, or restart packages and services. Review the
+check-mode diff. Then use the exact confirmation printed by the wrapper:
 
 ```shell
 export CONFIRM=baseline-single-node-reference-incus-reference-01

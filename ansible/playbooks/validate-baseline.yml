@@ -73,8 +73,8 @@
     - name: Assert baseline invariants
       ansible.builtin.assert:
         that:
-          - ansible_distribution == 'Debian'
-          - ansible_distribution_major_version == '13'
+          - ansible_facts['distribution'] == 'Debian'
+          - ansible_facts['distribution_major_version'] == '13'
           - ansible_facts.services['apparmor.service'].state == 'running'
           - ansible_facts.services['chrony.service'].state == 'running'
           - ansible_facts.services['ssh.service'].state == 'running'
@@ -102,10 +102,10 @@
           {{ {
             'schema_version': 1,
             'target': inventory_hostname,
-            'distribution': ansible_distribution,
-            'distribution_version': ansible_distribution_version,
-            'architecture': ansible_architecture,
-            'kernel': ansible_kernel,
+            'distribution': ansible_facts['distribution'],
+            'distribution_version': ansible_facts['distribution_version'],
+            'architecture': ansible_facts['architecture'],
+            'kernel': ansible_facts['kernel'],
             'user_namespace_supported': baseline_user_namespace.stat.exists,
             'time_synchronized': 'Not synchronised' not in baseline_time_status.stdout,
             'services': {

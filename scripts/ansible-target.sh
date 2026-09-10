@@ -10,6 +10,7 @@ inventory=${INVENTORY:-}
 target_host=${TARGET_HOST:-}
 public_key_file=${OPERATOR_PUBLIC_KEY_FILE:-}
 ssh_identity_file=${OPERATOR_SSH_IDENTITY_FILE:-}
+profile_vars_file=ansible/inventories/single-node-reference/group_vars/incus_hosts.yml
 
 fail() {
   echo "Error: $*" >&2
@@ -36,6 +37,7 @@ esac
 
 [ -n "$public_key_file" ] || fail "set OPERATOR_PUBLIC_KEY_FILE to a public key"
 [ -r "$public_key_file" ] || fail "public key is not readable: $public_key_file"
+[ -r "$profile_vars_file" ] || fail "profile variables are not readable: $profile_vars_file"
 [ -z "$ssh_identity_file" ] || [ -r "$ssh_identity_file" ] ||
   fail "SSH identity file is not readable: $ssh_identity_file"
 [ -x .venv/bin/ansible-playbook ] || fail "run 'make setup-python' first"
@@ -53,6 +55,7 @@ run_playbook() {
   .venv/bin/ansible-playbook \
     --inventory "$inventory" \
     --limit "$target_host" \
+    --extra-vars "@$profile_vars_file" \
     --extra-vars "$extra_vars" \
     "$@"
 }

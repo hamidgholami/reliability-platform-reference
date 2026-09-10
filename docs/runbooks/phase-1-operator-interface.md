@@ -63,8 +63,9 @@ checks, exact confirmations, target promotion, and cleanup.
 P1-02 enables `make preflight`, `make baseline-check`, `make baseline`, and
 `make validate-baseline` for one explicit target. Follow the
 [Debian baseline runbook](debian-baseline.md); the mutating baseline requires an
-exact confirmation string, while target inventory and key material stay
-outside Git. P1-03 likewise enables `make preflight-incus`,
+exact confirmation string. Check mode may refresh stale APT metadata but does
+not change installed package or service state. Target inventory and key
+material stay outside Git. P1-03 likewise enables `make preflight-incus`,
 `make bootstrap-incus`, and `make validate-incus`; follow the
 [standalone Incus host runbook](incus-host.md).
 

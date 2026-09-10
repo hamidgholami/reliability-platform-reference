@@ -6,6 +6,7 @@
   ansible.builtin.apt:
     update_cache: true
     cache_valid_time: "{{ debian_prepare_apt_cache_valid_time }}"
+  check_mode: false
 
 - name: Apply available package upgrades
   ansible.builtin.apt:
@@ -25,3 +26,4 @@
   loop:
     - apparmor
     - chrony
+  when: not ansible_check_mode

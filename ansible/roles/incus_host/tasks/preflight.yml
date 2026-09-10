@@ -5,9 +5,9 @@
 - name: Confirm the standalone Incus input boundary
   ansible.builtin.assert:
     that:
-      - ansible_distribution == 'Debian'
-      - ansible_distribution_major_version == '13'
-      - ansible_service_mgr == 'systemd'
+      - ansible_facts['distribution'] == 'Debian'
+      - ansible_facts['distribution_major_version'] == '13'
+      - ansible_facts['service_mgr'] == 'systemd'
       - debian_prepare_stable_target | bool
       - incus_host_mode == 'standalone'
       - incus_host_package == 'incus-base'
@@ -23,7 +23,8 @@
 - name: Read root filesystem capacity
   ansible.builtin.set_fact:
     incus_host_root_mount: >-
-      {{ ansible_mounts | selectattr('mount', 'equalto', '/') | first }}
+      {{ ansible_facts['mounts'] |
+         selectattr('mount', 'equalto', '/') | first }}
 
 - name: Require minimum free root filesystem capacity
   ansible.builtin.assert:
