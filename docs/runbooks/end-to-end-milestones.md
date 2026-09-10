@@ -22,6 +22,12 @@ Passing Milestone A never establishes runtime correctness.
 
 Trigger: P1-02 and P1-03 automation are implemented.
 
+Status: passed on 2026-09-10 against the AWS-supplied Debian 13 reference VM.
+The final baseline, Incus bootstrap, and Incus validation runs reported zero
+changes. No persisted preseed, unexpected exposed listener, or provider-owned
+Incus resource was found. The temporary VM is retained for Milestone C and is
+not final cleanup evidence.
+
 Use one disposable Debian 13 VM. Try the existing one-VM Lima profile first
 when it can faithfully exercise system containers, SSH restart, and reboot. If
 Lima needs special macOS networking or hides relevant target behavior, stop

@@ -12,7 +12,7 @@
 
 - name: Add the operator to the Incus administrator group
   ansible.builtin.user:
-    name: "{{ debian_prepare_operator_user }}"
+    name: "{{ incus_host_operator_user }}"
     groups:
       - incus-admin
     append: true

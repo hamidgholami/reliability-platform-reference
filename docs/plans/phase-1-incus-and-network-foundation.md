@@ -1,7 +1,7 @@
 # Phase 1 Plan: Minimal Single-Node Incus Foundation
 
-- Status: revised and accepted on 2026-09-04; P1-02 through P1-04 automation
-  implemented, real-target acceptance pending
+- Status: revised and accepted on 2026-09-04; P1-00 through P1-04 complete on
+  the reference VM, P1-05 active
 - Owner: Hamid Gholami
 - Default deployment profile: `single-node-reference`, supplied initially by
   the AWS bootstrap root
@@ -237,10 +237,17 @@ reported zero changes, and validation found only TCP 22 exposed.
 - [x] Verify daemon and API health through structured output.
 - [x] Stop at the healthy API boundary; do not create provider-owned projects,
   networks, storage pools, profiles, or instances.
-- [ ] Run twice and verify that no bootstrap artifact remains.
+- [x] Run twice and verify that no bootstrap artifact remains.
 
 Acceptance: standalone initialization is idempotent, the Incus API is healthy,
 and failed preflight makes no mutation.
+
+Deployment evidence on 2026-09-10 used Debian's `incus-base` 6.0.4 package.
+The second bootstrap and repeated validator each reported zero changes. The
+standalone API, packaged systemd units, controller reachability, and non-root
+SSH operator access passed. Only TCP 22 and 8443 were exposed. API-derived
+counts found no storage pool, managed network, instance, non-default project,
+or non-default profile, and a host check found no persisted preseed artifact.
 
 ### P1-04 — Reference VM bootstrap and promotion
 
@@ -249,21 +256,28 @@ and failed preflight makes no mutation.
 - [x] Run all fast workstation checks first.
 - [ ] When useful, create one disposable Debian 13 Lima VM and exercise P1-02
   and P1-03 without adding privileged host networking.
-- [ ] Skip Lima cleanly when unavailable or when the test would require
+- [x] Skip Lima cleanly when unavailable or when the test would require
   Mac-specific routing work.
 - [x] Execute the AWS bootstrap plan and show identity, region, selected official
   AMI, instance type, disk, public IPv4, estimated price, tags, and expiry.
 - [x] Apply the AWS root only after explicit confirmation and generate a
   non-secret target inventory from its outputs.
-- [ ] Apply the same P1-02 and P1-03 paths to the selected
+- [x] Apply the same P1-02 and P1-03 paths to the selected
   `single-node-reference` VM.
-- [ ] Confirm resource capacity, reboot/reconnect behavior, Incus API access,
+- [x] Confirm resource capacity, reboot/reconnect behavior, Incus API access,
   and absence of unintended listeners on the reference VM.
 
 Acceptance: the real reference VM, not merely mocks or Lima, reaches the
 healthy standalone Incus API boundary. The AWS root has no resources outside
 its declared boundary. Optional Lima failure does not block deployment when the
 reference-target tests pass.
+
+The AWS reference VM passed this acceptance on 2026-09-10. Lima was skipped
+because the real Debian target already exercised the required host boundary
+without adding macOS-specific networking work. The minimum disk-capacity gate,
+baseline reconnection, Incus controller and operator access, listener allowlist,
+and second-run convergence all passed. The VM remains intentionally live for
+P1-05; final provider teardown, AWS destroy, and orphan checks belong to P1-06.
 
 ### P1-05 — Minimal provider-managed substrate
 

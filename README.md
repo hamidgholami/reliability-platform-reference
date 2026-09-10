@@ -8,8 +8,9 @@ and cloud environments.
 minimal standalone Incus foundation on a Debian 13 VM, initially supplied by a
 small isolated AWS OpenTofu root. P1-01 provides pinned repository interfaces
 and fast quality gates; the Mac workstation is used for checks and optional
-disposable integration rather than persistent platform hosting. P1-04 now
-provides a guarded AWS reference-VM lifecycle for real host acceptance.
+disposable integration rather than persistent platform hosting. P1-02 through
+P1-04 have passed real-host acceptance on the AWS reference VM; P1-05 now adds
+the minimal provider-managed Incus substrate and first system container.
 
 ## Intended outcomes
 

@@ -11,6 +11,8 @@
       - debian_prepare_stable_target | bool
       - incus_host_mode == 'standalone'
       - incus_host_package == 'incus-base'
+      - incus_host_operator_user | length > 0
+      - incus_host_operator_user != 'root'
       - incus_host_storage_owner == 'opentofu'
       - incus_host_storage_source | length == 0
       - incus_host_preseed_schema_version == 1
@@ -127,7 +129,12 @@
       than Incus; no Incus mutation was attempted.
 
 - name: Query an existing local Incus API when available
-  ansible.builtin.command: incus query /1.0
+  ansible.builtin.command:
+    argv:
+      - incus
+      - query
+      - --raw
+      - /1.0
   register: incus_host_existing_api
   changed_when: false
   failed_when: false

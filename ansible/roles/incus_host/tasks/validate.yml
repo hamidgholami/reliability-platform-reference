@@ -7,13 +7,34 @@
   changed_when: false
 
 - name: Query structured local Incus API health
-  ansible.builtin.command: incus query /1.0
+  ansible.builtin.command:
+    argv:
+      - incus
+      - query
+      - --raw
+      - /1.0
   register: incus_host_api_query
   changed_when: false
 
 - name: Decode Incus API health
   ansible.builtin.set_fact:
     incus_host_api_health: "{{ incus_host_api_query.stdout | from_json }}"
+
+- name: Query the local Incus API as the SSH operator
+  ansible.builtin.command:
+    argv:
+      - incus
+      - query
+      - --raw
+      - /1.0
+  register: incus_host_operator_api_query
+  become: false
+  changed_when: false
+
+- name: Decode SSH operator Incus API access
+  ansible.builtin.set_fact:
+    incus_host_operator_api_health: >-
+      {{ incus_host_operator_api_query.stdout | from_json }}
 
 - name: Read installed Incus package version
   ansible.builtin.command:
@@ -30,8 +51,15 @@
   register: incus_host_effective_api_address
   changed_when: false
 
-- name: Check Incus socket and daemon state
-  ansible.builtin.service_facts:
+- name: Inspect the Incus socket state
+  ansible.builtin.systemd_service:
+    name: incus.socket
+  register: incus_host_socket_unit
+
+- name: Inspect the Incus daemon state
+  ansible.builtin.systemd_service:
+    name: incus.service
+  register: incus_host_service_unit
 
 - name: Validate the local HTTPS API endpoint
   ansible.builtin.uri:
@@ -41,6 +69,106 @@
     validate_certs: false
     return_content: true
   register: incus_host_local_https
+
+- name: Read listening TCP sockets after Incus initialization
+  ansible.builtin.command: ss -H -lnt
+  register: incus_host_listening_tcp
+  changed_when: false
+
+- name: Select exposed TCP listeners after Incus initialization
+  ansible.builtin.set_fact:
+    incus_host_exposed_tcp_lines: >-
+      {{ incus_host_listening_tcp.stdout_lines
+         | reject('search', '\s127\.[^ ]+:')
+         | reject('search', '\s\[::1\]:')
+         | list }}
+
+- name: Derive exposed TCP ports after Incus initialization
+  ansible.builtin.set_fact:
+    incus_host_exposed_tcp_ports: >-
+      {{ incus_host_exposed_tcp_lines
+         | map('regex_search', ':[0-9]+')
+         | reject('equalto', none)
+         | map('regex_replace', '^:', '')
+         | map('int') | unique | sort | list }}
+
+- name: Query Incus storage pools
+  ansible.builtin.command:
+    argv:
+      - incus
+      - query
+      - --raw
+      - /1.0/storage-pools
+  register: incus_host_storage_pools_query
+  changed_when: false
+
+- name: Query Incus networks
+  ansible.builtin.command:
+    argv:
+      - incus
+      - query
+      - --raw
+      - /1.0/networks?recursion=1
+  register: incus_host_networks_query
+  changed_when: false
+
+- name: Query Incus projects
+  ansible.builtin.command:
+    argv:
+      - incus
+      - query
+      - --raw
+      - /1.0/projects
+  register: incus_host_projects_query
+  changed_when: false
+
+- name: Query Incus profiles
+  ansible.builtin.command:
+    argv:
+      - incus
+      - query
+      - --raw
+      - /1.0/profiles
+  register: incus_host_profiles_query
+  changed_when: false
+
+- name: Query the built-in default Incus profile
+  ansible.builtin.command:
+    argv:
+      - incus
+      - query
+      - --raw
+      - /1.0/profiles/default
+  register: incus_host_default_profile_query
+  changed_when: false
+
+- name: Query Incus instances
+  ansible.builtin.command:
+    argv:
+      - incus
+      - query
+      - --raw
+      - /1.0/instances
+  register: incus_host_instances_query
+  changed_when: false
+
+- name: Decode the provider resource boundary
+  ansible.builtin.set_fact:
+    incus_host_storage_pools: >-
+      {{ (incus_host_storage_pools_query.stdout | from_json).metadata |
+         default([], true) }}
+    incus_host_managed_networks: >-
+      {{ (incus_host_networks_query.stdout | from_json).metadata |
+         selectattr('managed') | list }}
+    incus_host_projects: >-
+      {{ (incus_host_projects_query.stdout | from_json).metadata }}
+    incus_host_profiles: >-
+      {{ (incus_host_profiles_query.stdout | from_json).metadata }}
+    incus_host_default_profile: >-
+      {{ (incus_host_default_profile_query.stdout | from_json).metadata }}
+    incus_host_instances: >-
+      {{ (incus_host_instances_query.stdout | from_json).metadata |
+         default([], true) }}
 
 - name: Assert standalone Incus health boundary
   ansible.builtin.assert:
@@ -53,9 +181,22 @@
       - incus_host_api_health.status == 'Success'
       - incus_host_api_health.metadata.auth == 'trusted'
       - not incus_host_api_health.metadata.environment.server_clustered | bool
-      - ansible_facts.services['incus.socket'].state == 'running'
-      - ansible_facts.services['incus.service'].state == 'running'
+      - incus_host_operator_api_health.type == 'sync'
+      - incus_host_operator_api_health.metadata.auth == 'trusted'
+      - incus_host_socket_unit.status.ActiveState == 'active'
+      - incus_host_socket_unit.status.UnitFileState == 'enabled'
+      - incus_host_service_unit.status.ActiveState == 'active'
       - (incus_host_local_https.content | from_json).type == 'sync'
+      - incus_host_storage_pools | length == 0
+      - incus_host_managed_networks | length == 0
+      - incus_host_projects == ['/1.0/projects/default']
+      - incus_host_profiles == ['/1.0/profiles/default']
+      - incus_host_default_profile.config | length == 0
+      - incus_host_default_profile.devices | length == 0
+      - incus_host_instances | length == 0
+      - >-
+        incus_host_exposed_tcp_ports ==
+        (incus_host_expected_exposed_tcp_ports | map('int') | sort | list)
 
 - name: Check Incus API reachability from the controller
   ansible.builtin.wait_for:
@@ -105,10 +246,19 @@
         'server_version': incus_host_api_health.metadata.environment.server_version,
         'server_clustered': incus_host_api_health.metadata.environment.server_clustered,
         'https_address': incus_host_effective_api_address.stdout | trim,
+        'exposed_tcp_ports': incus_host_exposed_tcp_ports,
+        'ssh_operator_api_access_verified': true,
         'controller_api_reachability_required': incus_host_require_controller_api,
         'server_certificate_sha256': incus_host_server_fingerprint.stdout,
         'preseed_transport': 'stdin',
-        'provider_resources_created': false
+        'provider_boundary_verified': true,
+        'provider_resource_counts': {
+          'storage_pools': incus_host_storage_pools | length,
+          'managed_networks': incus_host_managed_networks | length,
+          'non_default_projects': (incus_host_projects | length) - 1,
+          'non_default_profiles': (incus_host_profiles | length) - 1,
+          'instances': incus_host_instances | length
+        }
       } | to_nice_json }}
   delegate_to: localhost
   become: false

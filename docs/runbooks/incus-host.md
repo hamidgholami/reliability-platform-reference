@@ -58,10 +58,13 @@ resource.
 
 Run both commands a second time. The second bootstrap recap must report zero
 changes. Validation checks structured local API data, standalone mode, package
-series, services, local HTTPS, and—on the reference profile—TCP reachability
-from the controller. It writes an ignored report under `reports/p1-03/` with
-the initial server-certificate fingerprint. Trusting that certificate and
-creating a client identity belong to P1-05.
+series, packaged systemd units, non-root SSH operator access, local HTTPS,
+exposed listeners, and—on the reference profile—TCP reachability from the
+controller. It also queries the API to prove that storage pools, managed
+networks, instances, and non-default projects and profiles remain absent. The
+ignored report under `reports/p1-03/` records these bounded results and the
+initial server-certificate fingerprint. Trusting that certificate and creating
+a client identity belong to P1-05.
 
 ## Recovery boundary
 
