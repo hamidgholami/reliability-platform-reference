@@ -87,9 +87,9 @@ printf '%s\n' \
   '    ;;' \
   '  "query rpr-target:/1.0")' \
   '    if [ "${MOCK_INCUS_ENVELOPE:-}" = 1 ]; then' \
-  '      printf '\''{"metadata":{"auth":"trusted","environment":{"server_clustered":false}}}'\''' \
+  '      printf '\''{"metadata":{"auth":"trusted","api_extensions":["projects_restrictions","projects_networks_restricted_access","projects_limits_disk_pool","storage_api_project"],"environment":{"server_clustered":false,"server_version":"6.0.4"}}}'\''' \
   '    else' \
-  '      printf '\''{"auth":"trusted","environment":{"server_clustered":false}}'\''' \
+  '      printf '\''{"auth":"trusted","api_extensions":["projects_restrictions","projects_networks_restricted_access","projects_limits_disk_pool","storage_api_project"],"environment":{"server_clustered":false,"server_version":"6.0.4"}}'\''' \
   '    fi' \
   '    ;;' \
   '  *) exit 1 ;;' \

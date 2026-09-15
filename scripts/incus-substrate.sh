@@ -150,6 +150,28 @@ verify_client_trust()
   echo "Server certificate SHA-256: $normalized_actual"
 }
 
+verify_server_capabilities()
+{
+  required_extensions="
+projects_restrictions
+projects_networks_restricted_access
+projects_limits_disk_pool
+storage_api_project
+"
+
+  for extension in $required_extensions; do
+    printf '%s' "$server_metadata" |
+      jq -e --arg extension "$extension" \
+        '.api_extensions | index($extension) != null' >/dev/null ||
+      fail "the Incus server lacks required API extension: $extension"
+  done
+
+  server_version="$(printf '%s' "$server_metadata" |
+    jq -er '.environment.server_version')" ||
+    fail "the Incus API did not report its server version"
+  echo "Incus substrate capabilities verified: server=$server_version"
+}
+
 write_runtime_vars()
 {
   umask 077
@@ -226,6 +248,7 @@ plan()
   [ -d "$terraform_root/.terraform" ] ||
     fail "run make setup-hcl before planning Incus resources"
   verify_client_trust
+  verify_server_capabilities
   write_runtime_vars
 
   tofu -chdir="$terraform_root" plan \
@@ -256,6 +279,7 @@ plan()
     --arg ipv4_cidr "$platform_ipv4_cidr" \
     --arg dns_domain "$platform_dns_domain" \
     --arg image "$instance_image" \
+    --arg server_version "$server_version" \
     --arg runtime_sha "$runtime_sha" \
     --arg plan_sha "$plan_sha" \
     --argjson actions "$action_summary" '{
@@ -267,6 +291,7 @@ plan()
       platform_ipv4_cidr: $ipv4_cidr,
       platform_dns_domain: $dns_domain,
       instance_image: $image,
+      incus_server_version: $server_version,
       resource_changes: $actions,
       runtime_vars_sha256: $runtime_sha,
       create_plan_sha256: $plan_sha
@@ -311,9 +336,14 @@ apply_plan()
   load_session
   verify_create_plan
   verify_client_trust
+  verify_server_capabilities
 
+  umask 077
   echo "Applying only the reviewed Incus plan to $remote ($endpoint)."
-  tofu -chdir="$terraform_root" apply -input=false "$create_plan"
+  tofu -chdir="$terraform_root" apply \
+    -input=false \
+    -state="$state_file" \
+    "$create_plan"
   write_inventory
   rm -f "$create_plan"
   echo "Generated ignored inventory: $inventory_file"
@@ -327,6 +357,7 @@ validate_substrate()
   done
   load_session
   verify_client_trust
+  verify_server_capabilities
   [ -r "$state_file" ] || fail "Incus state is missing; run make apply first"
 
   outputs="$(tofu -chdir="$terraform_root" output -state="$state_file" -json)"
@@ -349,6 +380,13 @@ validate_substrate()
     fail "the Incus project does not enforce the one-container limit"
   [ "$(printf '%s' "$project_json" | jq -r '.config["limits.virtual-machines"]')" = "0" ] ||
     fail "the Incus project permits virtual machines"
+  [ "$(printf '%s' "$project_json" | jq -r '.config["restricted.networks.access"]')" = "$network_name" ] ||
+    fail "the Incus project permits an unexpected managed network"
+  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.disk"]')" = "4GiB" ] ||
+    fail "the Incus project aggregate disk limit differs from the Phase 1 boundary"
+  [ "$(printf '%s' "$project_json" |
+    jq -r --arg key "limits.disk.pool.${pool_name}" '.config[$key]')" = "4GiB" ] ||
+    fail "the Incus project per-pool disk limit differs from the Phase 1 boundary"
 
   network_json="$(INCUS_CONF="$config_dir" incus query \
     "${remote}:/1.0/networks/${network_name}?project=default")"
@@ -441,6 +479,7 @@ destroy()
   done
   load_session
   verify_client_trust
+  verify_server_capabilities
   [ -r "$state_file" ] || fail "Incus state is missing; nothing can be safely destroyed"
 
   umask 077
@@ -451,7 +490,10 @@ destroy()
     -var-file="$runtime_vars" \
     -out="$destroy_plan"
   tofu -chdir="$terraform_root" show "$destroy_plan"
-  tofu -chdir="$terraform_root" apply -input=false "$destroy_plan"
+  tofu -chdir="$terraform_root" apply \
+    -input=false \
+    -state="$state_file" \
+    "$destroy_plan"
 
   managed_state="$(tofu -chdir="$terraform_root" state list \
     -state="$state_file" 2>/dev/null | sed -n '/^incus_/p')"

@@ -309,22 +309,29 @@ validation and provider-only destroy have separate boundaries.
   server-certificate acceptance.
 - [x] Install or validate the macOS Incus client and configure separate,
   explicitly trusted identities for the human operator and OpenTofu.
-- [ ] Create the development project and only the restrictions needed now.
-- [ ] Create a local `dir` storage pool.
-- [ ] Create the `platform0` managed bridge with configurable `10.20.0.0/24`,
+- [x] Create the development project and only the restrictions needed now.
+- [x] Create a local `dir` storage pool.
+- [x] Create the `platform0` managed bridge with configurable `10.20.0.0/24`,
   NAT, DHCP, Incus DNS, and a documented IPv6 policy.
-- [ ] Create one minimal profile and one disposable system container; do not
+- [x] Create one minimal profile and one disposable system container; do not
   install VM-only host dependencies or create an Incus VM.
-- [ ] Keep the container image reference configurable and document the
+- [x] Keep the container image reference configurable and document the
   image-change replacement or rollout path for stateful services.
-- [ ] Verify container DHCP, name resolution, outbound connectivity, and
+- [x] Verify container DHCP, name resolution, outbound connectivity, and
   structured health information.
-- [ ] Prove `incus list`, `incus info`, and operation inspection from the
+- [x] Prove `incus list`, `incus info`, and operation inspection from the
   MacBook without bypassing OpenTofu ownership for routine mutations.
-- [ ] Export only a non-secret machine-readable inventory for later Ansible.
-- [ ] Keep state on an ignored operator-only local path and never publish state
+- [x] Export only a non-secret machine-readable inventory for later Ansible.
+- [x] Keep state on an ignored operator-only local path and never publish state
   or saved plans as evidence.
-- [ ] Apply twice and explain or eliminate all drift.
+- [x] Apply twice and explain or eliminate all drift.
+
+The optional Lima checkpoint passed on 2026-09-15 with Incus 6.0.4. The
+provider created the five-resource boundary, `smoke-01` received
+`10.20.0.133`, and internal DNS, external DNS, NAT, project restrictions, and
+the IPv6 policy passed runtime validation. A second plan and apply reported no
+changes. P1-05 remains active until provider-only destroy and clean recreation
+pass; authoritative `single-node-reference` acceptance remains part of P1-06.
 
 Acceptance: the provider creates a working container deterministically, the
 second apply has no unexplained drift, and provider destroy does not uninstall

@@ -19,10 +19,14 @@ The provider owns exactly five resources:
 - project profile `system-container`; and
 - disposable Debian system container `smoke-01`.
 
-The project has isolated profiles and storage volumes but shared images. It
-inherits only the named network and storage pool. The profile allows one CPU,
-512 MiB memory, and a 4 GiB root disk. Containers remain unprivileged and
-nesting is disabled.
+The project has isolated profiles and storage volumes but shared images.
+Network access is limited to `platform0`. The profile explicitly places its
+root disk on `rpr-local`, while aggregate and per-pool limits bound disk usage
+to 4 GiB. This is compatible with the Incus 6.0 LTS API: its later maintenance
+releases support per-pool limits but not the newer
+`restricted.storage-pools.access` key. Phase 1 creates no other storage pool.
+The profile allows one CPU and 512 MiB memory. Containers remain unprivileged
+and nesting is disabled.
 
 The bridge defaults to `10.20.0.0/24`, uses `.1` as its gateway and DNS
 forwarder, and leases `.120` through `.219`. Incus supplies bridge DHCP, DNS,
@@ -48,7 +52,8 @@ make incus-client-check
 make plan
 ```
 
-The wrapper refuses a create/update plan containing any delete action. It
+The wrapper verifies the required Incus API extensions and refuses a
+create/update plan containing any delete action. It
 writes runtime variables, state, plan, and plan metadata below ignored
 `.cache/incus-substrate` with operator-only permissions. Review the displayed
 five-resource boundary before applying it.

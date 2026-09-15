@@ -60,23 +60,23 @@ resource "incus_project" "development" {
   remote        = var.incus_remote
 
   config = {
-    "features.images"                 = "false"
-    "features.networks"               = "false"
-    "features.networks.zones"         = "false"
-    "features.profiles"               = "true"
-    "features.storage.buckets"        = "false"
-    "features.storage.volumes"        = "true"
-    "limits.containers"               = "1"
-    "limits.cpu"                      = "1"
-    "limits.disk"                     = "4GiB"
-    "limits.instances"                = "1"
-    "limits.memory"                   = "512MiB"
-    "limits.virtual-machines"         = "0"
-    "restricted"                      = "true"
-    "restricted.devices.disk"         = "managed"
-    "restricted.devices.nic"          = "managed"
-    "restricted.networks.access"      = incus_network.platform.name
-    "restricted.storage-pools.access" = incus_storage_pool.local.name
+    "features.images"                                   = "false"
+    "features.networks"                                 = "false"
+    "features.networks.zones"                           = "false"
+    "features.profiles"                                 = "true"
+    "features.storage.buckets"                          = "false"
+    "features.storage.volumes"                          = "true"
+    "limits.containers"                                 = "1"
+    "limits.cpu"                                        = "1"
+    "limits.disk"                                       = "4GiB"
+    "limits.disk.pool.${incus_storage_pool.local.name}" = "4GiB"
+    "limits.instances"                                  = "1"
+    "limits.memory"                                     = "512MiB"
+    "limits.virtual-machines"                           = "0"
+    "restricted"                                        = "true"
+    "restricted.devices.disk"                           = "managed"
+    "restricted.devices.nic"                            = "managed"
+    "restricted.networks.access"                        = incus_network.platform.name
   }
 }
 
