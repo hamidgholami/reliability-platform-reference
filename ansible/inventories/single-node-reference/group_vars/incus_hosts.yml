@@ -43,10 +43,11 @@ ssh_allow_agent_forwarding: false
 ssh_x11_forwarding: false
 network_ipv6_enable: true
 
-# Before Incus is installed, SSH is the only expected remotely reachable TCP
-# service. Extend this list only with an explicit host-level requirement.
+# The baseline validator runs both before and after Incus bootstrap. The API
+# port may be absent before P1-03 and is an expected host requirement afterward.
 debian_baseline_expected_tcp_ports:
   - "{{ ansible_port | default(22) | int }}"
+  - "{{ incus_host_api_port }}"
 
 # P1-03 installs only the Debian-native container daemon. OpenTofu owns all
 # storage, network, project, profile, and instance resources in P1-05.

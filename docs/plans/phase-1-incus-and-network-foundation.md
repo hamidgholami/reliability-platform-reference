@@ -256,7 +256,7 @@ or non-default profile, and a host check found no persisted preseed artifact.
 - [x] Run all fast workstation checks first.
 - [x] Add an ignored inventory generator that consumes Lima's runtime SSH
   configuration, proves loopback-only access, and records Ansible task timing.
-- [ ] When useful, create one disposable Debian 13 Lima VM and exercise P1-02
+- [x] When useful, create one disposable Debian 13 Lima VM and exercise P1-02
   and P1-03 without adding privileged host networking.
 - [x] Skip Lima cleanly when unavailable or when the test would require
   Mac-specific routing work.
@@ -274,16 +274,23 @@ healthy standalone Incus API boundary. The AWS root has no resources outside
 its declared boundary. Optional Lima failure does not block deployment when the
 reference-target tests pass.
 
-The AWS reference VM passed this acceptance on 2026-09-10. Lima was skipped
-because the real Debian target already exercised the required host boundary
-without adding macOS-specific networking work. The minimum disk-capacity gate,
-baseline reconnection, Incus controller and operator access, listener allowlist,
-and second-run convergence all passed. OpenTofu then destroyed all 11 bootstrap
-resources and left empty state. Direct EC2 API checks confirmed the instance
-terminated and its volume, network, and access resources absent. AWS's tagging
-index still returned recently deleted ARNs immediately afterward, so the final
-clean orphan-check proof remains a P1-06 requirement. P1-05 live acceptance
-will use a new short-lived reference VM.
+The AWS reference VM passed this acceptance on 2026-09-10. Lima was initially
+skipped because the real Debian target already exercised the required host
+boundary. The minimum disk-capacity gate, baseline reconnection, Incus
+controller and operator access, listener allowlist, and second-run convergence
+all passed. OpenTofu then destroyed all 11 bootstrap resources and left empty
+state. Direct EC2 API checks confirmed the instance terminated and its volume,
+network, and access resources absent. AWS's tagging index still returned
+recently deleted ARNs immediately afterward, so the final clean orphan-check
+proof remains a P1-06 requirement. P1-05 live acceptance will use a new
+short-lived reference VM.
+
+The optional Lima replay passed on 2026-09-15 with Debian 13.7 on ARM64 and
+Incus 6.0.4. Baseline and bootstrap second runs reported zero changes. SSH
+reconnection, AppArmor, time synchronization, namespaces, standalone API
+health, and non-root operator access passed through unprivileged loopback
+forwarding. Only the expected SSH and Incus API listeners were exposed, and
+the API confirmed zero provider-owned resources before P1-05.
 
 ### P1-05 — Minimal provider-managed substrate
 

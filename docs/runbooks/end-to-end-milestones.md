@@ -31,6 +31,13 @@ its volume, network, and access resources absent. The AWS tagging index still
 returned recently deleted ARNs immediately afterward, so Milestone C must use a
 new short-lived VM and obtain a clean final orphan-check result.
 
+The same host-foundation path was replayed on 2026-09-15 in the optional Lima
+profile using Debian 13.7 ARM64 and Incus 6.0.4. The second baseline and
+bootstrap runs converged with zero changes, validation found only expected
+listeners and zero provider-owned resources, and the operator accessed the
+daemon after a verified fresh SSH login. This local result reduces future cloud
+trial and error but does not replace Milestone C on the reference target.
+
 Use one disposable Debian 13 VM. Try the existing one-VM Lima profile first
 when it can faithfully exercise system containers, SSH restart, and reboot. If
 Lima needs special macOS networking or hides relevant target behavior, stop

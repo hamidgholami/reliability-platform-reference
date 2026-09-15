@@ -129,6 +129,7 @@
           {{ {
             'schema_version': 1,
             'target': inventory_hostname,
+            'deployment_profile': rpr_deployment_profile,
             'distribution': ansible_facts['distribution'],
             'distribution_version': ansible_facts['distribution_version'],
             'architecture': ansible_facts['architecture'],
