@@ -69,6 +69,13 @@ material stay outside Git. P1-03 likewise enables `make preflight-incus`,
 `make bootstrap-incus`, and `make validate-incus`; follow the
 [standalone Incus host runbook](incus-host.md).
 
+The target wrapper enables Ansible diff mode for every operational playbook,
+including read-only validation and check mode. Modules that support diff output
+therefore show reviewed before-and-after content consistently. Future tasks
+that handle passwords, tokens, private keys, or other confidential values must
+set both `no_log: true` and `diff: false`; do not rely on terminal output being
+private.
+
 The [end-to-end milestone runbook](end-to-end-milestones.md) defines when local
 checks are insufficient and a disposable real environment must be exercised.
 Incus-provider commands remain disabled until their named Phase 1 work item

@@ -58,6 +58,9 @@ same change. Architecture and trust-boundary changes require an ADR.
 6. Prefer explicit, narrowly scoped playbooks and Make targets over broad
    Ansible tag matrices. Add a tag only for a demonstrated operational need;
    never let one bypass preflight, access-safety, or post-change validation.
+7. Run every operational target playbook through the repository wrapper with
+   diff mode enabled. Tasks handling confidential values must use `no_log: true`
+   and `diff: false` before secret material is introduced.
 
 The repository-wide validation targets are `make help`, `make doctor`,
 `make lint-markdown`, `make lint-license`, `make scan-secrets`, and `make check`.

@@ -45,6 +45,7 @@ esac
 extra_vars="debian_prepare_operator_public_key_file=$public_key_file rpr_deployment_profile=$profile"
 
 run_playbook() {
+  set -- --diff "$@"
   if [ -n "$ssh_identity_file" ]; then
     set -- --private-key "$ssh_identity_file" "$@"
   fi
@@ -67,13 +68,13 @@ case "$action" in
     ;;
   baseline-check)
     echo "Check-mode preview: profile=$profile target=$target_host inventory=$inventory"
-    run_playbook --check --diff ansible/playbooks/baseline.yml
+    run_playbook --check ansible/playbooks/baseline.yml
     ;;
   baseline)
     expected="baseline-$profile-$target_host"
     [ "${CONFIRM:-}" = "$expected" ] || fail "set CONFIRM=$expected to mutate this target"
     echo "Mutating baseline: profile=$profile target=$target_host inventory=$inventory"
-    run_playbook --diff ansible/playbooks/baseline.yml
+    run_playbook ansible/playbooks/baseline.yml
     ;;
   validate-baseline)
     echo "Read-only validation: profile=$profile target=$target_host inventory=$inventory"
@@ -87,7 +88,7 @@ case "$action" in
     expected="bootstrap-incus-$profile-$target_host"
     [ "${CONFIRM:-}" = "$expected" ] || fail "set CONFIRM=$expected to mutate this target"
     echo "Mutating Incus host: profile=$profile target=$target_host inventory=$inventory"
-    run_playbook --diff ansible/playbooks/bootstrap-incus.yml
+    run_playbook ansible/playbooks/bootstrap-incus.yml
     ;;
   validate-incus)
     echo "Read-only Incus validation: profile=$profile target=$target_host inventory=$inventory"
