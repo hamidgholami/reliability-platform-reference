@@ -9,6 +9,7 @@ test_root=$(mktemp -d)
 fake_bin="$test_root/bin"
 cache_dir="$test_root/cache"
 ssh_config="$test_root/ssh.config"
+command_log="$test_root/limactl.log"
 trap 'rm -f "$output_file"; rm -rf "$test_root"' EXIT HUP INT TERM
 
 expect_failure()
@@ -56,12 +57,16 @@ case "\$1" in
   --version) printf '%s\n' 'limactl version 2.2.0' ;;
   list)
     case "\$3" in
-      '{{.Name}}') printf '%s\n' 'rpr-p1' ;;
+      '{{.Name}}')
+        [ "\${FAKE_LIMA_EXISTS:-true}" = "true" ] || exit 1
+        printf '%s\n' 'rpr-p1'
+        ;;
       '{{.Status}}') printf '%s\n' 'Running' ;;
       '{{.SSHConfigFile}}') printf '%s\n' '$ssh_config' ;;
       *) exit 1 ;;
     esac
     ;;
+  start) printf '%s\n' "\$*" >"\${FAKE_LIMA_COMMAND_LOG:?}" ;;
   *) exit 1 ;;
 esac
 EOF
@@ -88,5 +93,16 @@ jq -e '
   and $host.debian_prepare_stable_target == true
   and ($host.ansible_ssh_common_args | startswith("-F "))
 ' "$cache_dir/hosts.json" >/dev/null
+
+PATH="$fake_bin:$PATH" \
+PROFILE=workstation-validation \
+CONFIRM=create-rpr-p1 \
+FAKE_LIMA_EXISTS=false \
+FAKE_LIMA_COMMAND_LOG="$command_log" \
+  ./scripts/lima-lifecycle.sh up >"$output_file"
+
+grep -F \
+  'start --tty=false --name rpr-p1 lima/single-node.yaml' \
+  "$command_log" >/dev/null
 
 echo "Lima lifecycle safety checks passed."

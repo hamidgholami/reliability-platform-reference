@@ -126,7 +126,7 @@ case "$action" in
     if instance_exists; then
       fail "Lima instance ${instance_name} already exists"
     fi
-    limactl start --name "$instance_name" "$template"
+    limactl start --tty=false --name "$instance_name" "$template"
     ;;
   start)
     require_profile
@@ -136,13 +136,13 @@ case "$action" in
     instance_exists || fail "Lima instance ${instance_name} does not exist"
     [ "$(limactl list --format '{{.Status}}' "$instance_name")" != "Running" ] ||
       fail "Lima instance ${instance_name} is already running"
-    limactl start "$instance_name"
+    limactl start --tty=false "$instance_name"
     ;;
   stop)
     require_profile
     require_lima
     instance_exists || fail "Lima instance ${instance_name} does not exist"
-    limactl stop "$instance_name"
+    limactl stop --tty=false "$instance_name"
     ;;
   inventory)
     require_profile
@@ -156,7 +156,7 @@ case "$action" in
       fail "set CONFIRM=delete-${instance_name} to delete the disposable VM"
     require_lima
     instance_exists || fail "Lima instance ${instance_name} does not exist"
-    limactl delete "$instance_name"
+    limactl delete --tty=false "$instance_name"
     ;;
   *)
     fail "usage: $0 {validate|up|start|stop|inventory|delete}"
