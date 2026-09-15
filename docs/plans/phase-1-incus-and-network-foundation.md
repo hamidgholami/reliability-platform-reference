@@ -53,6 +53,10 @@ Use this promotion ladder:
 Passing workstation checks does not prove target behavior. Conversely, a Lima
 test is skipped when it requires privileged macOS networking or substantial
 Lima-specific engineering; the same test runs on the reference VM instead.
+The `single-node-reference` contract is normative: shared OpenTofu and Ansible
+configuration must remain runnable against a generic remote Debian target.
+Lima-only details belong at the workstation profile boundary and must never
+weaken, reshape, or delay the reference-environment implementation.
 
 The [end-to-end execution milestones](../runbooks/end-to-end-milestones.md)
 define the mandatory reality checks and human handoffs. P1-02 and P1-03 trigger

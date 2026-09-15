@@ -38,13 +38,14 @@ listeners and zero provider-owned resources, and the operator accessed the
 daemon after a verified fresh SSH login. This local result reduces future cloud
 trial and error but does not replace Milestone C on the reference target.
 
-Use one disposable Debian 13 VM. Try the existing one-VM Lima profile first
-when it can faithfully exercise system containers, SSH restart, and reboot. If
-Lima needs special macOS networking or hides relevant target behavior, stop
-adapting the project to Lima and use the temporary AWS reference VM instead.
-The workstation-validation path derives an ignored inventory from Lima's own
-SSH configuration and uses an unprivileged loopback forward for the Incus API;
-it does not require a routable guest address.
+Use one disposable Debian 13 VM. The AWS or equivalent remote reference VM is
+the authoritative target. The existing one-VM Lima profile may preview the
+same automation when it works without changing the shared implementation. If
+Lima needs special macOS networking, hides relevant target behavior, or adds
+material complexity, skip it and continue on the reference VM. The optional
+workstation-validation path derives an ignored inventory from Lima's own SSH
+configuration and uses an unprivileged loopback forward for the Incus API; it
+does not require a routable guest address.
 
 The checkpoint must prove:
 

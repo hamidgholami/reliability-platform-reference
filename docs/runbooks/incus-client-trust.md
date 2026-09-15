@@ -10,6 +10,12 @@ resource. The normal MacBook client identity belongs to the human operator. A
 second identity under the ignored `.cache/incus/opentofu` directory belongs
 only to OpenTofu. Do not reuse either private key for SSH or another service.
 
+The trust contract is designed for the remote `single-node-reference` target.
+The Lima commands below exercise it cheaply through a loopback forward, but
+they are an optional rehearsal rather than the deployment definition. A later
+reference run supplies its reviewed endpoint and fingerprint without changing
+the shared provider configuration.
+
 An Incus administrator certificate is equivalent to root-level control of the
 host. Keep both private keys local, never commit their configuration directory,
 and revoke server trust when a disposable environment is removed. Later
