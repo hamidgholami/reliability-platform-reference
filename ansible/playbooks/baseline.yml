@@ -55,7 +55,7 @@
 
     - name: Wait for the SSH socket from the controller
       ansible.builtin.wait_for:
-        host: "{{ ansible_host }}"
+        host: "{{ rpr_controller_ssh_host | default(ansible_host) }}"
         port: "{{ ansible_port | default(22) | int }}"
         connect_timeout: 5
         timeout: 60

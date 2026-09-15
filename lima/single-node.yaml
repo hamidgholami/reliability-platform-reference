@@ -18,3 +18,11 @@ mounts: []
 containerd:
   system: false
   user: false
+
+# Keep the Incus API private to the workstation. P1-05 uses this stable local
+# endpoint instead of privileged vmnet networking or a routable guest address.
+portForwards:
+  - guestPort: 8443
+    hostIP: 127.0.0.1
+    hostPort: 18443
+    proto: tcp

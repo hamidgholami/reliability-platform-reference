@@ -21,7 +21,10 @@ and an explicit pull request. Cloud services may incur charges even though the
 automation components are available without a license fee.
 
 The transitive Ansible collections resolved by `devsec.hardening` are also
-listed with exact versions in `ansible/requirements.yml`.
+listed with exact versions in `ansible/requirements.yml`. The pinned
+`ansible.posix` collection supplies the operational `profile_tasks` callback;
+target runs report the twenty slowest tasks so performance changes are based on
+measurements rather than total wall time alone.
 
 AWS CLI v2 is an operator-side integration client rather than a vendored or CI
 dependency. Install the current v2 with Homebrew before a paid P1-04 session;

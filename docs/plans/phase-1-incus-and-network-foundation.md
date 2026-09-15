@@ -254,6 +254,8 @@ or non-default profile, and a host check found no persisted preseed artifact.
 - [x] Implement the guarded AWS plan, apply, inventory, destroy, and orphan
   workflow with offline safety tests.
 - [x] Run all fast workstation checks first.
+- [x] Add an ignored inventory generator that consumes Lima's runtime SSH
+  configuration, proves loopback-only access, and records Ansible task timing.
 - [ ] When useful, create one disposable Debian 13 Lima VM and exercise P1-02
   and P1-03 without adding privileged host networking.
 - [x] Skip Lima cleanly when unavailable or when the test would require
@@ -389,6 +391,8 @@ make doctor
 make check
 make test-local
 make lima-up                 # optional
+make lima-inventory          # optional; running Lima VM only
+make lima-start              # optional; existing stopped Lima VM only
 make aws-plan PROFILE=single-node-reference
 make aws-apply PROFILE=single-node-reference
 make preflight               # explicit inventory, target, and public key

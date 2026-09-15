@@ -35,6 +35,9 @@ Use one disposable Debian 13 VM. Try the existing one-VM Lima profile first
 when it can faithfully exercise system containers, SSH restart, and reboot. If
 Lima needs special macOS networking or hides relevant target behavior, stop
 adapting the project to Lima and use the temporary AWS reference VM instead.
+The workstation-validation path derives an ignored inventory from Lima's own
+SSH configuration and uses an unprivileged loopback forward for the Incus API;
+it does not require a routable guest address.
 
 The checkpoint must prove:
 

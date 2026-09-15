@@ -9,9 +9,10 @@ ANSIBLE_ENV = ANSIBLE_CONFIG=$(CURDIR)/ansible.cfg ANSIBLE_HOME=$(CURDIR)/.cache
 
 .PHONY: help setup setup-python setup-hcl doctor lint lint-markdown lint-license lint-ansible \
 	syntax-ansible lint-hcl validate-hcl test-hcl scan-secrets check test-local \
-	lima-validate lima-up lima-stop lima-delete preflight baseline-check baseline \
+	lima-validate lima-up lima-start lima-stop lima-inventory lima-delete \
+	preflight baseline-check baseline \
 	validate-baseline preflight-incus bootstrap-incus validate-incus \
-	test-ansible-safety \
+	test-ansible-safety test-lima-safety \
 	bootstrap-incus plan apply validate destroy aws-plan aws-apply \
 	aws-destroy aws-orphan-check test-aws-safety
 
@@ -64,13 +65,16 @@ test-hcl: ## Test the AWS safety contract with a mocked provider only.
 test-ansible-safety: ## Test Ansible target and confirmation fail-closed behavior.
 	@./tests/ansible-target-safety.sh
 
+test-lima-safety: ## Test Lima lifecycle guards and generated inventory offline.
+	@./tests/lima-lifecycle-safety.sh
+
 test-aws-safety: ## Test AWS profile, exposure, TTL, and confirmation guards offline.
 	@./tests/aws-reference-safety.sh
 
 scan-secrets: ## Scan Git content and the working tree with Gitleaks.
 	@./scripts/scan-secrets.sh
 
-check: lint syntax-ansible validate-hcl test-hcl test-ansible-safety test-aws-safety scan-secrets ## Run every non-mutating repository check.
+check: lint syntax-ansible validate-hcl test-hcl test-ansible-safety test-lima-safety test-aws-safety scan-secrets ## Run every non-mutating repository check.
 
 test-local: check ## Run the complete workstation-only test suite.
 
@@ -80,8 +84,14 @@ lima-validate: ## Validate the optional Lima YAML; do not create a VM.
 lima-up: ## Create the optional VM (requires PROFILE and CONFIRM).
 	@./scripts/lima-lifecycle.sh up
 
-lima-stop: ## Stop the optional Lima VM without deleting it.
+lima-start: ## Restart the existing optional VM (requires PROFILE and CONFIRM).
+	@./scripts/lima-lifecycle.sh start
+
+lima-stop: ## Stop the optional Lima VM (requires PROFILE).
 	@./scripts/lima-lifecycle.sh stop
+
+lima-inventory: ## Generate ignored Ansible inventory for the running Lima VM.
+	@./scripts/lima-lifecycle.sh inventory
 
 lima-delete: ## Delete the optional VM (requires PROFILE and CONFIRM).
 	@./scripts/lima-lifecycle.sh delete

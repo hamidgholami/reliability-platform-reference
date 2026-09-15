@@ -38,14 +38,55 @@ deletion:
 
 ```sh
 PROFILE=workstation-validation CONFIRM=create-rpr-p1 make lima-up
-make lima-stop
+PROFILE=workstation-validation make lima-inventory
+PROFILE=workstation-validation make lima-stop
+PROFILE=workstation-validation CONFIRM=start-rpr-p1 make lima-start
 PROFILE=workstation-validation CONFIRM=delete-rpr-p1 make lima-delete
 ```
 
 The VM uses two CPUs, 4 GiB memory, a 30 GiB disk, and no host mounts or bundled
 containerd. Creating it downloads a pinned Debian 13 arm64 cloud image and
-consumes local resources. Delete it with `make lima-delete`; there is no
-repository-owned data recovery after deletion.
+consumes local resources. A static unprivileged forward exposes the future
+Incus API only on `127.0.0.1:18443`; it does not make the VM or its containers
+routable from the LAN.
+
+`make lima-inventory` first proves non-interactive SSH through Lima's generated
+SSH configuration. It then derives the current loopback address, forwarded SSH
+port, and guest user and writes an inventory to the ignored
+`.cache/lima/hosts.json` path. It references Lima's SSH configuration instead of
+copying or exposing its private key. Regenerate the inventory after restarting
+the VM.
+
+Use the generated inventory with the existing Ansible interface:
+
+```sh
+export PROFILE=workstation-validation
+export INVENTORY="$PWD/.cache/lima/hosts.json"
+export TARGET_HOST=incus-lima-01
+export OPERATOR_PUBLIC_KEY_FILE=/absolute/path/to/operator.pub
+
+make preflight
+make baseline-check
+export CONFIRM=baseline-workstation-validation-incus-lima-01
+make baseline
+make validate-baseline
+
+make preflight-incus
+export CONFIRM=bootstrap-incus-workstation-validation-incus-lima-01
+make bootstrap-incus
+make validate-incus
+```
+
+Run the baseline and Incus bootstrap paths a second time. Every operational
+playbook uses diff mode, and the final output lists the twenty slowest tasks and
+total runtime. Compare first-run work with second-run convergence before
+changing SSH transport settings. Pipelining remains disabled until this
+measurement shows that controller transport is a meaningful bottleneck.
+
+Delete the VM with `make lima-delete`; there is no repository-owned data
+recovery after deletion. Removing the VM also removes its Lima-generated SSH
+configuration, so the cached inventory becomes invalid and may be overwritten
+by the next test VM.
 
 ## Reference target and AWS boundary
 
