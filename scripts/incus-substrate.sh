@@ -120,12 +120,24 @@ verify_client_trust()
   [ "$certificate_public_key" = "$private_public_key" ] ||
     fail "the OpenTofu Incus client certificate and key do not match"
 
-  server="$(INCUS_CONF="$config_dir" incus query "${remote}:/1.0")" ||
+  server_response="$(INCUS_CONF="$config_dir" incus query "${remote}:/1.0")" ||
     fail "the OpenTofu Incus client cannot query the configured remote"
-  [ "$(printf '%s' "$server" | jq -er '.metadata.auth')" = "trusted" ] ||
+  server_metadata="$(printf '%s' "$server_response" | jq -cer '
+    if type == "object" and (.metadata? | type) == "object"
+    then .metadata
+    else .
+    end
+  ')" || fail "the Incus API returned an unexpected response"
+  server_auth="$(printf '%s' "$server_metadata" | jq -r '.auth // empty')"
+  [ "$server_auth" = "trusted" ] ||
     fail "the OpenTofu Incus client is not trusted"
-  [ "$(printf '%s' "$server" |
-    jq -er '.metadata.environment.server_clustered')" = "false" ] ||
+  server_clustered="$(printf '%s' "$server_metadata" | jq -r '
+    if .environment.server_clustered == true then "true"
+    elif .environment.server_clustered == false then "false"
+    else "unknown"
+    end
+  ')"
+  [ "$server_clustered" = "false" ] ||
     fail "Phase 1 requires a standalone Incus server"
 
   echo "Incus provider trust verified: profile=$profile remote=$remote endpoint=$endpoint"
