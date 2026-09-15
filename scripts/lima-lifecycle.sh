@@ -99,7 +99,6 @@ generate_inventory()
                 ansible_host: $host,
                 ansible_user: $user,
                 ansible_port: $port,
-                ansible_ssh_args: "-o ControlMaster=no -o ControlPath=none",
                 ansible_ssh_common_args: ("-F " + ($ssh_config | @sh)),
                 rpr_controller_ssh_host: $controller_host,
                 debian_prepare_stable_target: true

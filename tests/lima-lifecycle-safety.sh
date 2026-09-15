@@ -89,7 +89,6 @@ jq -e '
   | $host.ansible_host == "lima-rpr-p1"
   and $host.ansible_user == "lima"
   and $host.ansible_port == 60022
-  and $host.ansible_ssh_args == "-o ControlMaster=no -o ControlPath=none"
   and $host.rpr_controller_ssh_host == "127.0.0.1"
   and $host.debian_prepare_stable_target == true
   and ($host.ansible_ssh_common_args | startswith("-F "))
