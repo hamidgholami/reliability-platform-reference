@@ -100,7 +100,7 @@ export INCUS_SERVER_CERTIFICATE_SHA256="$(
 )"
 ```
 
-Verify both the client and provider boundary without creating a resource:
+Verify the client boundary and produce a provider plan:
 
 ```sh
 make incus-client-check
@@ -111,8 +111,10 @@ The check requires a matching pinned server certificate, a matching client
 certificate and key, trusted API access, and a standalone server. The provider
 loads the pre-enrolled remote from the isolated configuration directory with
 automatic certificate generation and server-certificate acceptance explicitly
-disabled. The saved plan, runtime inputs, session metadata, and future state
-stay under ignored `.cache` paths with operator-only permissions.
+disabled. Neither command creates a resource. Review and apply the resulting
+plan through the [Incus substrate lifecycle](incus-substrate.md). The saved
+plan, runtime inputs, session metadata, and state stay under ignored `.cache`
+paths with operator-only permissions.
 
 ## Later targets and revocation
 

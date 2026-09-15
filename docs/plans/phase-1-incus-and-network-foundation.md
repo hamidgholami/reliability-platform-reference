@@ -300,13 +300,14 @@ the API confirmed zero provider-owned resources before P1-05.
 
 The first implementation slice configures the provider to consume an isolated,
 pre-enrolled client identity. `incus-client-check` and `plan` verify trust and
-standalone topology without creating resources; apply remains disabled until
-the minimal substrate configuration is reviewable.
+standalone topology before any mutation. The resource slice enables apply only
+for a saved, digest-verified, non-destructive plan with an exact confirmation;
+validation and provider-only destroy have separate boundaries.
 
-- [ ] Pin and configure the official `lxc/incus` provider against an explicitly
+- [x] Pin and configure the official `lxc/incus` provider against an explicitly
   trusted remote; disable automatic client-certificate generation and automatic
   server-certificate acceptance.
-- [ ] Install or validate the macOS Incus client and configure separate,
+- [x] Install or validate the macOS Incus client and configure separate,
   explicitly trusted identities for the human operator and OpenTofu.
 - [ ] Create the development project and only the restrictions needed now.
 - [ ] Create a local `dir` storage pool.

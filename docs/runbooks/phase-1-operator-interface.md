@@ -113,11 +113,11 @@ material stay outside Git. P1-03 likewise enables `make preflight-incus`,
 `make bootstrap-incus`, and `make validate-incus`; follow the
 [standalone Incus host runbook](incus-host.md).
 
-P1-05 starts by enrolling separate human and OpenTofu TLS client identities as
-described in the [Incus client trust runbook](incus-client-trust.md). The
-read-only `make incus-client-check` and `make plan` targets verify the pinned
-server certificate and provider authentication before any Incus resource
-creation is enabled.
+P1-05 enrolls separate human and OpenTofu TLS client identities as described in
+the [Incus client trust runbook](incus-client-trust.md). The read-only
+`make incus-client-check` verifies the pinned server certificate and provider
+authentication. The [Incus substrate runbook](incus-substrate.md) defines the
+separate plan, apply, validation, no-drift, and provider-only destroy workflow.
 
 The target wrapper enables Ansible diff mode for every operational playbook,
 including read-only validation and check mode. Modules that support diff output
@@ -128,6 +128,6 @@ private.
 
 The [end-to-end milestone runbook](end-to-end-milestones.md) defines when local
 checks are insufficient and a disposable real environment must be exercised.
-Incus resource-mutation commands remain disabled until their named Phase 1
-slice implements the corresponding safety and acceptance checks. `make help`
-is the authoritative list and labels unavailable commands.
+Incus resource mutations require the exact confirmations shown by their plan
+or runbook. `make help` is the authoritative command list and labels any
+unavailable command.

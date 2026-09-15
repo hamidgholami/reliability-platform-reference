@@ -125,17 +125,17 @@ validate-incus: ## Validate Incus API health and write ignored local evidence.
 incus-client-check: ## Verify the isolated OpenTofu client trust boundary.
 	@./scripts/incus-substrate.sh preflight
 
-plan: ## Verify Incus trust and save a read-only provider plan.
+plan: ## Verify Incus trust and save a non-destructive substrate plan.
 	@./scripts/incus-substrate.sh plan
 
-apply: ## Unavailable until the P1-05 substrate resource slice.
-	@./scripts/not-implemented.sh apply P1-05
+apply: ## Apply the reviewed Incus substrate plan (requires exact CONFIRM).
+	@./scripts/incus-substrate.sh apply
 
-validate: ## Unavailable until the P1-05 substrate resource slice.
-	@./scripts/not-implemented.sh validate P1-05
+validate: ## Validate the Incus substrate and write ignored local evidence.
+	@./scripts/incus-substrate.sh validate
 
-destroy: ## Unavailable until the P1-05 substrate resource slice.
-	@./scripts/not-implemented.sh destroy P1-05
+destroy: ## Destroy only provider-owned Incus resources (requires exact CONFIRM).
+	@./scripts/incus-substrate.sh destroy
 
 aws-plan: ## Verify AWS safety/cost gates and save the minimal VM plan.
 	@./scripts/aws-reference.sh plan

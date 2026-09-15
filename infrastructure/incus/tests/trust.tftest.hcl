@@ -10,6 +10,21 @@ mock_provider "incus" {
       members      = {}
     }
   }
+
+  mock_resource "incus_network" {
+    defaults = {
+      managed = true
+    }
+  }
+
+  mock_resource "incus_instance" {
+    defaults = {
+      ipv4_address = "10.20.0.100"
+      ipv6_address = ""
+      mac_address  = "00:16:3e:00:00:01"
+      status       = "Running"
+    }
+  }
 }
 
 variables {
@@ -33,6 +48,38 @@ run "trusted_standalone_boundary" {
   assert {
     condition     = output.provider_trust_boundary.remote == "rpr-target"
     error_message = "The provider must use the explicitly selected remote."
+  }
+
+  assert {
+    condition = (
+      incus_project.development.config["restricted"] == "true" &&
+      incus_project.development.config["limits.containers"] == "1" &&
+      incus_project.development.config["limits.virtual-machines"] == "0"
+    )
+    error_message = "The development project must be restricted to one container and no VMs."
+  }
+
+  assert {
+    condition = (
+      incus_network.platform.config["ipv4.address"] == "10.20.0.1/24" &&
+      incus_network.platform.config["ipv4.nat"] == "true" &&
+      incus_network.platform.config["ipv6.address"] == "none"
+    )
+    error_message = "The managed bridge must use explicit IPv4 NAT and disabled IPv6."
+  }
+
+  assert {
+    condition     = incus_storage_pool.local.driver == "dir"
+    error_message = "Phase 1 must use the portable local dir storage driver."
+  }
+
+  assert {
+    condition = (
+      incus_instance.smoke.type == "container" &&
+      length(incus_instance.smoke.profiles) == 1 &&
+      incus_instance.smoke.profiles[0] == incus_profile.system.name
+    )
+    error_message = "The smoke workload must be a system container using only the managed profile."
   }
 }
 
@@ -62,4 +109,46 @@ run "reject_invalid_remote_name" {
   }
 
   expect_failures = [var.incus_remote]
+}
+
+run "reject_noncanonical_bridge_subnet" {
+  command = plan
+
+  providers = {
+    incus = incus.mock
+  }
+
+  variables {
+    platform_ipv4_cidr = "10.20.0.1/24"
+  }
+
+  expect_failures = [var.platform_ipv4_cidr]
+}
+
+run "reject_public_bridge_subnet" {
+  command = plan
+
+  providers = {
+    incus = incus.mock
+  }
+
+  variables {
+    platform_ipv4_cidr = "203.0.113.0/24"
+  }
+
+  expect_failures = [var.platform_ipv4_cidr]
+}
+
+run "reject_implicit_image_source" {
+  command = plan
+
+  providers = {
+    incus = incus.mock
+  }
+
+  variables {
+    instance_image = "debian/13"
+  }
+
+  expect_failures = [var.instance_image]
 }

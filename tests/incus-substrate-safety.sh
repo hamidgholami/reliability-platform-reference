@@ -59,6 +59,20 @@ expect_failure \
   INCUS_SERVER_CERTIFICATE_SHA256=invalid \
   ./scripts/incus-substrate.sh preflight
 
+expect_failure \
+  "set CONFIRM=apply-incus-workstation-validation-rpr-target" \
+  env PROFILE=workstation-validation INCUS_CONFIG_DIR=/tmp/incus-test \
+  INCUS_REMOTE=rpr-target INCUS_ENDPOINT=https://127.0.0.1:18443 \
+  INCUS_SERVER_CERTIFICATE_SHA256="$valid_fingerprint" \
+  ./scripts/incus-substrate.sh apply
+
+expect_failure \
+  "set CONFIRM=destroy-incus-workstation-validation-rpr-target" \
+  env PROFILE=workstation-validation INCUS_CONFIG_DIR=/tmp/incus-test \
+  INCUS_REMOTE=rpr-target INCUS_ENDPOINT=https://127.0.0.1:18443 \
+  INCUS_SERVER_CERTIFICATE_SHA256="$valid_fingerprint" \
+  ./scripts/incus-substrate.sh destroy
+
 mkdir -p "$fixture_dir/bin" "$fixture_dir/config/servercerts"
 : >"$fixture_dir/config/config.yml"
 : >"$fixture_dir/config/client.crt"
@@ -94,6 +108,30 @@ printf '%s\n' \
   '  *) exit 1 ;;' \
   'esac' >"$fixture_dir/bin/openssl"
 chmod +x "$fixture_dir/bin/incus" "$fixture_dir/bin/openssl"
+
+mkdir -p "$fixture_dir/cache"
+printf '%s\n' '{}' >"$fixture_dir/cache/runtime.auto.tfvars.json"
+jq -n \
+  --arg fingerprint "$valid_fingerprint" '{
+    deployment_profile: "workstation-validation",
+    remote: "rpr-target",
+    endpoint: "https://127.0.0.1:18443",
+    server_certificate_sha256: $fingerprint,
+    platform_ipv4_cidr: "10.20.0.0/24",
+    platform_dns_domain: "dev.apadanalab.de",
+    instance_image: "images:debian/13",
+    runtime_vars_sha256: "invalid"
+  }' >"$fixture_dir/cache/session.json"
+
+expect_failure \
+  "planned Incus runtime inputs changed after review" \
+  env PROFILE=workstation-validation \
+  INCUS_CONFIG_DIR="$fixture_dir/config" \
+  INCUS_REMOTE=rpr-target \
+  INCUS_ENDPOINT=https://127.0.0.1:18443 \
+  INCUS_SERVER_CERTIFICATE_SHA256="$valid_fingerprint" \
+  RPR_INCUS_CACHE_DIR="$fixture_dir/cache" \
+  ./scripts/incus-substrate.sh validate
 
 for response_shape in direct envelope; do
   if [ "$response_shape" = envelope ]; then
