@@ -12,7 +12,8 @@ ANSIBLE_ENV = ANSIBLE_CONFIG=$(CURDIR)/ansible.cfg ANSIBLE_HOME=$(CURDIR)/.cache
 	lima-validate lima-up lima-start lima-stop lima-inventory lima-delete \
 	preflight baseline-check baseline \
 	validate-baseline preflight-incus bootstrap-incus validate-incus \
-	test-ansible-safety test-lima-safety \
+	incus-client-check test-ansible-safety test-lima-safety \
+	test-incus-substrate-safety \
 	bootstrap-incus plan apply validate destroy aws-plan aws-apply \
 	aws-destroy aws-orphan-check test-aws-safety
 
@@ -59,8 +60,9 @@ lint-hcl: ## Check OpenTofu formatting without changing files.
 validate-hcl: ## Validate initialized HCL without credentials or network access.
 	@./scripts/validate-hcl.sh
 
-test-hcl: ## Test the AWS safety contract with a mocked provider only.
+test-hcl: ## Test the AWS and Incus safety contracts with mocked providers only.
 	@tofu -chdir=infrastructure/bootstrap/aws-single-node test
+	@tofu -chdir=infrastructure/incus test
 
 test-ansible-safety: ## Test Ansible target and confirmation fail-closed behavior.
 	@./tests/ansible-target-safety.sh
@@ -68,13 +70,16 @@ test-ansible-safety: ## Test Ansible target and confirmation fail-closed behavio
 test-lima-safety: ## Test Lima lifecycle guards and generated inventory offline.
 	@./tests/lima-lifecycle-safety.sh
 
+test-incus-substrate-safety: ## Test Incus provider trust guards offline.
+	@./tests/incus-substrate-safety.sh
+
 test-aws-safety: ## Test AWS profile, exposure, TTL, and confirmation guards offline.
 	@./tests/aws-reference-safety.sh
 
 scan-secrets: ## Scan Git content and the working tree with Gitleaks.
 	@./scripts/scan-secrets.sh
 
-check: lint syntax-ansible validate-hcl test-hcl test-ansible-safety test-lima-safety test-aws-safety scan-secrets ## Run every non-mutating repository check.
+check: lint syntax-ansible validate-hcl test-hcl test-ansible-safety test-lima-safety test-incus-substrate-safety test-aws-safety scan-secrets ## Run every non-mutating repository check.
 
 test-local: check ## Run the complete workstation-only test suite.
 
@@ -117,16 +122,19 @@ bootstrap-incus: ## Install and initialize standalone Incus (requires exact CONF
 validate-incus: ## Validate Incus API health and write ignored local evidence.
 	@./scripts/ansible-target.sh validate-incus
 
-plan: ## Unavailable until P1-05: plan provider-owned Incus resources.
-	@./scripts/not-implemented.sh plan P1-05
+incus-client-check: ## Verify the isolated OpenTofu client trust boundary.
+	@./scripts/incus-substrate.sh preflight
 
-apply: ## Unavailable until P1-05: apply provider-owned Incus resources.
+plan: ## Verify Incus trust and save a read-only provider plan.
+	@./scripts/incus-substrate.sh plan
+
+apply: ## Unavailable until the P1-05 substrate resource slice.
 	@./scripts/not-implemented.sh apply P1-05
 
-validate: ## Unavailable until P1-05: validate the Incus substrate.
+validate: ## Unavailable until the P1-05 substrate resource slice.
 	@./scripts/not-implemented.sh validate P1-05
 
-destroy: ## Unavailable until P1-05: destroy provider-owned Incus resources.
+destroy: ## Unavailable until the P1-05 substrate resource slice.
 	@./scripts/not-implemented.sh destroy P1-05
 
 aws-plan: ## Verify AWS safety/cost gates and save the minimal VM plan.

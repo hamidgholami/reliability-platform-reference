@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+deployment_profile = "workstation-validation"
+incus_config_dir    = "/absolute/path/to/ignored/.cache/incus/opentofu"
+incus_remote        = "rpr-target"

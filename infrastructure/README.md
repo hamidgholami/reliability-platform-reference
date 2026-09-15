@@ -5,9 +5,10 @@ state and lifecycle ownership.
 
 - `bootstrap/aws-single-node` creates the disposable Debian 13 host and its
   minimal AWS network boundary through the guarded P1-04 Make targets.
-- `incus` will manage resources through the Incus API after Ansible has made
-  that API healthy. P1-01 contains only its provider constraint; substrate
-  resources start in P1-05.
+- `incus` manages resources through the Incus API after Ansible has made that
+  API healthy. Its first P1-05 slice verifies a pre-enrolled, isolated provider
+  identity through a read-only data source; substrate resources follow only
+  after this trust boundary passes.
 
 Initialization downloads pinned providers but does not contact an
 infrastructure API. Validation then runs offline. Planning the AWS root reads

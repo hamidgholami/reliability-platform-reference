@@ -294,6 +294,11 @@ the API confirmed zero provider-owned resources before P1-05.
 
 ### P1-05 — Minimal provider-managed substrate
 
+The first implementation slice configures the provider to consume an isolated,
+pre-enrolled client identity. `incus-client-check` and `plan` verify trust and
+standalone topology without creating resources; apply remains disabled until
+the minimal substrate configuration is reviewable.
+
 - [ ] Pin and configure the official `lxc/incus` provider against an explicitly
   trusted remote; disable automatic client-certificate generation and automatic
   server-certificate acceptance.
