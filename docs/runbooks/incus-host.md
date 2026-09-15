@@ -50,11 +50,11 @@ make validate-incus
 ```
 
 The role installs `incus-base`, grants the existing operator `incus-admin`
-membership, starts the packaged systemd units, and sends a minimal preseed over
-standard input. A versioned Jinja template makes the input reviewable, but it is
-rendered in controller memory rather than copied to the host. The preseed
-configures only `0.0.0.0:8443`; it creates no file and no provider-owned
-resource.
+membership, resets the SSH connection so the new supplementary group is active,
+starts the packaged systemd units, and sends a minimal preseed over standard
+input. A versioned Jinja template makes the input reviewable, but it is rendered
+in controller memory rather than copied to the host. The preseed configures only
+`0.0.0.0:8443`; it creates no file and no provider-owned resource.
 
 Run both commands a second time. The second bootstrap recap must report zero
 changes. Validation checks structured local API data, standalone mode, package

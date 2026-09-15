@@ -17,6 +17,9 @@
       - incus-admin
     append: true
 
+- name: Reset SSH to activate Incus administrator group membership
+  ansible.builtin.meta: reset_connection
+
 - name: Enable the Incus socket
   ansible.builtin.systemd_service:
     name: incus.socket

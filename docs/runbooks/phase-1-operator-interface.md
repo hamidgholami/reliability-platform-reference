@@ -55,7 +55,9 @@ SSH configuration. It then derives the current loopback address, forwarded SSH
 port, and guest user and writes an inventory to the ignored
 `.cache/lima/hosts.json` path. It references Lima's SSH configuration instead of
 copying or exposing its private key. Regenerate the inventory after restarting
-the VM.
+the VM. The generated Ansible connection disables Lima's indefinite SSH control
+master so connection resets establish a genuinely new login after group
+membership changes.
 
 Use the generated inventory with the existing Ansible interface:
 
