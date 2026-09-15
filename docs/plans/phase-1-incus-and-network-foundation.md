@@ -1,7 +1,7 @@
 # Phase 1 Plan: Minimal Single-Node Incus Foundation
 
-- Status: revised and accepted on 2026-09-04; P1-00 through P1-04 complete on
-  the reference VM, P1-05 active
+- Status: revised and accepted on 2026-09-04; P1-00 through P1-05 complete,
+  P1-06 active
 - Owner: Hamid Gholami
 - Default deployment profile: `single-node-reference`, supplied initially by
   the AWS bootstrap root
@@ -286,8 +286,8 @@ all passed. OpenTofu then destroyed all 11 bootstrap resources and left empty
 state. Direct EC2 API checks confirmed the instance terminated and its volume,
 network, and access resources absent. AWS's tagging index still returned
 recently deleted ARNs immediately afterward, so the final clean orphan-check
-proof remains a P1-06 requirement. P1-05 live acceptance will use a new
-short-lived reference VM.
+proof remains a P1-06 requirement. Final authoritative substrate acceptance
+will use a new short-lived reference VM during the P1-06 end-to-end run.
 
 The optional Lima replay passed on 2026-09-15 with Debian 13.7 on ARM64 and
 Incus 6.0.4. Baseline and bootstrap second runs reported zero changes. SSH
@@ -326,12 +326,15 @@ validation and provider-only destroy have separate boundaries.
   or saved plans as evidence.
 - [x] Apply twice and explain or eliminate all drift.
 
-The optional Lima checkpoint passed on 2026-09-15 with Incus 6.0.4. The
-provider created the five-resource boundary, `smoke-01` received
-`10.20.0.133`, and internal DNS, external DNS, NAT, project restrictions, and
-the IPv6 policy passed runtime validation. A second plan and apply reported no
-changes. P1-05 remains active until provider-only destroy and clean recreation
-pass; authoritative `single-node-reference` acceptance remains part of P1-06.
+P1-05 acceptance passed on the optional Lima environment on 2026-09-15 with
+Incus 6.0.4. The provider created the five-resource boundary; internal DNS,
+external DNS, NAT, project restrictions, and the IPv6 policy passed runtime
+validation. A second plan and apply reported no changes. Provider-only destroy
+then removed all five resources and left empty managed state while Incus and
+both client trust paths remained healthy. Clean recreation created all five
+resources again, `smoke-01` received `10.20.0.147`, runtime validation passed,
+and the final plan and apply reported no changes. Authoritative
+`single-node-reference` acceptance remains part of P1-06.
 
 Acceptance: the provider creates a working container deterministically, the
 second apply has no unexplained drift, and provider destroy does not uninstall
