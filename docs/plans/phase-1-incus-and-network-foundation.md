@@ -342,12 +342,12 @@ or de-initialize Incus.
 
 ### P1-06 — Operator workflow, teardown, and evidence
 
-- [ ] Implement the public `preflight`, `baseline`, `bootstrap-incus`, `plan`,
+- [x] Implement the public `preflight`, `baseline`, `bootstrap-incus`, `plan`,
   `apply`, `validate`, and `destroy` Make targets.
 - [x] Implement distinct `aws-plan`, `aws-apply`, `aws-destroy`, and
   `aws-orphan-check` targets so VM lifecycle cannot be confused with Incus
   resource lifecycle.
-- [ ] Require `PROFILE=single-node-reference` and show the exact boundary before
+- [x] Require `PROFILE=single-node-reference` and show the exact boundary before
   each mutation.
 - [ ] Verify clean rebuild from documented inputs after provider destroy.
 - [ ] Publish redacted evidence for hardening idempotence, Incus health,

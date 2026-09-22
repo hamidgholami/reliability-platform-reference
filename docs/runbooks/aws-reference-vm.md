@@ -241,6 +241,38 @@ to prove idempotence. The Ansible wrapper accepts
 `OPERATOR_SSH_IDENTITY_FILE`, but it may be omitted when a correctly configured
 SSH agent supplies the key.
 
+## Incus provider lifecycle
+
+After `validate-incus` records the server certificate fingerprint, follow the
+[reference-VM enrollment](incus-client-trust.md#reference-vm-enrollment). It
+uses distinct human and OpenTofu remotes and a distinct provider cache, so the
+preserved Lima client identities and OpenTofu state are not overwritten.
+
+Review and apply the five-resource provider plan, validate it, and prove a
+second no-change apply:
+
+```sh
+make plan
+CONFIRM=apply-incus-single-node-reference-rpr-reference-tofu make apply
+make validate
+make plan
+CONFIRM=apply-incus-single-node-reference-rpr-reference-tofu make apply
+```
+
+Then exercise provider-only teardown and clean recreation:
+
+```sh
+CONFIRM=destroy-incus-single-node-reference-rpr-reference-tofu make destroy
+make incus-client-check
+make plan
+CONFIRM=apply-incus-single-node-reference-rpr-reference-tofu make apply
+make validate
+```
+
+Before destroying the AWS layer, perform the final provider destroy, verify
+that its state is empty, and revoke the two reference client certificates as
+described in the trust runbook. Do not revoke or remove the Lima identities.
+
 ## Teardown and orphan check
 
 Provider-owned Incus resources must be destroyed first once P1-05 creates

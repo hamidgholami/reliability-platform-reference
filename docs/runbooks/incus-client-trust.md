@@ -116,15 +116,88 @@ plan through the [Incus substrate lifecycle](incus-substrate.md). The saved
 plan, runtime inputs, session metadata, and state stay under ignored `.cache`
 paths with operator-only permissions.
 
-## Later targets and revocation
+## Reference-VM enrollment
 
-Use a distinct human remote name for a later EC2 target, for example
-`rpr-reference`; do not silently replace `rpr-lima`. The isolated `rpr-target`
-configuration can be removed and re-enrolled only after verifying the new
-server fingerprint.
+Keep the reference VM separate from the preserved Lima environment. Use a
+distinct human remote, isolated OpenTofu client directory, provider remote, and
+provider state directory:
+
+```sh
+export PROFILE=single-node-reference
+export INVENTORY="$PWD/.cache/aws-single-node/hosts.json"
+export TARGET_HOST=incus-reference-01
+export RPR_REFERENCE_IP="$(
+  jq -r '.all.children.incus_hosts.hosts["incus-reference-01"].ansible_host' \
+    "$INVENTORY"
+)"
+export INCUS_ENDPOINT="https://${RPR_REFERENCE_IP}:8443"
+export INCUS_CONFIG_DIR="$PWD/.cache/incus/reference-opentofu"
+export INCUS_REMOTE=rpr-reference-tofu
+export RPR_INCUS_CACHE_DIR="$PWD/.cache/incus-substrate-reference"
+export INCUS_SERVER_CERTIFICATE_SHA256="$(
+  jq -r '.server_certificate_sha256' reports/p1-03/incus-reference-01.json
+)"
+```
+
+The AWS security group exposes the Incus API only to the reviewed operator
+IPv4 `/32`. Incus still requires a trusted TLS client certificate; network
+reachability alone grants no API access. Compare the server fingerprint with
+`INCUS_SERVER_CERTIFICATE_SHA256` during both enrollments and stop on any
+mismatch.
+
+Create and enroll the human operator identity first:
+
+```sh
+ssh admin@"$RPR_REFERENCE_IP" \
+  'incus config trust add rpr-mac-reference -q'
+
+incus remote add rpr-reference "$INCUS_ENDPOINT"
+```
+
+Treat the first command's token as a secret and paste it only into the second
+command's prompt. Keep `rpr-lima` configured; do not change the default remote.
+
+Create the isolated OpenTofu identity independently:
+
+```sh
+mkdir -p "$INCUS_CONFIG_DIR"
+chmod 700 "$INCUS_CONFIG_DIR"
+
+ssh admin@"$RPR_REFERENCE_IP" \
+  'incus config trust add rpr-opentofu-reference -q'
+
+INCUS_CONF="$INCUS_CONFIG_DIR" \
+  incus remote add "$INCUS_REMOTE" "$INCUS_ENDPOINT"
+```
+
+Verify both paths before planning resources:
+
+```sh
+incus info rpr-reference:
+make incus-client-check
+make plan
+```
+
+The reference-specific `RPR_INCUS_CACHE_DIR` is mandatory for this milestone.
+It prevents the reference plan, state, inventory, and evidence from replacing
+the corresponding Lima files.
+
+## Revocation and local cleanup
 
 Removing a local remote does not revoke its server authorization. Before
 deleting a disposable target, list its trusted certificates through SSH, match
-the certificate name and fingerprint, and remove the intended trust entry. Also
-remove any unused pending token. Never delete an entry based only on list
-position or a shortened fingerprint.
+the two reference certificate names and full fingerprints, and remove those
+entries. Also remove any unused pending token. Never delete an entry based only
+on list position or a shortened fingerprint.
+
+After provider destroy succeeds and trust is revoked, remove the human and
+isolated client remotes:
+
+```sh
+incus remote remove rpr-reference
+INCUS_CONF="$INCUS_CONFIG_DIR" incus remote remove "$INCUS_REMOTE"
+```
+
+Delete the ignored reference client and provider cache directories only after
+the final evidence is recorded and the AWS target has been destroyed. This
+cleanup does not affect the separate Lima client or substrate state.
