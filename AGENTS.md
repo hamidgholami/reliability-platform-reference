@@ -7,17 +7,18 @@ delivery, identity, secrets, observability, recovery, and operations across a
 local Incus environment and selected cloud profiles. Prefer an integrated
 workflow with measured evidence over a catalogue of unrelated tools.
 
-## Current phase
+## Delivery scope
 
-Phase 0 is complete. The Phase 1 implementation plan is accepted. P1-00 through
-P1-04 are complete on an AWS-supplied reference VM, which was destroyed after
-Milestone B; P1-05 is active. A new short-lived reference VM is required for
-provider acceptance. Destroy/recreate evidence and final AWS cleanup remain
-P1-06 acceptance work.
-Phase 1 targets one standalone Incus host on a Debian 13 VM, initially supplied
-by a separate minimal AWS bootstrap root. The workstation provides fast checks
-and optional one-VM Lima integration. Do not add implementation or empty future
-product directories before the relevant work item begins.
+Use `docs/roadmap.md` and the active files under `docs/plans/` for current
+phase status and acceptance work. Do not duplicate milestone progress here.
+Complete the active vertical slice and its executable evidence before starting
+later phases.
+
+The current foundation targets one standalone Incus host on Debian 13,
+initially supplied by a separate minimal AWS bootstrap root. The workstation
+provides fast checks and optional one-VM Lima integration. Do not add
+implementation or empty future product directories before the relevant work
+item begins.
 
 ## Non-goals and boundaries
 
