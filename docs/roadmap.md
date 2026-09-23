@@ -7,7 +7,7 @@ an implementation plan, acceptance evidence, and rollback or teardown path.
 | --- | --- |
 | 0 | Architecture, governance, repository checks, and approved boundaries |
 | 1 | Minimal standalone Incus foundation on one Debian VM, with AWS VM bootstrap, Ansible, and the official Incus provider |
-| 2 | Private DNS, PKI, identity, Vault/OpenBao, dynamic secrets, SSH certificates, and approvals |
+| 2 | Private DNS, PKI, Keycloak approver identity, OpenBao dynamic secrets, and SSH certificates |
 | 3 | Kubespray Kubernetes foundation and GitOps bootstrap |
 | 4 | Jenkins platform library and end-to-end delivery path using a coherent sample application |
 | 5 | Artifact and supply-chain controls with Pulp and Harbor |
@@ -33,7 +33,10 @@ AWS-supplied Debian VM, P1-05 passed the provider lifecycle on optional Lima,
 and P1-06 passed the authoritative end-to-end reference-VM create, validate,
 destroy, recreate, and cleanup lifecycle. The
 [redacted acceptance record](evidence/phase-1-acceptance.md) captures the
-results and limitations. Phase 2 is next; no Phase 2 service has been started.
+results and limitations. The
+[Phase 2 trust, secrets, and identity plan](plans/phase-2-trust-secrets-and-identity.md)
+is active at P2-00 capability and ownership review; no Phase 2 service has been
+created yet.
 
 Phase 4 will introduce a small, coherent Java Spring Boot application as the
 system under delivery. It will demonstrate build, unit and integration tests,

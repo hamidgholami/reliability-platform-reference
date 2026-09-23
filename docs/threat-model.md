@@ -1,13 +1,13 @@
 # Initial Threat Model
 
-Status: Phase 0 baseline; revisit at every new trust boundary.
+Status: active baseline; updated for the Phase 2 trust boundaries.
 
 ## Assets
 
 - source history and release provenance;
 - DNS and domain ownership;
 - identity, MFA, TOTP, and YubiKey enrollment data;
-- Vault/OpenBao recovery and bootstrap material;
+- OpenBao recovery and bootstrap material;
 - CI/CD approval authority and short-lived deployment credentials;
 - infrastructure state, backups, artifacts, and observability data;
 - cloud accounts and the ability to create billable resources.
@@ -24,7 +24,7 @@ identity/secrets services, backup storage, and each cloud account or tenant.
 | --- | --- |
 | Stolen maintainer account | Phishing-resistant MFA/YubiKey, signed human commits, protected branch, recovery procedure |
 | Secret committed to Git | Ignore rules, Gitleaks locally and in CI, immediate rotation procedure |
-| Pipeline impersonation or replay | Keycloak human identity, explicit approval, Vault/OpenBao TOTP validation, short-lived SSH certificates |
+| Pipeline impersonation or replay | Keycloak human identity and MFA, artifact-bound single-use approval, short-lived OpenBao SSH certificates |
 | Compromised workload cluster controls recovery | Keep core identity, secret, delivery, and backup control services outside that cluster |
 | DNS takeover | Registrar lock, MFA, DNSSEC, scoped DNS token, tested account recovery |
 | Supply-chain substitution | Exact versions, pinned actions, checksums/signatures, dependency review |
@@ -33,10 +33,12 @@ identity/secrets services, backup storage, and each cloud account or tenant.
 
 ## Identity separation
 
-Keycloak authenticates humans through SSO and MFA. Vault/OpenBao authorizes
-machine and deployment actions, validates pipeline TOTP when required, and
-issues short-lived SSH credentials. A shared service account and reusable SSH
-key must not substitute for an attributable human approval.
+Keycloak authenticates humans through SSO and MFA. OpenBao authorizes machine
+and deployment actions and issues short-lived SSH credentials. Personal TOTP
+and WebAuthn credentials remain inside Keycloak and never enter Jenkins or
+OpenBao. A shared service account, machine-readable TOTP, or reusable SSH key
+must not substitute for an attributable human approval. See
+[ADR-0008](adr/0008-separate-human-approval-from-machine-credentials.md).
 
 ## Deferred analysis
 

@@ -8,7 +8,7 @@ trust without depending on the platform being healthy.
 - verified repository revision and release checksums;
 - documented maintainers and emergency decision process;
 - DNS registrar and authoritative-DNS recovery procedure;
-- offline locations for CA recovery material and Vault/OpenBao recovery keys;
+- offline locations for CA recovery material and OpenBao recovery keys;
 - bootstrap host fingerprints and out-of-band access procedure;
 - encrypted inventory of cloud accounts, tenants, and billing contacts;
 - restore order, last tested date, and evidence location;

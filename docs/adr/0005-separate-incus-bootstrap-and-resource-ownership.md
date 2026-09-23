@@ -79,8 +79,9 @@ server certificate are disabled.
 Validate a second Ansible run and a second provider apply for idempotence and
 no unexplained drift. Confirm that saved plans, state, logs, and evidence do not
 expose the TSIG value. Exercise key rotation and provider-only destroy before
-Phase 1 exits. Reverse or refine this boundary with a superseding ADR if the
-provider schema or selected state backend changes materially.
+the Phase 2 private-DNS work item exits. Reverse or refine this boundary with a
+superseding ADR if the provider schema or selected state backend changes
+materially.
 
 ## References
 

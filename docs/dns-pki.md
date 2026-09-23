@@ -41,7 +41,7 @@ WAF, or a materially safer certificate-automation interface.
 
 ACME DNS-01 automation must use a maintained client or integration that supports
 the Netcup API. Provider credentials must be scoped as narrowly as Netcup
-allows, stored in Vault/OpenBao, and excluded from Git. If direct automation
+allows, stored in OpenBao, and excluded from Git. If direct automation
 cannot meet that security contract, delegate only the ACME challenge namespace
 to a suitable automation provider rather than moving the entire public zone.
 

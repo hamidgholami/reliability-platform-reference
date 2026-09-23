@@ -1,6 +1,6 @@
 # Reference Architecture
 
-Status: accepted Phase 0 baseline
+Status: accepted baseline; revised by ADR-0006 through ADR-0008
 
 ## System intent
 
@@ -16,10 +16,10 @@ providers are identical.
 Developer
    |
    v
-Jenkins + approval broker ----> Vault/OpenBao ----> short-lived credentials
+Jenkins + approval broker -------> OpenBao -------> short-lived credentials
    |                                  |
    v                                  v
-Artifact and image stores       SSH certificates / TOTP validation
+Artifact and image stores       SSH certificates / dynamic secrets
    |
    v
 GitOps desired state ----------> Kubernetes workloads
@@ -38,8 +38,8 @@ GitOps desired state ----------> Kubernetes workloads
 1. **Workstation and governance** — repository policy, local checks, signed
    human commits, ADRs, and cost/destruction guardrails.
 2. **Foundation** — networking, DNS, PKI, Incus hosts, and environment inventory.
-3. **Identity and secrets** — Keycloak for human SSO/MFA and Vault/OpenBao for
-   machine identity, dynamic secrets, SSH certificates, and deployment TOTP.
+3. **Identity and secrets** — Keycloak for human SSO/MFA and approver roles;
+   OpenBao for machine identity, dynamic secrets, and SSH certificates.
 4. **Delivery** — Jenkins pipelines, an original shared library, artifact stores,
    policy checks, approvals, and GitOps promotion.
 5. **Runtime** — Kubernetes built with Kubespray, plus selected infrastructure
@@ -56,7 +56,7 @@ promise that every planned service runs concurrently on the minimum host.
 ## Service placement
 
 The default placement is deliberately split. Jenkins, the approval broker,
-Keycloak, Vault/OpenBao, PostgreSQL, Pulp, Harbor, observability services, edge
+Keycloak, OpenBao, PostgreSQL, Pulp, Harbor, observability services, edge
 services, and backup infrastructure run on dedicated Incus instances outside
 the workload Kubernetes cluster. Sample applications, Traefik Gateway API,
 MetalLB, GitOps controllers, cert-manager, agents, and Velero run inside it.
@@ -83,7 +83,7 @@ Official Incus OpenTofu provider --> network/storage/DNS-zone resources
 Ansible guest configuration             +--> BIND 9 secondaries + internal CA
               |                         +--> PostgreSQL
               |                         +--> Keycloak
-              |                         +--> Vault/OpenBao
+              |                         +--> OpenBao
               v
 Kubespray --> Kubernetes --> GitOps --> applications and agents
                                   |
@@ -104,6 +104,12 @@ The DNS boundary uses Incus network zones as the hidden primary, BIND 9 outside
 Kubernetes as the query-serving secondaries, and CoreDNS inside Kubernetes for
 cluster service discovery. See
 [ADR-0003](adr/0003-separate-platform-and-kubernetes-dns-roles.md).
+
+[ADR-0007](adr/0007-use-openbao-as-the-secrets-runtime.md) selects one secrets
+runtime instead of a dual-product matrix.
+[ADR-0008](adr/0008-separate-human-approval-from-machine-credentials.md)
+separates Keycloak human MFA and approval evidence from OpenBao-issued machine
+credentials.
 
 ## Failure-domain rules
 

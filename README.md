@@ -14,7 +14,9 @@ P1-04 passed real-host acceptance on the AWS reference VM, and P1-05 completed
 the provider-managed substrate lifecycle on the optional Lima environment.
 P1-06 passed the authoritative end-to-end reference-VM lifecycle, including
 clean destroy and recreation. See the
-[redacted acceptance record](docs/evidence/phase-1-acceptance.md).
+[redacted acceptance record](docs/evidence/phase-1-acceptance.md). **Phase 2:
+trust, secrets, and identity** is active at its capability and ownership review;
+no Phase 2 service has been created yet.
 
 ## Intended outcomes
 
@@ -27,7 +29,7 @@ clean destroy and recreation. See the
 ## Scope
 
 The planned platform connects Jenkins, Ansible, OpenTofu/Terraform-compatible
-modules, Incus, Kubernetes, GitOps, Vault/OpenBao, Keycloak, artifact services,
+modules, Incus, Kubernetes, GitOps, OpenBao, Keycloak, artifact services,
 observability, backup, and selected AWS and Azure integrations. Product choices
 and placements are defined in [the architecture](docs/architecture.md) and the
 [ADRs](docs/adr/).
@@ -48,7 +50,9 @@ make check
 ```
 
 See the [Phase 1 operator interface](docs/runbooks/phase-1-operator-interface.md)
-before any optional VM work. The enabled AWS lifecycle is documented in the
+before any optional VM work. The active
+[Phase 2 plan](docs/plans/phase-2-trust-secrets-and-identity.md) defines the next
+delivery boundary. The enabled AWS lifecycle is documented in the
 [AWS reference VM runbook](docs/runbooks/aws-reference-vm.md); no cloud apply is
 automatic.
 

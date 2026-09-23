@@ -8,7 +8,7 @@ produces timestamped evidence.
 | Class | Example capability | Availability/SLO approach | Draft RPO | Draft RTO |
 | --- | --- | --- | --- | --- |
 | C0 | Git repository and operator trust kit | Recoverable source of truth | 24 hours | 4 hours |
-| C1 | DNS, identity, Vault/OpenBao | Error-budgeted control plane | 15 minutes | 1 hour |
+| C1 | DNS, identity, OpenBao | Error-budgeted control plane | 15 minutes | 1 hour |
 | C2 | Jenkins, GitOps, artifact services | Delivery may pause safely | 4 hours | 8 hours |
 | C3 | Sample workloads and demonstrations | Best effort | 24 hours | 24 hours |
 | C4 | Ephemeral test infrastructure | No continuity promise | None | Recreate |
