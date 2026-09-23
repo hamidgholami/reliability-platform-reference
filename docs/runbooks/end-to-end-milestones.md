@@ -28,8 +28,8 @@ changes. No persisted preseed, unexpected exposed listener, or provider-owned
 Incus resource was found. OpenTofu then destroyed all 11 AWS bootstrap resources
 and left empty state. Direct EC2 API checks found the instance terminated and
 its volume, network, and access resources absent. The AWS tagging index still
-returned recently deleted ARNs immediately afterward, so Milestone C must use a
-new short-lived VM and obtain a clean final orphan-check result.
+returned recently deleted ARNs immediately afterward. This informed the
+resource-specific live-resource verification used by Milestone C.
 
 The same host-foundation path was replayed on 2026-09-15 in the optional Lima
 profile using Debian 13.7 ARM64 and Incus 6.0.4. The second baseline and
@@ -69,6 +69,11 @@ The [AWS reference VM runbook](aws-reference-vm.md) is the executable P1-04
 handoff for these prerequisites, guarded lifecycle commands, and final cleanup.
 
 ## Milestone C — Complete Phase 1 deployment acceptance
+
+Status: passed on 2026-09-23 against a short-lived AWS Frankfurt reference VM.
+The entire create, configure, validate, provider destroy/recreate, final
+provider destroy, trust revocation, AWS destroy, and orphan-check path passed.
+See the [redacted Phase 1 acceptance record](../evidence/phase-1-acceptance.md).
 
 Trigger: P1-04 through P1-06 implementation is ready and all workstation checks
 pass.

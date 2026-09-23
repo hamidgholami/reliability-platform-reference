@@ -28,13 +28,12 @@ capability gap rather than expand the product list.
 [Phase 0 architecture and governance](plans/phase-0-architecture-and-governance.md)
 is complete. The accepted
 [Phase 1 Incus and network foundation plan](plans/phase-1-incus-and-network-foundation.md)
-has completed P1-00 through P1-05. P1-02 through P1-04 passed real-target
-acceptance on the AWS-supplied Debian VM, and the P1-05 provider lifecycle
-passed on the optional Lima environment. P1-06 is active and will run the
-authoritative end-to-end reference-VM acceptance. The revised plan finishes a
-single-node
-apply/destroy/recreate slice before adding private DNS, clustering, or broader
-cloud platform topology.
+is complete. P1-02 through P1-04 passed real-target acceptance on the
+AWS-supplied Debian VM, P1-05 passed the provider lifecycle on optional Lima,
+and P1-06 passed the authoritative end-to-end reference-VM create, validate,
+destroy, recreate, and cleanup lifecycle. The
+[redacted acceptance record](evidence/phase-1-acceptance.md) captures the
+results and limitations. Phase 2 is next; no Phase 2 service has been started.
 
 Phase 4 will introduce a small, coherent Java Spring Boot application as the
 system under delivery. It will demonstrate build, unit and integration tests,

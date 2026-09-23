@@ -286,8 +286,11 @@ make aws-orphan-check
 
 Destroy removes the generated inventory and saved plans after OpenTofu
 succeeds. The orphan check fails if the local state still contains resources or
-if AWS still returns a live resource tagged
-`Project=reliability-platform-reference`. It does not inspect unrelated,
+if resource-specific EC2 APIs return a live resource tagged
+`Project=reliability-platform-reference`. AWS's tagging index can temporarily
+return deleted-resource tombstones; the check reports known tombstones only
+after the authoritative EC2 checks find no live declared-boundary resource. It
+fails closed for an unknown tagged resource type and does not inspect unrelated,
 untagged account resources.
 
 No domain change, DNS record, password, TLS certificate, TOTP seed, Vault

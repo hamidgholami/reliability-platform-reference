@@ -478,9 +478,51 @@ orphan_check()
   tagged_count=$(printf '%s' "$tagged" |
     jq -er '.ResourceTagMappingList | length') ||
     fail "could not inspect tagged AWS resources"
+
+  tagged_arns=$(printf '%s' "$tagged" |
+    jq -er '.ResourceTagMappingList[].ResourceARN') ||
+    [ "$tagged_count" -eq 0 ] || fail "could not inspect tagged AWS resources"
+  unknown_tagged_arns=$(printf '%s\n' "$tagged_arns" | awk '
+    /:(instance|volume|vpc|subnet|internet-gateway|route-table|security-group|security-group-rule|key-pair|network-interface)\// { next }
+    NF { print }
+  ')
+  [ -z "$unknown_tagged_arns" ] || {
+    printf '%s\n' "$unknown_tagged_arns" >&2
+    fail "unknown tagged AWS resource types remain after destroy"
+  }
+
+  tag_filter="Name=tag:Project,Values=$project_tag"
+  live_resources=$(
+    aws_call "$aws_region" ec2 describe-instances \
+      --filters "$tag_filter" \
+        "Name=instance-state-name,Values=pending,running,shutting-down,stopping,stopped" \
+      --query 'Reservations[].Instances[].InstanceId' --output text
+    aws_call "$aws_region" ec2 describe-volumes --filters "$tag_filter" \
+      --query 'Volumes[].VolumeId' --output text
+    aws_call "$aws_region" ec2 describe-vpcs --filters "$tag_filter" \
+      --query 'Vpcs[].VpcId' --output text
+    aws_call "$aws_region" ec2 describe-subnets --filters "$tag_filter" \
+      --query 'Subnets[].SubnetId' --output text
+    aws_call "$aws_region" ec2 describe-internet-gateways --filters "$tag_filter" \
+      --query 'InternetGateways[].InternetGatewayId' --output text
+    aws_call "$aws_region" ec2 describe-route-tables --filters "$tag_filter" \
+      --query 'RouteTables[].RouteTableId' --output text
+    aws_call "$aws_region" ec2 describe-security-groups --filters "$tag_filter" \
+      --query 'SecurityGroups[].GroupId' --output text
+    aws_call "$aws_region" ec2 describe-security-group-rules --filters "$tag_filter" \
+      --query 'SecurityGroupRules[].SecurityGroupRuleId' --output text
+    aws_call "$aws_region" ec2 describe-key-pairs --filters "$tag_filter" \
+      --query 'KeyPairs[].KeyPairId' --output text
+    aws_call "$aws_region" ec2 describe-network-interfaces --filters "$tag_filter" \
+      --query 'NetworkInterfaces[].NetworkInterfaceId' --output text
+  )
+  [ -z "$live_resources" ] || {
+    printf '%s\n' "$live_resources" | tr '\t' '\n' >&2
+    fail "live AWS resources remain after destroy"
+  }
+
   if [ "$tagged_count" -ne 0 ]; then
-    printf '%s' "$tagged" | jq -r '.ResourceTagMappingList[].ResourceARN' >&2
-    fail "tagged AWS resources remain after destroy"
+    echo "AWS tagging index reports $tagged_count deleted-resource tombstone(s); direct EC2 checks found no live declared-boundary resources."
   fi
 
   echo "No OpenTofu state resources or live AWS resources tagged Project=$project_tag remain."

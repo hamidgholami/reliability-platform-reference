@@ -4,14 +4,17 @@ An open, reproducible reference platform for demonstrating production-minded
 DevOps and site reliability engineering practices across local, on-premises,
 and cloud environments.
 
-**Phase 0: architecture and governance** is complete. Phase 1 now delivers one
-minimal standalone Incus foundation on a Debian 13 VM, initially supplied by a
+**Phase 0: architecture and governance** and **Phase 1: minimal standalone
+Incus foundation** are complete. Phase 1 delivers one Incus foundation on a
+Debian 13 VM, initially supplied by a
 small isolated AWS OpenTofu root. P1-01 provides pinned repository interfaces
 and fast quality gates; the Mac workstation is used for checks and optional
 disposable integration rather than persistent platform hosting. P1-02 through
 P1-04 passed real-host acceptance on the AWS reference VM, and P1-05 completed
 the provider-managed substrate lifecycle on the optional Lima environment.
-P1-06 will run the authoritative end-to-end reference-VM acceptance.
+P1-06 passed the authoritative end-to-end reference-VM lifecycle, including
+clean destroy and recreation. See the
+[redacted acceptance record](docs/evidence/phase-1-acceptance.md).
 
 ## Intended outcomes
 

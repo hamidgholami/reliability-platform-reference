@@ -1,7 +1,6 @@
 # Phase 1 Plan: Minimal Single-Node Incus Foundation
 
-- Status: revised and accepted on 2026-09-04; P1-00 through P1-05 complete,
-  P1-06 active
+- Status: complete; authoritative deployment acceptance passed on 2026-09-23
 - Owner: Hamid Gholami
 - Default deployment profile: `single-node-reference`, supplied initially by
   the AWS bootstrap root
@@ -285,9 +284,10 @@ controller and operator access, listener allowlist, and second-run convergence
 all passed. OpenTofu then destroyed all 11 bootstrap resources and left empty
 state. Direct EC2 API checks confirmed the instance terminated and its volume,
 network, and access resources absent. AWS's tagging index still returned
-recently deleted ARNs immediately afterward, so the final clean orphan-check
-proof remains a P1-06 requirement. Final authoritative substrate acceptance
-will use a new short-lived reference VM during the P1-06 end-to-end run.
+recently deleted ARNs immediately afterward. P1-06 therefore verifies live
+resources through resource-specific EC2 APIs instead of treating tagging-index
+tombstones as authoritative. Final authoritative substrate acceptance used a
+new short-lived reference VM during the P1-06 end-to-end run.
 
 The optional Lima replay passed on 2026-09-15 with Debian 13.7 on ARM64 and
 Incus 6.0.4. Baseline and bootstrap second runs reported zero changes. SSH
@@ -349,15 +349,24 @@ or de-initialize Incus.
   resource lifecycle.
 - [x] Require `PROFILE=single-node-reference` and show the exact boundary before
   each mutation.
-- [ ] Verify clean rebuild from documented inputs after provider destroy.
-- [ ] Publish redacted evidence for hardening idempotence, Incus health,
+- [x] Verify clean rebuild from documented inputs after provider destroy.
+- [x] Publish redacted evidence for hardening idempotence, Incus health,
   provider no-drift, container connectivity, destroy, and recreation.
-- [ ] Record duration, peak observed resource use, limitations, and final
+- [x] Record duration, peak observed resource use, limitations, and final
   cleanup state.
 
 Acceptance: another operator can create, validate, destroy, and recreate the
 minimal foundation with the documented commands and no orphaned
 provider-managed resources.
+
+Acceptance passed on 2026-09-23 against a short-lived AWS Frankfurt reference
+VM. Baseline and Incus second runs converged with zero changes. The provider
+created exactly five resources, passed DHCP, internal and external DNS, NAT,
+outbound connectivity, and no-drift validation, then passed destroy and clean
+recreation. Final provider and AWS destroys left empty state and no live
+declared-boundary cloud resources. Results, measurements, cost estimate, and
+limitations are in the
+[redacted Phase 1 acceptance record](../evidence/phase-1-acceptance.md).
 
 ## Deferred backlog
 
