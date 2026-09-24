@@ -15,8 +15,8 @@ the provider-managed substrate lifecycle on the optional Lima environment.
 P1-06 passed the authoritative end-to-end reference-VM lifecycle, including
 clean destroy and recreation. See the
 [redacted acceptance record](docs/evidence/phase-1-acceptance.md). **Phase 2:
-trust, secrets, and identity** is active at P2-01. Private-DNS guest automation
-has started; no Phase 2 service has passed deployment acceptance yet.
+trust, secrets, and identity** is active after P2-01 passed retained local
+acceptance, including clean recreation. Reference-host promotion remains.
 
 ## Intended outcomes
 

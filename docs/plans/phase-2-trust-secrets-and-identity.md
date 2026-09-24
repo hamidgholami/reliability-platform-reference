@@ -1,6 +1,6 @@
 # Phase 2 Plan: Trust, Secrets, and Identity
 
-- Status: active; P2-01 private DNS implementation started
+- Status: active; P2-01 accepted on `workstation-validation`
 - Started: 2026-09-23
 - Owner: Hamid Gholami
 - Default deployment profile: `single-node-reference`
@@ -144,30 +144,40 @@ created merely to compare products.
 - [x] Select the Debian 13 BIND 9.20 package line and define authoritative-only
   guest configuration, protected TSIG input, and local-first promotion
   boundaries.
-- [ ] Enable the Incus network-zone server on a private, non-standard port
+- [x] Enable the Incus network-zone server on a private, non-standard port
   reachable only from the platform network.
-- [ ] Add provider-owned forward and IPv4 reverse zones and attach them to the
+- [x] Add provider-owned forward and IPv4 reverse zones and attach them to the
   managed bridge.
-- [ ] Create only the two bounded BIND service instances required by the
+- [x] Create only the two bounded BIND service instances required by the
   accepted DNS design, using stable addresses from the foundational range.
-- [ ] Configure BIND as authoritative secondary only: no public listener, open
+- [x] Configure BIND as authoritative secondary only: no public listener, open
   recursion, manual primary data, or unrelated zones.
-- [ ] Supply per-peer TSIG material through protected runtime inputs. Permit the
+- [x] Supply per-peer TSIG material through protected runtime inputs. Permit the
   provider to record the required value in protected local state, but never in
   output, logs, committed variables, or published evidence.
-- [ ] Generate Ansible inventory from provider output and configure each guest
+- [x] Generate Ansible inventory from provider output and configure each guest
   through the repository wrapper with diff mode and secret-safe tasks.
-- [ ] Validate authenticated AXFR, NOTIFY-driven refresh, forward and reverse
+- [x] Validate authenticated AXFR, bounded refresh, forward and reverse
   answers, automatic record changes from Incus state, manual provider-owned
   records, and queries through either secondary.
-- [ ] Prove that one stopped secondary does not prevent queries to the other.
+- [x] Prove that one stopped secondary does not prevent queries to the other.
   Do not describe this as host-level HA.
-- [ ] Prove provider and Ansible idempotence plus bounded DNS teardown and clean
+- [x] Prove provider and Ansible idempotence plus bounded DNS teardown and clean
   recreation.
 
 Acceptance: clients on the platform network resolve current forward and reverse
 records through either BIND secondary; unauthorized transfer fails; no private
 address is published in Netcup DNS; and no TSIG value appears in evidence.
+
+Implementation note: Debian 13 supplies Incus 6.0 LTS, while DNS NOTIFY for
+network zones first appeared in Incus 7.4. P2-01 therefore clamps BIND's
+periodic refresh to the 120-second SOA value advertised by Incus 6.0 and proves
+that bound. Adopting NOTIFY is deferred until it is available on a selected
+supported LTS; a monthly feature release is not required for this capability.
+The redacted
+[local acceptance record](../evidence/phase-2-private-dns-local-acceptance.md)
+captures the completed workstation run. Promotion to the real
+`single-node-reference` environment remains part of Phase 2 final acceptance.
 
 ### P2-02 — Internal PKI and secrets foundation
 

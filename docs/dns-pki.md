@@ -92,8 +92,9 @@ The change flow is:
 3. For a manual name or alias, add the desired record to the Git-tracked
    provider inputs and apply it through the Incus API.
 4. CI validates the data and BIND secondary configuration.
-5. Incus notifies both BIND secondaries, which retrieve the updated zone through
-   authenticated AXFR and answer normal DNS queries.
+5. Both BIND secondaries retrieve the updated zone through authenticated AXFR
+   on the bounded refresh interval and answer normal DNS queries. A future
+   supported Incus line may replace polling with NOTIFY.
 6. Incus managed-bridge DNS and Kubernetes CoreDNS conditionally forward
    `dev.apadanalab.de` queries to the BIND pair.
 7. Trusted workstations, VPN clients, and future site resolvers use the same

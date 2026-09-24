@@ -111,8 +111,26 @@ chmod +x "$fixture_dir/bin/incus" "$fixture_dir/bin/openssl"
 
 mkdir -p "$fixture_dir/cache"
 printf '%s\n' '{}' >"$fixture_dir/cache/runtime.auto.tfvars.json"
+mkdir -p "$fixture_dir/private-dns"
+jq -n '{
+  private_dns_tsig_secrets: {
+    "dns-01": {
+      forward: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      reverse: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "dns-02": {
+      forward: "cccccccccccccccccccccccccccccccc",
+      reverse: "dddddddddddddddddddddddddddddddd"
+    }
+  }
+}' >"$fixture_dir/private-dns/tsig.auto.tfvars.json"
+chmod 600 "$fixture_dir/private-dns/tsig.auto.tfvars.json"
+private_dns_secrets_sha="$(shasum -a 256 \
+  "$fixture_dir/private-dns/tsig.auto.tfvars.json" | awk '{print $1}')"
 jq -n \
-  --arg fingerprint "$valid_fingerprint" '{
+  --arg fingerprint "$valid_fingerprint" \
+  --arg private_dns_secrets_file "$fixture_dir/private-dns/tsig.auto.tfvars.json" \
+  --arg private_dns_secrets_sha "$private_dns_secrets_sha" '{
     deployment_profile: "workstation-validation",
     remote: "rpr-target",
     endpoint: "https://127.0.0.1:18443",
@@ -120,6 +138,8 @@ jq -n \
     platform_ipv4_cidr: "10.20.0.0/24",
     platform_dns_domain: "dev.apadanalab.de",
     instance_image: "images:debian/13",
+    private_dns_secrets_file: $private_dns_secrets_file,
+    private_dns_secrets_sha256: $private_dns_secrets_sha,
     runtime_vars_sha256: "invalid"
   }' >"$fixture_dir/cache/session.json"
 
@@ -130,6 +150,7 @@ expect_failure \
   INCUS_REMOTE=rpr-target \
   INCUS_ENDPOINT=https://127.0.0.1:18443 \
   INCUS_SERVER_CERTIFICATE_SHA256="$valid_fingerprint" \
+  PRIVATE_DNS_SECRETS_FILE="$fixture_dir/private-dns/tsig.auto.tfvars.json" \
   RPR_INCUS_CACHE_DIR="$fixture_dir/cache" \
   ./scripts/incus-substrate.sh validate
 

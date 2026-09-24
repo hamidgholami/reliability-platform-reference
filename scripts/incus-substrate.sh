@@ -22,6 +22,8 @@ destroy_plan="$cache_dir/destroy.tfplan"
 session_file="$cache_dir/session.json"
 inventory_file="$cache_dir/inventory.json"
 evidence_file="$cache_dir/validation.json"
+private_dns_secrets_file=${PRIVATE_DNS_SECRETS_FILE:-"$PWD/.cache/private-dns/tsig.auto.tfvars.json"}
+private_dns_inventory_file="$cache_dir/private-dns-hosts.json"
 
 fail()
 {
@@ -86,6 +88,36 @@ validate_inputs()
   esac
   [ "${#normalized_expected}" -eq 64 ] ||
     fail "INCUS_SERVER_CERTIFICATE_SHA256 must be one SHA-256 fingerprint"
+}
+
+validate_private_dns_secrets()
+{
+  case "$private_dns_secrets_file" in
+    /*) ;;
+    *) fail "PRIVATE_DNS_SECRETS_FILE must be an absolute path" ;;
+  esac
+  [ -r "$private_dns_secrets_file" ] ||
+    fail "private DNS secrets are missing; run make private-dns-secrets"
+  secret_mode="$(stat -f '%Lp' "$private_dns_secrets_file" 2>/dev/null ||
+    stat -c '%a' "$private_dns_secrets_file")"
+  [ "$secret_mode" = "600" ] ||
+    fail "private DNS secrets must use mode 0600"
+  jq -e '
+    .private_dns_tsig_secrets as $secrets
+    | ($secrets | type) == "object"
+    and ($secrets | keys | length) == 2
+    and ($secrets | has("dns-01"))
+    and ($secrets | has("dns-02"))
+    and (["dns-01", "dns-02"] | all(
+      ($secrets[.].forward | type) == "string"
+      and ($secrets[.].reverse | type) == "string"
+      and ($secrets[.].forward | length) >= 32
+      and ($secrets[.].reverse | length) >= 32
+      and ($secrets[.].forward | test("\\s") | not)
+      and ($secrets[.].reverse | test("\\s") | not)
+    ))
+  ' "$private_dns_secrets_file" >/dev/null ||
+    fail "private DNS secrets do not satisfy the reviewed two-peer contract"
 }
 
 verify_client_trust()
@@ -157,6 +189,9 @@ projects_restrictions
 projects_networks_restricted_access
 projects_limits_disk_pool
 storage_api_project
+network_dns
+network_dns_records
+projects_networks_zones
 "
 
   for extension in $required_extensions; do
@@ -214,6 +249,10 @@ load_session()
     fail "planned Incus session is invalid"
   session_image="$(jq -er '.instance_image' "$session_file")" ||
     fail "planned Incus session is invalid"
+  session_private_dns_secrets_file="$(jq -er '.private_dns_secrets_file' "$session_file")" ||
+    fail "planned Incus session is invalid"
+  expected_private_dns_secrets_sha="$(jq -er '.private_dns_secrets_sha256' "$session_file")" ||
+    fail "planned Incus session has no private-DNS secret digest"
   expected_runtime_sha="$(jq -er '.runtime_vars_sha256' "$session_file")" ||
     fail "planned Incus session has no runtime-input digest"
 
@@ -225,6 +264,11 @@ load_session()
     fail "INCUS_ENDPOINT does not match the reviewed Incus plan"
   [ "$normalized_expected" = "$session_fingerprint" ] ||
     fail "the server fingerprint does not match the reviewed Incus plan"
+  [ "$private_dns_secrets_file" = "$session_private_dns_secrets_file" ] ||
+    fail "PRIVATE_DNS_SECRETS_FILE does not match the reviewed Incus plan"
+  actual_private_dns_secrets_sha="$(shasum -a 256 "$private_dns_secrets_file" | awk '{print $1}')"
+  [ "$actual_private_dns_secrets_sha" = "$expected_private_dns_secrets_sha" ] ||
+    fail "private DNS secrets changed after review; run make plan again"
   actual_runtime_sha="$(shasum -a 256 "$runtime_vars" | awk '{print $1}')"
   [ "$actual_runtime_sha" = "$expected_runtime_sha" ] ||
     fail "planned Incus runtime inputs changed after review; run make plan again"
@@ -249,12 +293,14 @@ plan()
     fail "run make setup-hcl before planning Incus resources"
   verify_client_trust
   verify_server_capabilities
+  validate_private_dns_secrets
   write_runtime_vars
 
   tofu -chdir="$terraform_root" plan \
     -input=false \
     -state="$state_file" \
     -var-file="$runtime_vars" \
+    -var-file="$private_dns_secrets_file" \
     -out="$create_plan"
   plan_json="$(tofu -chdir="$terraform_root" show -json "$create_plan")"
   destructive_count="$(printf '%s' "$plan_json" | jq '[
@@ -271,6 +317,7 @@ plan()
   ]')"
   plan_sha="$(shasum -a 256 "$create_plan" | awk '{print $1}')"
   runtime_sha="$(shasum -a 256 "$runtime_vars" | awk '{print $1}')"
+  private_dns_secrets_sha="$(shasum -a 256 "$private_dns_secrets_file" | awk '{print $1}')"
   jq -n \
     --arg profile "$profile" \
     --arg remote "$remote" \
@@ -279,6 +326,8 @@ plan()
     --arg ipv4_cidr "$platform_ipv4_cidr" \
     --arg dns_domain "$platform_dns_domain" \
     --arg image "$instance_image" \
+    --arg private_dns_secrets_file "$private_dns_secrets_file" \
+    --arg private_dns_secrets_sha "$private_dns_secrets_sha" \
     --arg server_version "$server_version" \
     --arg runtime_sha "$runtime_sha" \
     --arg plan_sha "$plan_sha" \
@@ -291,6 +340,8 @@ plan()
       platform_ipv4_cidr: $ipv4_cidr,
       platform_dns_domain: $dns_domain,
       instance_image: $image,
+      private_dns_secrets_file: $private_dns_secrets_file,
+      private_dns_secrets_sha256: $private_dns_secrets_sha,
       incus_server_version: $server_version,
       resource_changes: $actions,
       runtime_vars_sha256: $runtime_sha,
@@ -323,6 +374,45 @@ write_inventory()
       status: .substrate.value.instance_status
     }]
   }' >"$inventory_file"
+  printf '%s' "$outputs" | jq \
+    --arg remote "$remote" \
+    --arg profile "$profile" \
+    --arg client_cidr "$platform_ipv4_cidr" \
+    --arg project "$(printf '%s' "$outputs" | jq -r '.substrate.value.project')" '{
+      all: {
+        children: {
+          dns_secondaries: {
+            vars: {
+              ansible_connection: "community.general.incus",
+              ansible_incus_remote: $remote,
+              ansible_incus_project: $project,
+              ansible_user: "root",
+              rpr_deployment_profile: $profile,
+              bind_secondary_primary_address: .private_dns.value.primary_address,
+              bind_secondary_primary_port: .private_dns.value.primary_port,
+              bind_secondary_client_cidr: $client_cidr,
+              bind_secondary_forward_zone: .private_dns.value.forward_zone,
+              bind_secondary_reverse_zone: .private_dns.value.reverse_zone,
+              bind_secondary_expected_automatic_name: .substrate.value.instance_dns_name,
+              bind_secondary_expected_automatic_ipv4: .substrate.value.instance_ipv4,
+              bind_secondary_expected_manual_name: .private_dns.value.resolver_name,
+              bind_secondary_expected_manual_ipv4_addresses:
+                ([.private_dns.value.secondaries[].ipv4_address] | sort)
+            },
+            hosts: (.private_dns.value.secondaries | with_entries({
+              key: .key,
+              value: {
+                ansible_host: .key,
+                bind_secondary_listen_address: .value.ipv4_address,
+                bind_secondary_peer_name: .key,
+                bind_secondary_forward_tsig_secret: ("{{ private_dns_tsig_secrets[\"" + .key + "\"].forward }}"),
+                bind_secondary_reverse_tsig_secret: ("{{ private_dns_tsig_secrets[\"" + .key + "\"].reverse }}")
+              }
+            }))
+          }
+        }
+      }
+    }' >"$private_dns_inventory_file"
 }
 
 apply_plan()
@@ -333,6 +423,7 @@ apply_plan()
   for tool in jq shasum tofu; do
     require_tool "$tool"
   done
+  validate_private_dns_secrets
   load_session
   verify_create_plan
   verify_client_trust
@@ -347,6 +438,7 @@ apply_plan()
   write_inventory
   rm -f "$create_plan"
   echo "Generated ignored inventory: $inventory_file"
+  echo "Generated ignored private DNS inventory: $private_dns_inventory_file"
   echo "Run make validate, then make plan again to prove no drift."
 }
 
@@ -355,6 +447,7 @@ validate_substrate()
   for tool in incus jq tofu; do
     require_tool "$tool"
   done
+  validate_private_dns_secrets
   load_session
   verify_client_trust
   verify_server_capabilities
@@ -368,6 +461,9 @@ validate_substrate()
   instance_name="$(printf '%s' "$outputs" | jq -er '.substrate.value.instance')"
   instance_dns_name="$(printf '%s' "$outputs" | jq -er '.substrate.value.instance_dns_name')"
   bridge_ipv4_address="$(printf '%s' "$outputs" | jq -er '.substrate.value.bridge_ipv4_address')"
+  dns_profile_name="$(printf '%s' "$outputs" | jq -er '.private_dns.value.profile')"
+  forward_zone="$(printf '%s' "$outputs" | jq -er '.private_dns.value.forward_zone')"
+  reverse_zone="$(printf '%s' "$outputs" | jq -er '.private_dns.value.reverse_zone')"
   planned_image="$(printf '%s' "$outputs" | jq -er '.substrate.value.instance_image')"
   [ "$planned_image" = "$session_image" ] ||
     fail "the state image differs from the reviewed Incus session"
@@ -376,17 +472,21 @@ validate_substrate()
     "${remote}:/1.0/projects/${project_name}")"
   [ "$(printf '%s' "$project_json" | jq -r '.config.restricted')" = "true" ] ||
     fail "the Incus project is not restricted"
-  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.containers"]')" = "1" ] ||
-    fail "the Incus project does not enforce the one-container limit"
+  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.containers"]')" = "3" ] ||
+    fail "the Incus project does not enforce the three-container limit"
   [ "$(printf '%s' "$project_json" | jq -r '.config["limits.virtual-machines"]')" = "0" ] ||
     fail "the Incus project permits virtual machines"
   [ "$(printf '%s' "$project_json" | jq -r '.config["restricted.networks.access"]')" = "$network_name" ] ||
     fail "the Incus project permits an unexpected managed network"
-  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.disk"]')" = "4GiB" ] ||
-    fail "the Incus project aggregate disk limit differs from the Phase 1 boundary"
+  [ "$(printf '%s' "$project_json" | jq -r '.config["features.networks.zones"]')" = "true" ] ||
+    fail "the Incus project does not isolate its network zones"
+  [ "$(printf '%s' "$project_json" | jq -r '.config["restricted.networks.zones"]')" = "${session_dns_domain},${reverse_zone}" ] ||
+    fail "the Incus project permits unexpected network zones"
+  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.disk"]')" = "8GiB" ] ||
+    fail "the Incus project aggregate disk limit differs from the active boundary"
   [ "$(printf '%s' "$project_json" |
-    jq -r --arg key "limits.disk.pool.${pool_name}" '.config[$key]')" = "4GiB" ] ||
-    fail "the Incus project per-pool disk limit differs from the Phase 1 boundary"
+    jq -r --arg key "limits.disk.pool.${pool_name}" '.config[$key]')" = "8GiB" ] ||
+    fail "the Incus project per-pool disk limit differs from the active boundary"
 
   network_json="$(INCUS_CONF="$config_dir" incus query \
     "${remote}:/1.0/networks/${network_name}?project=default")"
@@ -400,6 +500,10 @@ validate_substrate()
     fail "the managed bridge does not have IPv4 NAT enabled"
   [ "$(printf '%s' "$network_json" | jq -r '.config["ipv6.address"]')" = "none" ] ||
     fail "the managed bridge does not enforce the Phase 1 IPv6 policy"
+  [ "$(printf '%s' "$network_json" | jq -r '.config["dns.zone.forward"]')" = "$forward_zone" ] ||
+    fail "the managed bridge is not attached to the private forward zone"
+  [ "$(printf '%s' "$network_json" | jq -r '.config["dns.zone.reverse.ipv4"]')" = "$reverse_zone" ] ||
+    fail "the managed bridge is not attached to the private reverse zone"
 
   pool_json="$(INCUS_CONF="$config_dir" incus query \
     "${remote}:/1.0/storage-pools/${pool_name}?project=default")"
@@ -414,6 +518,15 @@ validate_substrate()
     fail "the system-container profile root disk uses the wrong pool"
   [ "$(printf '%s' "$profile_json" | jq -r '.devices.eth0.network')" = "$network_name" ] ||
     fail "the system-container profile NIC uses the wrong network"
+
+  dns_profile_json="$(INCUS_CONF="$config_dir" incus query \
+    "${remote}:/1.0/profiles/${dns_profile_name}?project=${project_name}")"
+  [ "$(printf '%s' "$dns_profile_json" | jq -r '.config["security.privileged"]')" = "false" ] ||
+    fail "the DNS profile does not enforce unprivileged containers"
+  [ "$(printf '%s' "$dns_profile_json" | jq -r '.config["limits.memory"]')" = "256MiB" ] ||
+    fail "the DNS profile memory limit differs from the reviewed boundary"
+  [ "$(printf '%s' "$dns_profile_json" | jq -r '.devices.root.size')" = "2GiB" ] ||
+    fail "the DNS profile disk limit differs from the reviewed boundary"
 
   instance_json="$(INCUS_CONF="$config_dir" incus query \
     "${remote}:/1.0/instances/${instance_name}?project=${project_name}")"
@@ -436,6 +549,48 @@ validate_substrate()
   INCUS_CONF="$config_dir" incus exec --project "$project_name" \
     "${remote}:${instance_name}" -- ping -c 1 -W 5 1.1.1.1 >/dev/null
 
+  for dns_name in dns-01 dns-02; do
+    expected_dns_ipv4="$(printf '%s' "$outputs" |
+      jq -er --arg name "$dns_name" '.private_dns.value.secondaries[$name].ipv4_address')"
+    dns_state_json="$(INCUS_CONF="$config_dir" incus query \
+      "${remote}:/1.0/instances/${dns_name}/state?project=${project_name}")"
+    [ "$(printf '%s' "$dns_state_json" | jq -r '.status')" = "Running" ] ||
+      fail "$dns_name is not running"
+    actual_dns_ipv4="$(printf '%s' "$dns_state_json" | jq -er '
+      [.network.eth0.addresses[]
+        | select(.family == "inet" and .scope == "global")
+        | .address][0]
+    ')" || fail "$dns_name has no global IPv4 address on eth0"
+    [ "$actual_dns_ipv4" = "$expected_dns_ipv4" ] ||
+      fail "$dns_name does not use its reviewed static address"
+  done
+
+  forward_zone_json="$(INCUS_CONF="$config_dir" incus query \
+    "${remote}:/1.0/network-zones/${forward_zone}?project=${project_name}")"
+  reverse_zone_json="$(INCUS_CONF="$config_dir" incus query \
+    "${remote}:/1.0/network-zones/${reverse_zone}?project=${project_name}")"
+  for dns_name in dns-01 dns-02; do
+    expected_dns_ipv4="$(printf '%s' "$outputs" |
+      jq -er --arg name "$dns_name" '.private_dns.value.secondaries[$name].ipv4_address')"
+    [ "$(printf '%s' "$forward_zone_json" |
+      jq -r --arg key "peers.${dns_name}.address" '.config[$key]')" = "$expected_dns_ipv4" ] ||
+      fail "the forward zone has an unexpected $dns_name peer address"
+    [ "$(printf '%s' "$reverse_zone_json" |
+      jq -r --arg key "peers.${dns_name}.address" '.config[$key]')" = "$expected_dns_ipv4" ] ||
+      fail "the reverse zone has an unexpected $dns_name peer address"
+    printf '%s' "$forward_zone_json" |
+      jq -e --arg key "peers.${dns_name}.key" '.config[$key] | length >= 32' >/dev/null ||
+      fail "the forward zone has no protected $dns_name transfer key"
+    printf '%s' "$reverse_zone_json" |
+      jq -e --arg key "peers.${dns_name}.key" '.config[$key] | length >= 32' >/dev/null ||
+      fail "the reverse zone has no protected $dns_name transfer key"
+  done
+
+  resolver_record_json="$(INCUS_CONF="$config_dir" incus query \
+    "${remote}:/1.0/network-zones/${forward_zone}/records/resolver?project=${project_name}")"
+  [ "$(printf '%s' "$resolver_record_json" | jq '[.entries[] | select(.type == "A")] | length')" = "2" ] ||
+    fail "the provider-owned resolver record does not contain two A entries"
+
   umask 077
   jq -n \
     --arg profile "$profile" \
@@ -446,6 +601,9 @@ validate_substrate()
     --arg instance "$instance_name" \
     --arg ipv4 "$instance_ipv4" \
     --arg ipv4_cidr "$session_ipv4_cidr" \
+    --arg forward_zone "$forward_zone" \
+    --arg reverse_zone "$reverse_zone" \
+    --argjson secondaries "$(printf '%s' "$outputs" | jq '.private_dns.value.secondaries')" \
     --arg dns_name "$instance_dns_name" '{
       schema_version: 1,
       deployment_profile: $profile,
@@ -461,6 +619,10 @@ validate_substrate()
       internal_dns_resolved: true,
       external_dns_resolved: true,
       outbound_ipv4_reachable: true,
+      private_dns_infrastructure_ready: true,
+      private_dns_forward_zone: $forward_zone,
+      private_dns_reverse_zone: $reverse_zone,
+      private_dns_secondaries: $secondaries,
       ipv6_policy: "disabled"
     }' >"$evidence_file"
   write_inventory
@@ -477,6 +639,7 @@ destroy()
   for tool in jq tofu; do
     require_tool "$tool"
   done
+  validate_private_dns_secrets
   load_session
   verify_client_trust
   verify_server_capabilities
@@ -488,6 +651,7 @@ destroy()
     -input=false \
     -state="$state_file" \
     -var-file="$runtime_vars" \
+    -var-file="$private_dns_secrets_file" \
     -out="$destroy_plan"
   tofu -chdir="$terraform_root" show "$destroy_plan"
   tofu -chdir="$terraform_root" apply \
@@ -501,7 +665,8 @@ destroy()
     printf '%s\n' "$managed_state" >&2
     fail "provider-managed Incus resources remain in state"
   }
-  rm -f "$create_plan" "$destroy_plan" "$inventory_file" "$evidence_file"
+  rm -f "$create_plan" "$destroy_plan" "$inventory_file" \
+    "$private_dns_inventory_file" "$evidence_file"
   echo "Incus provider destroy finished; the Incus server remains installed and initialized."
 }
 

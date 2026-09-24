@@ -18,6 +18,12 @@ all:
         bind_secondary_client_cidr: 10.20.0.0/24
         bind_secondary_forward_zone: dev.apadanalab.de
         bind_secondary_reverse_zone: 0.20.10.in-addr.arpa
+        bind_secondary_expected_automatic_name: smoke-01.dev.apadanalab.de
+        bind_secondary_expected_automatic_ipv4: 10.20.0.120
+        bind_secondary_expected_manual_name: resolver.dev.apadanalab.de
+        bind_secondary_expected_manual_ipv4_addresses:
+          - 10.20.0.10
+          - 10.20.0.11
       hosts:
         dns-01:
           ansible_host: dns-01

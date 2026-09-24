@@ -7,5 +7,6 @@ bind_secondary_packages:
   - bind9-dnsutils
 bind_secondary_package_version_pattern: '^1:9\.20\.'
 bind_secondary_primary_port: 1053
+bind_secondary_refresh_seconds: 120
 bind_secondary_service_name: named
 bind_secondary_zone_directory: /var/cache/bind

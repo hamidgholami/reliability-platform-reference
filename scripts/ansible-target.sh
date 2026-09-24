@@ -18,7 +18,7 @@ fail() {
 }
 
 case "$action" in
-  preflight|baseline-check|baseline|validate-baseline|preflight-incus|bootstrap-incus|validate-incus) ;;
+  preflight|baseline-check|baseline|validate-baseline|preflight-incus|bootstrap-incus|validate-incus|private-dns-primary-check|private-dns-primary|validate-private-dns-primary) ;;
   *) fail "unsupported Ansible target action: $action" ;;
 esac
 
@@ -93,5 +93,20 @@ case "$action" in
   validate-incus)
     echo "Read-only Incus validation: profile=$profile target=$target_host inventory=$inventory"
     run_playbook ansible/playbooks/validate-incus.yml
+    ;;
+  private-dns-primary-check)
+    echo "Check-mode private DNS primary preview: profile=$profile target=$target_host inventory=$inventory"
+    run_playbook --check ansible/playbooks/configure-incus-dns-primary.yml
+    ;;
+  private-dns-primary)
+    expected="private-dns-primary-$profile-$target_host"
+    [ "${CONFIRM:-}" = "$expected" ] ||
+      fail "set CONFIRM=$expected to enable the private Incus DNS listener"
+    echo "Configuring private DNS primary: profile=$profile target=$target_host inventory=$inventory"
+    run_playbook ansible/playbooks/configure-incus-dns-primary.yml
+    ;;
+  validate-private-dns-primary)
+    echo "Read-only private DNS primary validation: profile=$profile target=$target_host inventory=$inventory"
+    run_playbook ansible/playbooks/validate-incus-dns-primary.yml
     ;;
 esac

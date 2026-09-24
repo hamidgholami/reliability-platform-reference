@@ -1,0 +1,7 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+incus_dns_primary_network: platform0
+incus_dns_primary_address: 10.20.0.1
+incus_dns_primary_port: 1053

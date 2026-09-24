@@ -16,6 +16,8 @@ argument_specs:
         required: true
       bind_secondary_primary_port:
         type: int
+      bind_secondary_refresh_seconds:
+        type: int
       bind_secondary_listen_address:
         type: str
         required: true
@@ -54,6 +56,19 @@ argument_specs:
         required: true
       bind_secondary_reverse_zone:
         type: str
+        required: true
+      bind_secondary_expected_automatic_name:
+        type: str
+        required: true
+      bind_secondary_expected_automatic_ipv4:
+        type: str
+        required: true
+      bind_secondary_expected_manual_name:
+        type: str
+        required: true
+      bind_secondary_expected_manual_ipv4_addresses:
+        type: list
+        elements: str
         required: true
       bind_secondary_service_name:
         type: str

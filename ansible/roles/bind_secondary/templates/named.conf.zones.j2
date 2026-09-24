@@ -10,6 +10,8 @@ zone "{{ bind_secondary_forward_zone }}" {
             key "{{ bind_secondary_forward_zone }}_{{ bind_secondary_peer_name }}.";
     };
     allow-transfer { none; };
+    min-refresh-time {{ bind_secondary_refresh_seconds }};
+    max-refresh-time {{ bind_secondary_refresh_seconds }};
     notify no;
     request-ixfr no;
 };
@@ -22,6 +24,8 @@ zone "{{ bind_secondary_reverse_zone }}" {
             key "{{ bind_secondary_reverse_zone }}_{{ bind_secondary_peer_name }}.";
     };
     allow-transfer { none; };
+    min-refresh-time {{ bind_secondary_refresh_seconds }};
+    max-refresh-time {{ bind_secondary_refresh_seconds }};
     notify no;
     request-ixfr no;
 };

@@ -2,6 +2,26 @@
 # SPDX-FileCopyrightText: 2026 Hamid Gholami
 # SPDX-License-Identifier: Apache-2.0
 
+- name: Make Python available in the DNS service containers
+  hosts: dns_secondaries
+  gather_facts: false
+  any_errors_fatal: true
+  become: false
+  tasks:
+    - name: Check Python and the APT binding
+      ansible.builtin.raw: /usr/bin/python3 -c 'import apt'
+      register: private_dns_python_probe
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Install Python when absent
+      ansible.builtin.raw: >-
+        apt-get update && DEBIAN_FRONTEND=noninteractive
+        apt-get install -y python3 python3-apt
+      when: private_dns_python_probe.rc != 0
+      changed_when: true
+
 - name: Configure private authoritative DNS secondaries
   hosts: dns_secondaries
   gather_facts: true

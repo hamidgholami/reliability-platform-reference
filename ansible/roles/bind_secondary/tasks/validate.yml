@@ -45,6 +45,42 @@
   register: bind_secondary_reverse_soa
   changed_when: false
 
+- name: Query an Incus-generated forward record
+  ansible.builtin.command:
+    argv:
+      - dig
+      - "@{{ bind_secondary_listen_address }}"
+      - "{{ bind_secondary_expected_automatic_name }}"
+      - A
+      - +norecurse
+      - +short
+  register: bind_secondary_automatic_forward_answer
+  changed_when: false
+
+- name: Query an Incus-generated reverse record
+  ansible.builtin.command:
+    argv:
+      - dig
+      - "@{{ bind_secondary_listen_address }}"
+      - -x
+      - "{{ bind_secondary_expected_automatic_ipv4 }}"
+      - +norecurse
+      - +short
+  register: bind_secondary_automatic_reverse_answer
+  changed_when: false
+
+- name: Query the provider-owned manual record
+  ansible.builtin.command:
+    argv:
+      - dig
+      - "@{{ bind_secondary_listen_address }}"
+      - "{{ bind_secondary_expected_manual_name }}"
+      - A
+      - +norecurse
+      - +short
+  register: bind_secondary_manual_answer
+  changed_when: false
+
 - name: Probe a recursive query outside the authoritative zones
   ansible.builtin.command:
     argv:
@@ -64,6 +100,7 @@
       - "@{{ bind_secondary_listen_address }}"
       - "{{ bind_secondary_forward_zone }}"
       - AXFR
+      - +comments
   register: bind_secondary_axfr_probe
   changed_when: false
   failed_when: false
@@ -76,10 +113,25 @@
       - bind_secondary_service.status.UnitFileState == 'enabled'
       - bind_secondary_forward_soa.stdout | trim | length > 0
       - bind_secondary_reverse_soa.stdout | trim | length > 0
-      - bind_secondary_recursion_probe.stdout is search('status: REFUSED')
-      - bind_secondary_recursion_probe.stdout is not search(' flags:.* ra[ ;]')
-      - bind_secondary_axfr_probe.rc != 0
-      - bind_secondary_axfr_probe.stdout is not search('\tSOA\t')
+      - >-
+        bind_secondary_automatic_forward_answer.stdout | trim ==
+        bind_secondary_expected_automatic_ipv4
+      - >-
+        bind_secondary_automatic_reverse_answer.stdout | trim ==
+        bind_secondary_expected_automatic_name ~ '.'
+      - >-
+        bind_secondary_manual_answer.stdout_lines | sort ==
+        bind_secondary_expected_manual_ipv4_addresses | sort
+      - >-
+        bind_secondary_recursion_probe.stdout is search('status: REFUSED')
+      - >-
+        bind_secondary_recursion_probe.stdout is not search(' flags:.* ra[ ;]')
+      - >-
+        (bind_secondary_axfr_probe.stdout ~ bind_secondary_axfr_probe.stderr)
+        is search('status: REFUSED')
+      - >-
+        (bind_secondary_axfr_probe.stdout ~ bind_secondary_axfr_probe.stderr)
+        is not search('\tSOA\t')
     fail_msg: >-
       BIND must serve both transferred zones, refuse recursion and unauthorized
       AXFR, and remain active on the reviewed Debian package line.

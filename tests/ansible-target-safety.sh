@@ -52,4 +52,13 @@ expect_failure \
   CONFIRM= \
   ./scripts/ansible-target.sh bootstrap-incus
 
+expect_failure \
+  "set CONFIRM=private-dns-primary-workstation-validation-incus-reference-01" \
+  env PROFILE=workstation-validation \
+  INVENTORY=ansible/inventories/single-node-reference/hosts.example.yml \
+  TARGET_HOST=incus-reference-01 \
+  OPERATOR_PUBLIC_KEY_FILE=/dev/null \
+  CONFIRM= \
+  ./scripts/ansible-target.sh private-dns-primary
+
 echo "Ansible target safety checks passed."

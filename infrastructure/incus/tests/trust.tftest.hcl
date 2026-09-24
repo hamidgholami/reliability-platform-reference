@@ -31,6 +31,16 @@ variables {
   deployment_profile = "workstation-validation"
   incus_config_dir   = "/tmp/test-incus-client"
   incus_remote       = "rpr-target"
+  private_dns_tsig_secrets = {
+    dns-01 = {
+      forward = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      reverse = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+    dns-02 = {
+      forward = "cccccccccccccccccccccccccccccccc"
+      reverse = "dddddddddddddddddddddddddddddddd"
+    }
+  }
 }
 
 run "trusted_standalone_boundary" {
@@ -53,10 +63,10 @@ run "trusted_standalone_boundary" {
   assert {
     condition = (
       incus_project.development.config["restricted"] == "true" &&
-      incus_project.development.config["limits.containers"] == "1" &&
+      incus_project.development.config["limits.containers"] == "3" &&
       incus_project.development.config["limits.virtual-machines"] == "0"
     )
-    error_message = "The development project must be restricted to one container and no VMs."
+    error_message = "The development project must be restricted to three containers and no VMs."
   }
 
   assert {
@@ -66,6 +76,17 @@ run "trusted_standalone_boundary" {
       incus_network.platform.config["ipv6.address"] == "none"
     )
     error_message = "The managed bridge must use explicit IPv4 NAT and disabled IPv6."
+  }
+
+  assert {
+    condition = (
+      incus_network.platform.config["dns.zone.forward"] == incus_network_zone.forward.name &&
+      incus_network.platform.config["dns.zone.reverse.ipv4"] == incus_network_zone.reverse.name &&
+      length(incus_instance.dns) == 2 &&
+      incus_instance.dns["dns-01"].type == "container" &&
+      incus_instance.dns["dns-02"].type == "container"
+    )
+    error_message = "Private DNS must use two bounded containers attached to the Incus-owned zones."
   }
 
   assert {

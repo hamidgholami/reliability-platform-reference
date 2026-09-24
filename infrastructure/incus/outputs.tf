@@ -27,3 +27,22 @@ output "substrate" {
     ipv6_policy         = "disabled"
   }
 }
+
+output "private_dns" {
+  description = "Non-secret private DNS topology and service addresses."
+  value = {
+    primary_address = cidrhost(var.platform_ipv4_cidr, 1)
+    primary_port    = 1053
+    forward_zone    = incus_network_zone.forward.name
+    reverse_zone    = incus_network_zone.reverse.name
+    resolver_name   = "resolver.${var.platform_dns_domain}"
+    profile         = incus_profile.dns.name
+    secondaries = {
+      for name, instance in incus_instance.dns : name => {
+        ipv4_address = instance.ipv4_address
+        dns_name     = "${name}.${var.platform_dns_domain}"
+        status       = instance.status
+      }
+    }
+  }
+}

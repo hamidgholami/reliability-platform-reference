@@ -1,0 +1,17 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+argument_specs:
+  main:
+    short_description: Enable the private Incus network-zone transfer listener
+    options: &incus_dns_primary_options
+      incus_dns_primary_network:
+        type: str
+      incus_dns_primary_address:
+        type: str
+      incus_dns_primary_port:
+        type: int
+  validate:
+    short_description: Validate the private Incus zone-transfer listener
+    options: *incus_dns_primary_options

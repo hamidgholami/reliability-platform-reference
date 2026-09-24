@@ -1,0 +1,28 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Read the effective Incus DNS listener
+  ansible.builtin.command:
+    argv:
+      - incus
+      - config
+      - get
+      - core.dns_address
+  register: incus_dns_primary_effective_address
+  changed_when: false
+
+- name: Wait for the private TCP zone-transfer listener
+  ansible.builtin.wait_for:
+    host: "{{ incus_dns_primary_address }}"
+    port: "{{ incus_dns_primary_port }}"
+    connect_timeout: 2
+    timeout: 30
+
+- name: Assert the private Incus DNS primary boundary
+  ansible.builtin.assert:
+    that:
+      - >-
+        incus_dns_primary_effective_address.stdout | trim ==
+        incus_dns_primary_address ~ ':' ~ incus_dns_primary_port
+    fail_msg: The Incus zone-transfer listener is not bound as reviewed.

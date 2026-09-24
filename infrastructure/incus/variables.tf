@@ -77,3 +77,30 @@ variable "instance_image" {
     error_message = "instance_image must be an explicit remote image alias."
   }
 }
+
+variable "private_dns_tsig_secrets" {
+  description = "Per-secondary, per-zone synthetic TSIG values supplied from protected runtime input."
+  type = map(object({
+    forward = string
+    reverse = string
+  }))
+  sensitive = true
+
+  validation {
+    condition = (
+      length(keys(var.private_dns_tsig_secrets)) == 2 &&
+      alltrue([
+        for name in ["dns-01", "dns-02"] :
+        contains(keys(var.private_dns_tsig_secrets), name)
+      ]) &&
+      alltrue([
+        for secrets in values(var.private_dns_tsig_secrets) :
+        length(secrets.forward) >= 32 &&
+        length(secrets.reverse) >= 32 &&
+        length(regexall("\\s", secrets.forward)) == 0 &&
+        length(regexall("\\s", secrets.reverse)) == 0
+      ])
+    )
+    error_message = "Provide whitespace-free forward and reverse TSIG values for dns-01 and dns-02."
+  }
+}

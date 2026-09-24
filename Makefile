@@ -12,8 +12,11 @@ ANSIBLE_ENV = ANSIBLE_CONFIG=$(CURDIR)/ansible.cfg ANSIBLE_HOME=$(CURDIR)/.cache
 	lima-validate lima-up lima-start lima-stop lima-inventory lima-delete \
 	preflight baseline-check baseline \
 	validate-baseline preflight-incus bootstrap-incus validate-incus \
+	private-dns-primary-check private-dns-primary validate-private-dns-primary \
 	incus-client-check test-ansible-safety test-lima-safety \
-	test-incus-substrate-safety \
+	test-incus-substrate-safety test-private-dns-safety \
+	private-dns-secrets configure-private-dns validate-private-dns \
+	accept-private-dns \
 	bootstrap-incus plan apply validate destroy aws-plan aws-apply \
 	aws-destroy aws-orphan-check test-aws-safety
 
@@ -54,6 +57,8 @@ syntax-ansible: ## Syntax-check active Ansible inventories and playbooks offline
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/preflight-incus.yml >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/bootstrap-incus.yml >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/validate-incus.yml >/dev/null
+	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/configure-incus-dns-primary.yml >/dev/null
+	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/validate-incus-dns-primary.yml >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/private-dns/hosts.example.yml --syntax-check ansible/playbooks/configure-private-dns.yml >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/private-dns/hosts.example.yml --syntax-check ansible/playbooks/validate-private-dns.yml >/dev/null
 
@@ -76,13 +81,16 @@ test-lima-safety: ## Test Lima lifecycle guards and generated inventory offline.
 test-incus-substrate-safety: ## Test Incus provider trust guards offline.
 	@./tests/incus-substrate-safety.sh
 
+test-private-dns-safety: ## Test private DNS confirmation and secret-file guards offline.
+	@./tests/private-dns-safety.sh
+
 test-aws-safety: ## Test AWS profile, exposure, TTL, and confirmation guards offline.
 	@./tests/aws-reference-safety.sh
 
 scan-secrets: ## Scan Git content and the working tree with Gitleaks.
 	@./scripts/scan-secrets.sh
 
-check: lint syntax-ansible validate-hcl test-hcl test-ansible-safety test-lima-safety test-incus-substrate-safety test-aws-safety scan-secrets ## Run every non-mutating repository check.
+check: lint syntax-ansible validate-hcl test-hcl test-ansible-safety test-lima-safety test-incus-substrate-safety test-private-dns-safety test-aws-safety scan-secrets ## Run every non-mutating repository check.
 
 test-local: check ## Run the complete workstation-only test suite.
 
@@ -125,8 +133,29 @@ bootstrap-incus: ## Install and initialize standalone Incus (requires exact CONF
 validate-incus: ## Validate Incus API health and write ignored local evidence.
 	@./scripts/ansible-target.sh validate-incus
 
+private-dns-primary-check: ## Preview the private Incus DNS listener configuration.
+	@./scripts/ansible-target.sh private-dns-primary-check
+
+private-dns-primary: ## Enable the private Incus DNS listener (requires exact CONFIRM).
+	@./scripts/ansible-target.sh private-dns-primary
+
+validate-private-dns-primary: ## Validate the private Incus DNS listener.
+	@./scripts/ansible-target.sh validate-private-dns-primary
+
 incus-client-check: ## Verify the isolated OpenTofu client trust boundary.
 	@./scripts/incus-substrate.sh preflight
+
+private-dns-secrets: ## Generate protected synthetic TSIG inputs (requires exact CONFIRM).
+	@./scripts/private-dns-secrets.sh
+
+configure-private-dns: ## Configure both BIND secondaries (requires exact CONFIRM).
+	@./scripts/private-dns.sh configure
+
+validate-private-dns: ## Validate both BIND secondaries.
+	@./scripts/private-dns.sh validate
+
+accept-private-dns: ## Exercise DNS propagation and one-secondary continuity (requires exact CONFIRM).
+	@./scripts/private-dns-acceptance.sh
 
 plan: ## Verify Incus trust and save a non-destructive substrate plan.
 	@./scripts/incus-substrate.sh plan

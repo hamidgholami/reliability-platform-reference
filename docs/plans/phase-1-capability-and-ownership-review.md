@@ -22,8 +22,9 @@ are retained for later milestones and are not current Phase 1 requirements.
 - Do not add a separate DHCP server, IPAM product, image registry, metrics
   agent, OVN, Ceph, or cluster management product in Phase 1.
 - BIND remains justified for the later private-DNS design because the Incus
-  network-zone server supports AXFR and NOTIFY but does not answer ordinary
-  authoritative queries. It is deferred from Phase 1.
+  network-zone server supports AXFR but does not answer ordinary authoritative
+  queries. The selected 6.0 LTS line uses periodic refresh; NOTIFY arrived in a
+  later feature release. BIND is deferred from Phase 1.
 - Ansible owns Debian preparation, upstream hardening integration, Incus
   installation and bootstrap, server-global bootstrap configuration, and guest
   service configuration.

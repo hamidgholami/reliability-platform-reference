@@ -10,12 +10,24 @@
       - ansible_facts['service_mgr'] == 'systemd'
       - bind_secondary_packages == ['bind9', 'bind9-dnsutils']
       - bind_secondary_primary_port == 1053
+      - bind_secondary_refresh_seconds == 120
       - bind_secondary_primary_address is match('^[0-9.]+$')
       - bind_secondary_listen_address is match('^[0-9.]+$')
       - bind_secondary_listen_address not in ['0.0.0.0', '127.0.0.1']
       - bind_secondary_client_cidr is match('^[0-9.]+/[0-9]+$')
       - bind_secondary_forward_zone is match('^[a-z0-9]([a-z0-9.-]*[a-z0-9])$')
       - bind_secondary_reverse_zone is match('^[0-9.]+\.in-addr\.arpa$')
+      - >-
+        bind_secondary_expected_automatic_name is
+        match('^[a-z0-9]([a-z0-9.-]*[a-z0-9])$')
+      - bind_secondary_expected_automatic_ipv4 is match('^[0-9.]+$')
+      - >-
+        bind_secondary_expected_manual_name is
+        match('^[a-z0-9]([a-z0-9.-]*[a-z0-9])$')
+      - bind_secondary_expected_manual_ipv4_addresses | length == 2
+      - >-
+        bind_secondary_expected_manual_ipv4_addresses |
+        reject('match', '^[0-9.]+$') | list | length == 0
       - bind_secondary_peer_name == inventory_hostname
       - bind_secondary_peer_name is match('^dns-0[12]$')
       - bind_secondary_zone_directory == '/var/cache/bind'

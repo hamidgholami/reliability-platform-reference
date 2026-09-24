@@ -1,0 +1,67 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Confirm the private Incus DNS primary boundary
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Debian'
+      - ansible_facts['distribution_major_version'] == '13'
+      - incus_dns_primary_network == 'platform0'
+      - incus_dns_primary_address == '10.20.0.1'
+      - incus_dns_primary_port == 1053
+    fail_msg: >-
+      P2-01 supports only the reviewed private network-zone listener on the
+      foundational platform0 bridge.
+
+- name: Read the managed bridge IPv4 address
+  ansible.builtin.command:
+    argv:
+      - incus
+      - network
+      - get
+      - "{{ incus_dns_primary_network }}"
+      - ipv4.address
+      - --project
+      - default
+  register: incus_dns_primary_bridge_address
+  changed_when: false
+  check_mode: false
+
+- name: Require the reviewed bridge address
+  ansible.builtin.assert:
+    that:
+      - >-
+        incus_dns_primary_bridge_address.stdout | trim ==
+        incus_dns_primary_address ~ '/24'
+    fail_msg: The Incus DNS listener address must belong to platform0.
+
+- name: Read the current Incus DNS listener
+  ansible.builtin.command:
+    argv:
+      - incus
+      - config
+      - get
+      - core.dns_address
+  register: incus_dns_primary_current_address
+  changed_when: false
+  check_mode: false
+
+- name: Enable the private Incus zone-transfer listener
+  ansible.builtin.command:
+    argv:
+      - incus
+      - config
+      - set
+      - core.dns_address
+      - "{{ incus_dns_primary_address }}:{{ incus_dns_primary_port }}"
+  when:
+    - not ansible_check_mode
+    - >-
+      incus_dns_primary_current_address.stdout | trim !=
+      incus_dns_primary_address ~ ':' ~ incus_dns_primary_port
+  changed_when: true
+
+- name: Run Incus DNS primary validation
+  ansible.builtin.import_tasks: validate.yml
+  when: not ansible_check_mode

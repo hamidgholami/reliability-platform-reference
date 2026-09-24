@@ -30,8 +30,9 @@ exposes zones only to approved transfer peers.
 
 Run two BIND 9 services on foundational Incus instances as authoritative
 secondaries. They receive zones from Incus through authenticated AXFR and
-NOTIFY, answer ordinary client queries, and do not provide general recursive
-resolution. Keep CoreDNS inside Kubernetes for `cluster.local` discovery and
+bounded SOA refresh, answer ordinary client queries, and do not provide general
+recursive resolution. Use NOTIFY when it is present in the selected supported
+Incus line. Keep CoreDNS inside Kubernetes for `cluster.local` discovery and
 forward only the private platform namespace to the BIND pair.
 
 The official Incus provider manages zone declarations, manual records, network
@@ -52,7 +53,7 @@ Incus remains authoritative for its own infrastructure state, which avoids
 declaring every instance address twice. BIND adds the query-serving and
 secondary-authority layer that Incus network zones deliberately do not provide.
 The design demonstrates automatic IPAM-derived records, hidden-primary
-topology, authenticated transfer, notifications, split DNS, and secondary
+topology, authenticated transfer and refresh, split DNS, and secondary
 recovery. CoreDNS remains the natural Kubernetes component because its
 Kubernetes plugin discovers Services and Pods directly.
 
@@ -95,7 +96,7 @@ private name resolution available while the workload cluster is unavailable.
 
 Verify that creating, renaming, and deleting an Incus instance updates forward
 and reverse answers through both BIND secondaries. Test custom records,
-authenticated transfer and notification, either BIND instance being
+authenticated transfer and bounded refresh, either BIND instance being
 unavailable, a temporary hidden-primary outage, and resolution through Incus
 DNS, trusted workstation split DNS, and Kubernetes CoreDNS. Reverse the choice
 with a superseding ADR if its operational cost is not justified by the

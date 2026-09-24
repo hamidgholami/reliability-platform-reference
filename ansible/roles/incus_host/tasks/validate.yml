@@ -195,8 +195,12 @@
       - incus_host_default_profile.devices | length == 0
       - incus_host_instances | length == 0
       - >-
-        incus_host_exposed_tcp_ports ==
-        (incus_host_expected_exposed_tcp_ports | map('int') | sort | list)
+        (incus_host_exposed_tcp_ports |
+        difference(incus_host_expected_exposed_tcp_ports | flatten | map('int') | list) |
+        length) == 0
+      - >-
+        (incus_host_required_exposed_tcp_ports | map('int') |
+        difference(incus_host_exposed_tcp_ports) | length) == 0
 
 - name: Check Incus API reachability from the controller
   ansible.builtin.wait_for:

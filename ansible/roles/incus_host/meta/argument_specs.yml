@@ -34,6 +34,9 @@ argument_specs:
       incus_host_expected_exposed_tcp_ports:
         type: list
         elements: int
+      incus_host_required_exposed_tcp_ports:
+        type: list
+        elements: int
       incus_host_preseed_schema_version:
         type: int
       incus_host_minimum_root_available_bytes:

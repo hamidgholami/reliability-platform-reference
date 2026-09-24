@@ -1,0 +1,14 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Validate the private Incus DNS primary listener
+  hosts: incus_hosts
+  gather_facts: false
+  any_errors_fatal: true
+  become: true
+  tasks:
+    - name: Run Incus DNS primary validation
+      ansible.builtin.import_role:
+        name: incus_dns_primary
+        tasks_from: validate
