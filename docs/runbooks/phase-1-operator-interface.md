@@ -54,6 +54,8 @@ Keep the VM between ordinary development sessions and stop it when idle. Delete
 and recreate it when a work item requires clean local acceptance, when its
 foundation is suspect, or when the runbook explicitly tests teardown. Routine
 role changes should reset only their service container or configuration layer.
+Creation and restart fail after ten minutes if the guest never reaches Lima's
+ready state, rather than waiting indefinitely for an unavailable SSH service.
 
 `make lima-inventory` first proves non-interactive SSH through Lima's generated
 SSH configuration. It then derives the current loopback address, forwarded SSH

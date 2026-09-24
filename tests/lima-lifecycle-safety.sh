@@ -102,7 +102,7 @@ FAKE_LIMA_COMMAND_LOG="$command_log" \
   ./scripts/lima-lifecycle.sh up >"$output_file"
 
 grep -F \
-  'start --tty=false --name rpr-p1 lima/single-node.yaml' \
+  'start --timeout=10m --tty=false --name rpr-p1 lima/single-node.yaml' \
   "$command_log" >/dev/null
 
 echo "Lima lifecycle safety checks passed."

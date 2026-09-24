@@ -8,6 +8,7 @@ instance_name="rpr-p1"
 inventory_host="incus-lima-01"
 template="lima/single-node.yaml"
 required_version="2.2.0"
+start_timeout="10m"
 cache_dir=${RPR_LIMA_CACHE_DIR:-"$PWD/.cache/lima"}
 inventory_file="$cache_dir/hosts.json"
 action="${1:-}"
@@ -126,7 +127,8 @@ case "$action" in
     if instance_exists; then
       fail "Lima instance ${instance_name} already exists"
     fi
-    limactl start --tty=false --name "$instance_name" "$template"
+    limactl start --timeout="$start_timeout" --tty=false \
+      --name "$instance_name" "$template"
     ;;
   start)
     require_profile
@@ -136,7 +138,7 @@ case "$action" in
     instance_exists || fail "Lima instance ${instance_name} does not exist"
     [ "$(limactl list --format '{{.Status}}' "$instance_name")" != "Running" ] ||
       fail "Lima instance ${instance_name} is already running"
-    limactl start --tty=false "$instance_name"
+    limactl start --timeout="$start_timeout" --tty=false "$instance_name"
     ;;
   stop)
     require_profile
