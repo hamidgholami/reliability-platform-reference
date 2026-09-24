@@ -1,6 +1,6 @@
 # Phase 2 Plan: Trust, Secrets, and Identity
 
-- Status: active; P2-00 capability and ownership review in progress
+- Status: active; P2-01 private DNS implementation started
 - Started: 2026-09-23
 - Owner: Hamid Gholami
 - Default deployment profile: `single-node-reference`
@@ -31,18 +31,25 @@ and validate one dependency-ordered slice before creating the next service.
 Planning the complete phase does not authorize pre-creating every future
 instance, role, directory, or Make target.
 
-The promotion path remains:
+The promotion path is local-first:
 
 | Level | Purpose | Required environment |
 | --- | --- | --- |
 | Workstation checks | Formatting, linting, syntax, policy, and offline safety contracts | macOS and CI |
-| Disposable integration | Optional service-role feedback where one Lima VM is sufficient | `workstation-validation` |
-| Deployment acceptance | DNS, PKI, secret, identity, credential, and restore behavior | `single-node-reference` |
+| Daily integration | Repeated service-role and provider feedback; keep one Lima VM between sessions and stop it when idle | `workstation-validation` |
+| Clean local acceptance | Recreate the Lima VM and active slice from empty state before closing each work item | `workstation-validation` |
+| AWS promotion | Prove the completed slice from empty cloud state at milestone boundaries | `single-node-reference` |
 
 Use real services for boundaries that mocks cannot establish, but do not build a
 custom test platform around behavior already owned by BIND, Keycloak,
 PostgreSQL, or the selected secrets service. Tests protect this repository's
 configuration, ownership, access, lifecycle, and recovery contracts.
+
+Daily development does not recreate the AWS host or the Lima VM. Use the same
+OpenTofu and Ansible artifacts in both profiles, reset only the smallest layer
+needed for the current test, and reserve a full Lima deletion or AWS deployment
+for clean acceptance. Do not build custom images, caches, or a standing cloud
+environment merely to shorten bootstrap time.
 
 ## Accepted starting gates
 
@@ -89,31 +96,23 @@ and proves the required authentication claims. The application that consumes an
 approval belongs with the Phase 4 delivery path and is not pulled into this
 phase.
 
-## P2-00 unresolved decisions
+## P2-00 decision gates
 
-Resolve these with official documentation and the smallest useful runtime
-spikes before adding foundational dependencies:
+Resolve each choice before the work item that consumes it. A later service must
+not block an earlier dependency slice when the two choices are independent.
 
-1. Select exact supported versions and installation sources for BIND,
-   PostgreSQL, Keycloak, and the chosen secrets service. Prefer Debian packages
-   where they satisfy the required contract.
-2. Confirm whether `apadanalab.de` uses Netcup Legacy DNS or CloudDNS and select
-   a maintained DNS-01 integration for that API. Do not write a custom ACME
-   client merely to support the provider.
-3. Measure each slice on the current reference host. Retain `t4g.small` while it
-   passes; increase the ephemeral instance size only after a recorded capacity
-   failure or a documented minimum requirement.
-4. Define the bootstrap-secret handoff for TSIG, initial TLS, secrets-service
-   initialization, and later rotation. The answer must not require a healthy
-   secrets service to create that same service.
-5. Define automation ownership for secrets-service configuration. Avoid adding
-   another provider when idempotent Ansible or a small, auditable API boundary
-   is sufficient, especially where provider state would duplicate secret data.
-6. Define how an operator reaches private DNS and browser endpoints in the
-   ephemeral AWS profile without opening them publicly. An SSH-based access path
-   is preferred unless a broader route is justified.
-7. Define Keycloak installation, realm export, database ownership, and the
-   hardware-assisted WebAuthn acceptance ceremony before storing identity data.
+| Decision | Gate | Status |
+| --- | --- | --- |
+| BIND version and source | P2-01 | Use the Debian 13 stable/security `bind9` and `bind9-dnsutils` 9.20 package line; accept patched Debian revisions and record the installed version in acceptance evidence. |
+| PostgreSQL version and source | P2-03 | Open; prefer the Debian 13 package when it satisfies the dynamic-credential contract. |
+| Keycloak version, installation, realm export, database ownership, and WebAuthn ceremony | P2-04 | Open; resolve before storing identity data. |
+| OpenBao installation and bootstrap | P2-02 | Open beyond the accepted OpenBao 2.6.2 product choice. |
+| Netcup API generation and maintained DNS-01 client | P2-05 | Open; it is not needed for private DNS and no custom ACME client is authorized. |
+| Capacity | Every slice | Develop in the retained local Lima VM. Keep AWS `t4g.small` until measurements show a failure or an upstream minimum requires a change. |
+| DNS bootstrap secrets | P2-01 | Generate one random TSIG value per zone and secondary in a mode-`0600` ignored runtime file. Pass that file independently to OpenTofu and Ansible; never recover a key from state or output. |
+| Remaining bootstrap secrets and rotation | P2-02 onward | Open; bootstrap must not require a healthy secrets service to create that same service. |
+| Secrets-service configuration owner | P2-02 | Open; prefer narrowly scoped idempotent Ansible or HTTP API tasks over another provider. |
+| Operator access | P2-01 | Validate DNS from the platform network through Incus execution. Do not expose BIND publicly. Revisit a private VPN only when browser-based P2-04 access demonstrates the need. |
 
 Any choice that changes a platform or trust boundary requires an ADR. Version
 and implementation details that stay within an accepted boundary belong in this
@@ -125,7 +124,7 @@ plan and the dependency inventory, not in an ADR.
 
 - [x] Select OpenBao 2.6.2 as the single Phase 2 secrets runtime in ADR-0007;
   retain Vault as a documented migration, not a parallel compatibility matrix.
-- [ ] Resolve the seven remaining decisions above with evidence from maintained
+- [ ] Resolve each decision gate before its consuming work item, using maintained
   upstream documentation and only the runtime spikes needed to distinguish
   alternatives.
 - [ ] Map every new secret-bearing value to its producer, consumers, storage,
@@ -142,6 +141,9 @@ created merely to compare products.
 
 ### P2-01 — Private authoritative DNS
 
+- [x] Select the Debian 13 BIND 9.20 package line and define authoritative-only
+  guest configuration, protected TSIG input, and local-first promotion
+  boundaries.
 - [ ] Enable the Incus network-zone server on a private, non-standard port
   reachable only from the platform network.
 - [ ] Add provider-owned forward and IPv4 reverse zones and attach them to the

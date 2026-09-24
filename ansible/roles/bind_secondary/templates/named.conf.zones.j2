@@ -1,0 +1,27 @@
+// SPDX-FileCopyrightText: 2026 Hamid Gholami
+// SPDX-License-Identifier: Apache-2.0
+// Managed by Ansible. Local edits are overwritten.
+
+zone "{{ bind_secondary_forward_zone }}" {
+    type secondary;
+    file "db.{{ bind_secondary_forward_zone }}";
+    primaries {
+        {{ bind_secondary_primary_address }} port {{ bind_secondary_primary_port }}
+            key "{{ bind_secondary_forward_zone }}_{{ bind_secondary_peer_name }}.";
+    };
+    allow-transfer { none; };
+    notify no;
+    request-ixfr no;
+};
+
+zone "{{ bind_secondary_reverse_zone }}" {
+    type secondary;
+    file "db.{{ bind_secondary_reverse_zone }}";
+    primaries {
+        {{ bind_secondary_primary_address }} port {{ bind_secondary_primary_port }}
+            key "{{ bind_secondary_reverse_zone }}_{{ bind_secondary_peer_name }}.";
+    };
+    allow-transfer { none; };
+    notify no;
+    request-ixfr no;
+};

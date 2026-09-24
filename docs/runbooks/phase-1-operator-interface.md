@@ -30,7 +30,7 @@ binaries explicitly, which avoids accidentally using a global Ansible install.
 The Phase 1 path uses standard Ansible SSH. Mitogen is deliberately deferred
 until a later multi-node benchmark proves that connection overhead is material.
 
-## Optional disposable Lima VM
+## Optional reusable Lima VM
 
 Lima is a feedback accelerator, not a deployment prerequisite. The wrapper
 requires the exact reviewed profile and confirmation before creation or
@@ -49,6 +49,11 @@ containerd. Creating it downloads a pinned Debian 13 arm64 cloud image and
 consumes local resources. A static unprivileged forward exposes the future
 Incus API only on `127.0.0.1:18443`; it does not make the VM or its containers
 routable from the LAN.
+
+Keep the VM between ordinary development sessions and stop it when idle. Delete
+and recreate it when a work item requires clean local acceptance, when its
+foundation is suspect, or when the runbook explicitly tests teardown. Routine
+role changes should reset only their service container or configuration layer.
 
 `make lima-inventory` first proves non-interactive SSH through Lima's generated
 SSH configuration. It then derives the current loopback address, forwarded SSH

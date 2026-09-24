@@ -1,0 +1,83 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Confirm the private DNS secondary boundary
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Debian'
+      - ansible_facts['distribution_major_version'] == '13'
+      - ansible_facts['service_mgr'] == 'systemd'
+      - bind_secondary_packages == ['bind9', 'bind9-dnsutils']
+      - bind_secondary_primary_port == 1053
+      - bind_secondary_primary_address is match('^[0-9.]+$')
+      - bind_secondary_listen_address is match('^[0-9.]+$')
+      - bind_secondary_listen_address not in ['0.0.0.0', '127.0.0.1']
+      - bind_secondary_client_cidr is match('^[0-9.]+/[0-9]+$')
+      - bind_secondary_forward_zone is match('^[a-z0-9]([a-z0-9.-]*[a-z0-9])$')
+      - bind_secondary_reverse_zone is match('^[0-9.]+\.in-addr\.arpa$')
+      - bind_secondary_peer_name == inventory_hostname
+      - bind_secondary_peer_name is match('^dns-0[12]$')
+      - bind_secondary_zone_directory == '/var/cache/bind'
+    fail_msg: >-
+      P2-01 supports only the reviewed Debian 13 authoritative-secondary
+      boundary on the private platform network.
+
+- name: Confirm protected TSIG inputs are present
+  ansible.builtin.assert:
+    that:
+      - bind_secondary_forward_tsig_secret | length >= 32
+      - bind_secondary_reverse_tsig_secret | length >= 32
+      - bind_secondary_forward_tsig_secret is not search('\s')
+      - bind_secondary_reverse_tsig_secret is not search('\s')
+    fail_msg: The two per-zone TSIG values must come from protected runtime input.
+  no_log: true
+
+- name: Read candidate BIND package policy
+  ansible.builtin.command:
+    argv:
+      - apt-cache
+      - policy
+      - bind9
+  register: bind_secondary_package_policy
+  changed_when: false
+
+- name: Derive Debian cloud-image mirror files
+  ansible.builtin.set_fact:
+    bind_secondary_package_mirror_files: >-
+      {{ bind_secondary_package_policy.stdout |
+         regex_findall('mirror\+file:(\S+)') | unique | list }}
+
+- name: Read Debian cloud-image mirror files
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop: "{{ bind_secondary_package_mirror_files }}"
+  register: bind_secondary_package_mirrors
+
+- name: Require the Debian BIND stable package line and source shape
+  ansible.builtin.assert:
+    that:
+      - >-
+        (bind_secondary_package_policy.stdout |
+        regex_findall('Candidate:\s+(\S+)') | first) is
+        match(bind_secondary_package_version_pattern)
+      - >-
+        bind_secondary_package_policy.stdout is
+        search('https?://[^ ]*debian\.org/') or
+        (bind_secondary_package_mirror_files | length) > 0
+    fail_msg: >-
+      The candidate bind9 package must be from a debian.org repository and
+      match the reviewed BIND 9.20 series.
+
+- name: Require official Debian cloud-image mirrors
+  ansible.builtin.assert:
+    that:
+      - >-
+        (item.content | b64decode | trim) is
+        match('^https?://([A-Za-z0-9-]+\.)*debian\.org/\S+$')
+    fail_msg: >-
+      Every mirror+file package source must resolve to an official debian.org
+      repository.
+  loop: "{{ bind_secondary_package_mirrors.results }}"
+  loop_control:
+    label: "{{ item.item }}"

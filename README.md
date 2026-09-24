@@ -9,14 +9,14 @@ Incus foundation** are complete. Phase 1 delivers one Incus foundation on a
 Debian 13 VM, initially supplied by a
 small isolated AWS OpenTofu root. P1-01 provides pinned repository interfaces
 and fast quality gates; the Mac workstation is used for checks and optional
-disposable integration rather than persistent platform hosting. P1-02 through
+reusable integration rather than persistent platform hosting. P1-02 through
 P1-04 passed real-host acceptance on the AWS reference VM, and P1-05 completed
 the provider-managed substrate lifecycle on the optional Lima environment.
 P1-06 passed the authoritative end-to-end reference-VM lifecycle, including
 clean destroy and recreation. See the
 [redacted acceptance record](docs/evidence/phase-1-acceptance.md). **Phase 2:
-trust, secrets, and identity** is active at its capability and ownership review;
-no Phase 2 service has been created yet.
+trust, secrets, and identity** is active at P2-01. Private-DNS guest automation
+has started; no Phase 2 service has passed deployment acceptance yet.
 
 ## Intended outcomes
 
@@ -40,7 +40,7 @@ See the [roadmap](docs/roadmap.md) for the staged implementation.
 
 ## Start here
 
-The active Phase 1 checks require Git, GNU Make, Node.js/npm, Gitleaks,
+The repository checks require Git, GNU Make, Node.js/npm, Gitleaks,
 Python 3, and OpenTofu 1.12.6. Install the pinned local dependencies first:
 
 ```sh

@@ -1,0 +1,13 @@
+// SPDX-FileCopyrightText: 2026 Hamid Gholami
+// SPDX-License-Identifier: Apache-2.0
+// Managed by Ansible from protected runtime input. Local edits are overwritten.
+
+key "{{ bind_secondary_forward_zone }}_{{ bind_secondary_peer_name }}." {
+    algorithm hmac-sha256;
+    secret "{{ bind_secondary_forward_tsig_secret }}";
+};
+
+key "{{ bind_secondary_reverse_zone }}_{{ bind_secondary_peer_name }}." {
+    algorithm hmac-sha256;
+    secret "{{ bind_secondary_reverse_tsig_secret }}";
+};

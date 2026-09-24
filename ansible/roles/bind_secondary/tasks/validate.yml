@@ -1,0 +1,85 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Validate the effective BIND configuration
+  ansible.builtin.command: named-checkconf
+  changed_when: false
+
+- name: Read installed BIND package version
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - --show
+      - "--showformat=${Version}"
+      - bind9
+  register: bind_secondary_installed_version
+  changed_when: false
+
+- name: Inspect the BIND service
+  ansible.builtin.systemd_service:
+    name: "{{ bind_secondary_service_name }}"
+  register: bind_secondary_service
+
+- name: Query the transferred forward zone
+  ansible.builtin.command:
+    argv:
+      - dig
+      - "@{{ bind_secondary_listen_address }}"
+      - "{{ bind_secondary_forward_zone }}"
+      - SOA
+      - +norecurse
+      - +short
+  register: bind_secondary_forward_soa
+  changed_when: false
+
+- name: Query the transferred reverse zone
+  ansible.builtin.command:
+    argv:
+      - dig
+      - "@{{ bind_secondary_listen_address }}"
+      - "{{ bind_secondary_reverse_zone }}"
+      - SOA
+      - +norecurse
+      - +short
+  register: bind_secondary_reverse_soa
+  changed_when: false
+
+- name: Probe a recursive query outside the authoritative zones
+  ansible.builtin.command:
+    argv:
+      - dig
+      - "@{{ bind_secondary_listen_address }}"
+      - example.net
+      - A
+      - +recurse
+      - +comments
+  register: bind_secondary_recursion_probe
+  changed_when: false
+
+- name: Attempt an unauthorized zone transfer
+  ansible.builtin.command:
+    argv:
+      - dig
+      - "@{{ bind_secondary_listen_address }}"
+      - "{{ bind_secondary_forward_zone }}"
+      - AXFR
+  register: bind_secondary_axfr_probe
+  changed_when: false
+  failed_when: false
+
+- name: Assert authoritative-only BIND health
+  ansible.builtin.assert:
+    that:
+      - bind_secondary_installed_version.stdout is match(bind_secondary_package_version_pattern)
+      - bind_secondary_service.status.ActiveState == 'active'
+      - bind_secondary_service.status.UnitFileState == 'enabled'
+      - bind_secondary_forward_soa.stdout | trim | length > 0
+      - bind_secondary_reverse_soa.stdout | trim | length > 0
+      - bind_secondary_recursion_probe.stdout is search('status: REFUSED')
+      - bind_secondary_recursion_probe.stdout is not search(' flags:.* ra[ ;]')
+      - bind_secondary_axfr_probe.rc != 0
+      - bind_secondary_axfr_probe.stdout is not search('\tSOA\t')
+    fail_msg: >-
+      BIND must serve both transferred zones, refuse recursion and unauthorized
+      AXFR, and remain active on the reviewed Debian package line.

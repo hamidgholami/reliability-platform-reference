@@ -8,7 +8,7 @@ Reliability Platform Reference is one delivery and operations system with
 multiple environment profiles. The first deployment target is a standalone
 Incus host on one Debian VM, initially supplied by a minimal isolated AWS
 bootstrap root. The maintainer workstation supplies fast checks and optional
-disposable integration; it is not required to host the platform. Later cloud
+reusable local integration; it is not required to host the platform. Later cloud
 profiles reuse the interfaces and operational contracts without pretending all
 providers are identical.
 

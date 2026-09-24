@@ -1,0 +1,59 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+argument_specs:
+  main:
+    short_description: Configure one private authoritative BIND secondary
+    options: &bind_secondary_options
+      bind_secondary_packages:
+        type: list
+        elements: str
+      bind_secondary_package_version_pattern:
+        type: str
+      bind_secondary_primary_address:
+        type: str
+        required: true
+      bind_secondary_primary_port:
+        type: int
+      bind_secondary_listen_address:
+        type: str
+        required: true
+      bind_secondary_client_cidr:
+        type: str
+        required: true
+      bind_secondary_forward_zone:
+        type: str
+        required: true
+      bind_secondary_reverse_zone:
+        type: str
+        required: true
+      bind_secondary_peer_name:
+        type: str
+        required: true
+      bind_secondary_forward_tsig_secret:
+        type: str
+        required: true
+      bind_secondary_reverse_tsig_secret:
+        type: str
+        required: true
+      bind_secondary_service_name:
+        type: str
+      bind_secondary_zone_directory:
+        type: str
+  validate:
+    short_description: Validate one private authoritative BIND secondary
+    options:
+      bind_secondary_package_version_pattern:
+        type: str
+      bind_secondary_listen_address:
+        type: str
+        required: true
+      bind_secondary_forward_zone:
+        type: str
+        required: true
+      bind_secondary_reverse_zone:
+        type: str
+        required: true
+      bind_secondary_service_name:
+        type: str

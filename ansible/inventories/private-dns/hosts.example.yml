@@ -1,0 +1,29 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+# OpenTofu will generate the real ignored inventory after it creates P2-01
+# resources. TSIG values belong in a separate ignored mode-0600 variables file.
+all:
+  children:
+    dns_secondaries:
+      vars:
+        ansible_connection: community.general.incus
+        ansible_incus_remote: replace-with-reviewed-remote
+        ansible_incus_project: rpr-dev
+        ansible_user: root
+        rpr_deployment_profile: workstation-validation
+        bind_secondary_primary_address: 10.20.0.1
+        bind_secondary_primary_port: 1053
+        bind_secondary_client_cidr: 10.20.0.0/24
+        bind_secondary_forward_zone: dev.apadanalab.de
+        bind_secondary_reverse_zone: 0.20.10.in-addr.arpa
+      hosts:
+        dns-01:
+          ansible_host: dns-01
+          bind_secondary_listen_address: 10.20.0.10
+          bind_secondary_peer_name: dns-01
+        dns-02:
+          ansible_host: dns-02
+          bind_secondary_listen_address: 10.20.0.11
+          bind_secondary_peer_name: dns-02

@@ -1,0 +1,13 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Validate BIND configuration
+  ansible.builtin.command: named-checkconf
+  changed_when: false
+  listen: Restart BIND
+
+- name: Restart BIND
+  ansible.builtin.systemd_service:
+    name: "{{ bind_secondary_service_name }}"
+    state: restarted

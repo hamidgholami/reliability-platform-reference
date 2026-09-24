@@ -1,0 +1,25 @@
+// SPDX-FileCopyrightText: 2026 Hamid Gholami
+// SPDX-License-Identifier: Apache-2.0
+// Managed by Ansible. Local edits are overwritten.
+
+options {
+    directory "{{ bind_secondary_zone_directory }}";
+
+    listen-on port 53 {
+        127.0.0.1;
+        {{ bind_secondary_listen_address }};
+    };
+    listen-on-v6 { none; };
+
+    allow-query {
+        127.0.0.1;
+        {{ bind_secondary_client_cidr }};
+    };
+    allow-query-cache { none; };
+    allow-recursion { none; };
+    allow-transfer { none; };
+    recursion no;
+
+    minimal-responses yes;
+    version "not disclosed";
+};

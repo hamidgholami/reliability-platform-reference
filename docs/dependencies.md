@@ -37,3 +37,10 @@ Mitogen is not included in the Phase 1 default. Its current release supports
 the pinned Ansible generation, but relies on Ansible's deprecated third-party
 strategy-plugin interface. One-host measurements must first show a meaningful
 transport bottleneck before that extra runtime coupling is justified.
+
+## Phase 2 runtime packages
+
+P2-01 installs `bind9` and `bind9-dnsutils` from the Debian 13 stable/security
+repositories. Automation accepts only the BIND 9.20 package line so Debian
+security revisions remain installable without silently crossing a feature
+series. Deployment acceptance records the exact installed revision.

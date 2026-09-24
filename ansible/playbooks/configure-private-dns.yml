@@ -1,0 +1,11 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Configure private authoritative DNS secondaries
+  hosts: dns_secondaries
+  gather_facts: true
+  any_errors_fatal: true
+  become: false
+  roles:
+    - role: bind_secondary

@@ -1,0 +1,61 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Run non-mutating BIND secondary preflight
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Install BIND secondary packages
+  ansible.builtin.apt:
+    name: "{{ bind_secondary_packages }}"
+    state: present
+
+- name: Install the owned BIND entry point
+  ansible.builtin.template:
+    src: named.conf.j2
+    dest: /etc/bind/named.conf
+    owner: root
+    group: bind
+    mode: "0640"
+  notify: Restart BIND
+
+- name: Install authoritative-only BIND options
+  ansible.builtin.template:
+    src: named.conf.options.j2
+    dest: /etc/bind/rpr-options.conf
+    owner: root
+    group: bind
+    mode: "0640"
+  notify: Restart BIND
+
+- name: Install protected transfer keys
+  ansible.builtin.template:
+    src: named.conf.keys.j2
+    dest: /etc/bind/rpr-tsig.conf
+    owner: root
+    group: bind
+    mode: "0640"
+  no_log: true
+  diff: false
+  notify: Restart BIND
+
+- name: Install secondary zone declarations
+  ansible.builtin.template:
+    src: named.conf.zones.j2
+    dest: /etc/bind/rpr-secondary-zones.conf
+    owner: root
+    group: bind
+    mode: "0640"
+  notify: Restart BIND
+
+- name: Apply validated BIND configuration changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start BIND
+  ansible.builtin.systemd_service:
+    name: "{{ bind_secondary_service_name }}"
+    enabled: true
+    state: started
+
+- name: Run BIND secondary validation
+  ansible.builtin.import_tasks: validate.yml

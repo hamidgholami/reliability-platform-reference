@@ -1,0 +1,14 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Validate private authoritative DNS secondaries
+  hosts: dns_secondaries
+  gather_facts: true
+  any_errors_fatal: true
+  become: false
+  tasks:
+    - name: Run BIND secondary validation
+      ansible.builtin.import_role:
+        name: bind_secondary
+        tasks_from: validate

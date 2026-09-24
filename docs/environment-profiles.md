@@ -2,11 +2,13 @@
 
 Profiles describe intended capability and ownership, not identical topology.
 The workstation is a control and test environment, not a continuously running
-platform. `single-node-reference` is the first deployment-acceptance profile.
+platform. Its Lima VM may be retained between development sessions and stopped
+when idle, then recreated at clean acceptance boundaries.
+`single-node-reference` is the first deployment-acceptance profile.
 
 | Profile | Purpose | Foundation | Kubernetes | Cost posture |
 | --- | --- | --- | --- | --- |
-| `workstation-validation` | Fast checks and optional disposable integration | No persistent foundation; optional one-VM Lima harness | None | Local and ephemeral |
+| `workstation-validation` | Fast checks and reusable local integration | One optional Lima VM, recreated at acceptance boundaries | None | Local and stopped when idle |
 | `single-node-reference` | First deployable end-to-end increment | One Debian VM with standalone Incus; initially supplied by a minimal AWS root | Deferred to Phase 3 | Ephemeral, tagged, and measured |
 | `onprem-reference` | Later expanded on-premises demonstration | Incus, non-HA or 3+ members | Kubespray | Explicit host capacity budget |
 | `onprem-ha` | Failure-domain experiments | 3+ Incus members | HA control plane | Created only for scheduled tests |
