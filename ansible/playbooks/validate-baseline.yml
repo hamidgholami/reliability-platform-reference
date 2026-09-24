@@ -110,6 +110,9 @@
           - "'passwordauthentication no' in baseline_sshd_effective.stdout"
           - "'permitrootlogin no' in baseline_sshd_effective.stdout"
           - "'pubkeyauthentication yes' in baseline_sshd_effective.stdout"
+          - >-
+            (ssh_server_ports | map('int') |
+            difference(baseline_listening_tcp_ports)) | length == 0
 
     - name: Create ignored local evidence directory
       ansible.builtin.file:

@@ -19,6 +19,12 @@ containerd:
   system: false
   user: false
 
+# Debian 13's systemd 257.13 can miss its generated VSOCK SSH socket during
+# early boot. Use Lima's supported TCP forwarding path until Debian ships the
+# upstream generator fix.
+ssh:
+  overVsock: false
+
 # Keep the Incus API private to the workstation. P1-05 uses this stable local
 # endpoint instead of privileged vmnet networking or a routable guest address.
 portForwards:

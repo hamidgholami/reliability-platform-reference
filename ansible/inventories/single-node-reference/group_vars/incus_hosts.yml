@@ -29,8 +29,10 @@ os_users_without_password_ageing:
 # Incus API without enabling remote forwarding, agent forwarding, or tunneling.
 ssh_client_hardening: false
 ssh_server_hardening: true
+# This is the target-side listener. ansible_port may instead be a controller-
+# side NAT or forwarding port, as it is for the Lima profile.
 ssh_server_ports:
-  - "{{ ansible_port | default(22) | string }}"
+  - "22"
 ssh_listen_to:
   - 0.0.0.0
 ssh_server_password_login: false
@@ -46,7 +48,7 @@ network_ipv6_enable: true
 # The baseline validator runs both before and after Incus bootstrap. The API
 # port may be absent before P1-03 and is an expected host requirement afterward.
 debian_baseline_expected_tcp_ports:
-  - "{{ ansible_port | default(22) | int }}"
+  - 22
   - "{{ incus_host_api_port }}"
 
 # P1-03 installs only the Debian-native container daemon. OpenTofu owns all
@@ -60,7 +62,7 @@ incus_host_storage_source: ""
 incus_host_api_address: 0.0.0.0
 incus_host_api_port: 8443
 incus_host_expected_exposed_tcp_ports:
-  - "{{ ansible_port | default(22) | int }}"
+  - 22
   - "{{ incus_host_api_port }}"
 incus_host_preseed_schema_version: 1
 incus_host_minimum_root_available_bytes: 2147483648

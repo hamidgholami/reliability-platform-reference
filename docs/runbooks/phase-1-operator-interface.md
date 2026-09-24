@@ -50,6 +50,13 @@ consumes local resources. A static unprivileged forward exposes the future
 Incus API only on `127.0.0.1:18443`; it does not make the VM or its containers
 routable from the LAN.
 
+The guest SSH daemon always listens on port 22; Lima's generated random
+localhost port is only the controller-side forwarding endpoint and must not be
+written into `sshd_config`. The template disables SSH over VSOCK because the
+systemd 257.13 package in Debian 13 can fail to create its generated VSOCK
+socket during early boot ([Debian bug #1137216]). Lima's supported TCP
+forwarding path keeps cold starts independent of that upstream regression.
+
 Keep the VM between ordinary development sessions and stop it when idle. Delete
 and recreate it when a work item requires clean local acceptance, when its
 foundation is suspect, or when the runbook explicitly tests teardown. Routine
@@ -87,6 +94,19 @@ make bootstrap-incus
 make validate-incus
 ```
 
+After applying the baseline, prove a cold start before relying on the retained
+VM in later work:
+
+```sh
+PROFILE=workstation-validation make lima-stop
+PROFILE=workstation-validation CONFIRM=start-rpr-p1 make lima-start
+PROFILE=workstation-validation make lima-inventory
+make validate-baseline
+```
+
+The regenerated inventory may contain a different controller-side SSH port;
+the guest SSH listener remains port 22.
+
 Run the baseline and Incus bootstrap paths a second time. Every operational
 playbook uses diff mode, and the final output lists the twenty slowest tasks and
 total runtime. Compare first-run work with second-run convergence before
@@ -97,6 +117,8 @@ Delete the VM with `make lima-delete`; there is no repository-owned data
 recovery after deletion. Removing the VM also removes its Lima-generated SSH
 configuration, so the cached inventory becomes invalid and may be overwritten
 by the next test VM.
+
+[Debian bug #1137216]: https://bugs.debian.org/1137216
 
 ## Reference target and AWS boundary
 
