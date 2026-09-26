@@ -35,6 +35,15 @@ expect_failure \
   ./scripts/ansible-target.sh baseline
 
 expect_failure \
+  "ANSIBLE_STRATEGY must be linear or mitogen_linear" \
+  env PROFILE=single-node-reference \
+  INVENTORY=ansible/inventories/single-node-reference/hosts.example.yml \
+  TARGET_HOST=incus-reference-01 \
+  OPERATOR_PUBLIC_KEY_FILE=/dev/null \
+  ANSIBLE_STRATEGY=unsupported \
+  ./scripts/ansible-target.sh preflight
+
+expect_failure \
   "set CONFIRM=baseline-single-node-reference-incus-reference-01" \
   env PROFILE=single-node-reference \
   INVENTORY=ansible/inventories/single-node-reference/hosts.example.yml \

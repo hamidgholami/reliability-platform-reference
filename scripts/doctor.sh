@@ -21,6 +21,19 @@ if [ ! -x .venv/bin/ansible-lint ] || [ ! -x .venv/bin/ansible-inventory ]; then
   exit 1
 fi
 
+required_mitogen_version="0.3.53"
+mitogen_version="$(
+  .venv/bin/python -c \
+    'import mitogen; print(".".join(str(part) for part in mitogen.__version__))'
+)" || {
+  echo "Missing pinned Mitogen environment; run: make setup-python" >&2
+  exit 1
+}
+[ "$mitogen_version" = "$required_mitogen_version" ] || {
+  echo "Mitogen ${required_mitogen_version} is required; found ${mitogen_version}." >&2
+  exit 1
+}
+
 if [ ! -d .cache/ansible/collections/ansible_collections/devsec/hardening ]; then
   echo "Missing pinned devsec.hardening collection; run: make setup-python" >&2
   exit 1

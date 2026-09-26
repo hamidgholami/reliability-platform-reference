@@ -5,6 +5,8 @@
 - name: Validate a Debian 13 Incus target without mutation
   hosts: incus_hosts
   gather_facts: false
+  # Preflight must work before Python is available on a new target.
+  strategy: linear
   any_errors_fatal: true
   tasks:
     - name: Run target preflight gates

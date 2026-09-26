@@ -27,8 +27,11 @@ CIDRs are rejected without sending any AWS request.
 
 Do not activate `.venv` manually for repository commands: Make invokes its
 binaries explicitly, which avoids accidentally using a global Ansible install.
-The Phase 1 path uses standard Ansible SSH. Mitogen is deliberately deferred
-until a later multi-node benchmark proves that connection overhead is material.
+The operational SSH-target wrapper uses pinned Mitogen after a retained-Lima
+baseline benchmark showed meaningful transport overhead. Pre-Python bootstrap
+and preflight plays retain Ansible's built-in strategy. To isolate a suspected
+Mitogen regression without changing repository files, prefix the target command
+with `ANSIBLE_STRATEGY=linear`.
 
 ## Optional reusable Lima VM
 
@@ -110,8 +113,9 @@ the guest SSH listener remains port 22.
 Run the baseline and Incus bootstrap paths a second time. Every operational
 playbook uses diff mode, and the final output lists the twenty slowest tasks and
 total runtime. Compare first-run work with second-run convergence before
-changing SSH transport settings. Pipelining remains disabled until this
-measurement shows that controller transport is a meaningful bottleneck.
+changing SSH transport settings. An initial retained-Lima measurement justified
+Mitogen for the SSH-target wrapper; the built-in linear strategy remains an
+explicit diagnostic fallback.
 
 Delete the VM with `make lima-delete`; there is no repository-owned data
 recovery after deletion. Removing the VM also removes its Lima-generated SSH

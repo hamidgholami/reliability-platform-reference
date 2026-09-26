@@ -45,6 +45,21 @@ esac
 extra_vars="debian_prepare_operator_public_key_file=$public_key_file rpr_deployment_profile=$profile"
 
 run_playbook() {
+  ansible_strategy=${ANSIBLE_STRATEGY:-mitogen_linear}
+  mitogen_strategy_plugins=""
+  case "$ansible_strategy" in
+    linear) ;;
+    mitogen_linear)
+      mitogen_strategy_plugins="$(
+        .venv/bin/python -c \
+          'import pathlib, ansible_mitogen; print(pathlib.Path(ansible_mitogen.__file__).parent / "plugins" / "strategy")'
+      )" || fail "Mitogen is unavailable; run 'make setup-python' first"
+      [ -d "$mitogen_strategy_plugins" ] ||
+        fail "Mitogen strategy plugins are unavailable; run 'make setup-python' first"
+      ;;
+    *) fail "ANSIBLE_STRATEGY must be linear or mitogen_linear" ;;
+  esac
+
   set -- --diff "$@"
   if [ -n "$ssh_identity_file" ]; then
     set -- --private-key "$ssh_identity_file" "$@"
@@ -53,6 +68,8 @@ run_playbook() {
   ANSIBLE_HOME="$PWD/.cache/ansible" \
   ANSIBLE_COLLECTIONS_PATH="$PWD/.cache/ansible/collections" \
   ANSIBLE_LOCAL_TEMP="$PWD/.cache/ansible/tmp" \
+  ANSIBLE_STRATEGY="$ansible_strategy" \
+  ANSIBLE_STRATEGY_PLUGINS="$mitogen_strategy_plugins" \
   .venv/bin/ansible-playbook \
     --inventory "$inventory" \
     --limit "$target_host" \

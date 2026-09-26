@@ -5,6 +5,8 @@
 - name: Validate target and make Python available
   hosts: incus_hosts
   gather_facts: false
+  # Mitogen requires target Python; preserve bootstrap support for a bare host.
+  strategy: linear
   any_errors_fatal: true
   tasks:
     - name: Run target preflight gates
