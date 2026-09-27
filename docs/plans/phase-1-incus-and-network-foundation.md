@@ -65,12 +65,13 @@ Before any paid run, stop and give the operator a current, step-by-step account,
 credential, cost, expiry, execution, and cleanup checklist.
 
 The workstation runs the pinned Ansible toolchain from a repository-local
-Python virtual environment. Standard Ansible SSH is the Phase 1 execution path.
-Mitogen is not a default dependency: this phase manages one host, most elapsed
-time is expected inside package and image operations, and Mitogen currently
-depends on the third-party strategy-plugin interface deprecated by Ansible.
-Reconsider it only after a multi-node benchmark identifies controller transport
-as a meaningful bottleneck.
+Python virtual environment. Phase 1 acceptance used standard Ansible SSH. A
+later retained-Lima baseline check measured 54.20 seconds with standard SSH and
+10.83 seconds with Mitogen, so the operational SSH-target wrapper now defaults
+to the pinned Mitogen strategy. Pre-Python bootstrap and preflight retain
+Ansible's built-in `linear` strategy, which is also the explicit diagnostic
+fallback. Mitogen depends on Ansible's deprecated third-party strategy-plugin
+interface, so every Ansible upgrade requires a compatibility review.
 
 Broad Ansible tags are also deferred. They are useful in large operational
 playbooks when measured workflows need safe subsets, but this phase has small,
@@ -369,10 +370,6 @@ limitations are in the
 [redacted Phase 1 acceptance record](../evidence/phase-1-acceptance.md).
 
 ## Deferred backlog
-
-- Benchmark standard Ansible SSH against Mitogen only when a multi-node profile
-  demonstrates that controller transport, rather than remote work, is a
-  material part of elapsed time.
 
 These are valid target capabilities, but none blocks Phase 1:
 

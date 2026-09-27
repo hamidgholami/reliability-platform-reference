@@ -112,7 +112,7 @@ not block an earlier dependency slice when the two choices are independent.
 | DNS bootstrap secrets | P2-01 | Generate one random TSIG value per zone and secondary in a mode-`0600` ignored runtime file. Pass that file independently to OpenTofu and Ansible; never recover a key from state or output. |
 | Remaining bootstrap secrets and rotation | P2-02 onward | Open; bootstrap must not require a healthy secrets service to create that same service. |
 | Secrets-service configuration owner | P2-02 | Open; prefer narrowly scoped idempotent Ansible or HTTP API tasks over another provider. |
-| Operator access | P2-01 | Validate DNS from the platform network through Incus execution. Do not expose BIND publicly. Revisit a private VPN only when browser-based P2-04 access demonstrates the need. |
+| Operator browser access | P2-04 | Required before browser acceptance. Prefer route-limited WireGuard with split DNS; resolve endpoint placement, peer custody, revocation, and profile-specific ingress before implementation. Do not expose private services publicly. |
 
 Any choice that changes a platform or trust boundary requires an ADR. Version
 and implementation details that stay within an accepted boundary belong in this
@@ -226,6 +226,11 @@ without rotating a shared static deployment key.
 
 ### P2-04 — Keycloak identity and OIDC integration
 
+- [ ] Provide private operator access before browser testing. Prefer WireGuard,
+  route only the selected platform CIDR, conditionally resolve only the private
+  platform zone, reject overlapping client networks, and keep service listeners
+  private. Document endpoint placement, peer enrollment, rotation, revocation,
+  and teardown before opening the VPN listener.
 - [ ] Deploy one Keycloak instance backed by the Phase 2 PostgreSQL service and
   protected by the accepted TLS and private-DNS path.
 - [ ] Manage realm, client, group, role, and authentication-flow configuration
@@ -244,9 +249,11 @@ without rotating a shared static deployment key.
 - [ ] Keep email self-service disabled until a real external SMTP relay exists;
   Phase 2 does not operate a mail server.
 
-Acceptance: an enrolled privileged user must complete all required factors and
-receives only the mapped role; an ordinary or incompletely authenticated user
-cannot obtain privileged secrets-service access.
+Acceptance: an enrolled privileged user reaches Keycloak by private DNS and
+private address from a declared workstation, completes all required factors,
+and receives only the mapped role. An ordinary or incompletely authenticated
+user cannot obtain privileged secrets-service access. Revoking the workstation
+VPN peer removes private route and DNS access without publishing the service.
 
 ### P2-05 — Public certificate automation and trust distribution
 
@@ -318,8 +325,21 @@ leaves no live project-owned cloud resources.
 - Measure host and per-service CPU, memory, disk, and duration at each accepted
   slice. Do not size the final Phase 2 topology from product minimums alone.
 - Destroy the ephemeral AWS environment after the planned acceptance session.
-  No identity or secrets service becomes a standing public cloud resource by
-  default.
+No identity or secrets service becomes a standing public cloud resource by
+default.
+
+## Deferred workstation ergonomics
+
+- [ ] Evaluate mise as an optional pinned-tool and environment-profile frontend
+  after the active service slice. Keep Make as the sole task and safety
+  interface, require explicit profile selection, keep credentials and personal
+  paths in ignored local configuration, and adopt mise only if it replaces
+  duplicated version or export configuration rather than adding another source
+  of truth.
+
+This evaluation is not a P2-02 or Phase 2 exit gate. CI and documented Make
+commands must remain usable without shell activation or hidden environment
+selection.
 
 ## Verification interface
 

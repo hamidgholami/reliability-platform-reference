@@ -42,6 +42,21 @@ route to `10.20.0.0/24`, directly through the Incus host or through a trusted
 VPN. This is especially important when the Incus host runs behind a Linux VM on
 a macOS workstation.
 
+## Planned operator VPN
+
+Private browser access is required no later than the Phase 2 Keycloak slice.
+The preferred baseline is plain WireGuard with split routing and split DNS: a
+declared workstation receives only the selected platform CIDR and resolves only
+the private platform zone through its internal resolvers. The tunnel must not
+become a default route or make private services public.
+
+Before implementation, the P2-04 decision gate must resolve endpoint placement,
+profile-specific UDP ingress, peer-key custody, enrollment, rotation,
+revocation, and teardown. It must also reject overlap between the platform CIDR
+and the client's local or existing VPN networks. Acceptance proves private-name
+browser access from an enrolled workstation and loss of route and DNS access
+after that peer is revoked.
+
 Services communicate by DNS name, never by an address copied into application
 configuration. Public DNS must not publish RFC 1918 addresses.
 
