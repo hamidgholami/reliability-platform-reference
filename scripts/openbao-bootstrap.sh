@@ -5,6 +5,7 @@
 set -eu
 umask 077
 
+action=${1:-}
 profile=${PROFILE:-}
 config_dir=${INCUS_CONFIG_DIR:-}
 remote=${INCUS_REMOTE:-}
@@ -12,6 +13,7 @@ inventory=${OPENBAO_INVENTORY:-"$PWD/.cache/incus-substrate/openbao-hosts.json"}
 pki_dir=${RPR_PKI_DIR:-}
 recovery_dir=${OPENBAO_RECOVERY_DIR:-${RPR_PKI_DIR:+$RPR_PKI_DIR/openbao-recovery}}
 runtime_dir=${OPENBAO_RUNTIME_DIR:-${RPR_PKI_DIR:+$RPR_PKI_DIR/openbao-runtime}}
+intermediate_dir=${RPR_PKI_DIR:+$RPR_PKI_DIR/openbao-intermediate}
 gpg_home=
 root_token_file=
 recovery_passphrase=
@@ -87,6 +89,35 @@ incus_exec()
     incus exec --project rpr-dev "$remote:bao-01" -- "$@"
 }
 
+validate_pki_dns_publication()
+{
+  for dns_name in dns-01 dns-02; do
+    case "$dns_name" in
+      dns-01) dns_address=10.20.0.10 ;;
+      dns-02) dns_address=10.20.0.11 ;;
+    esac
+    alias_answer=$(INCUS_CONF="$config_dir" \
+      incus exec --project rpr-dev "$remote:$dns_name" -- \
+      dig "@$dns_address" openbao.dev.apadanalab.de CNAME \
+      +norecurse +short 2>/dev/null | tr -d '\r') ||
+      fail "$dns_name could not query the private OpenBao alias"
+    address_answer=$(INCUS_CONF="$config_dir" \
+      incus exec --project rpr-dev "$remote:$dns_name" -- \
+      dig "@$dns_address" bao-01.dev.apadanalab.de A \
+      +norecurse +short 2>/dev/null | tr -d '\r') ||
+      fail "$dns_name could not query the private OpenBao address"
+    [ "$alias_answer" = "bao-01.dev.apadanalab.de." ] ||
+      fail "$dns_name returned an unexpected OpenBao alias"
+    [ "$address_answer" = "10.20.0.20" ] ||
+      fail "$dns_name returned an unexpected OpenBao address"
+  done
+  echo "Validated the OpenBao PKI endpoint name through both private DNS secondaries."
+}
+
+case "$action" in
+  kv|pki) ;;
+  *) fail "usage: $0 {kv|pki}" ;;
+esac
 case "$profile" in
   workstation-validation|single-node-reference) ;;
   *) fail "set PROFILE to workstation-validation or single-node-reference" ;;
@@ -113,7 +144,7 @@ case "$runtime_dir" in
 esac
 
 repo_dir=$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)
-for protected_dir in "$recovery_dir" "$runtime_dir"; do
+for protected_dir in "$recovery_dir" "$runtime_dir" "$intermediate_dir"; do
   case "$protected_dir" in
     "$repo_dir"|"$repo_dir"/*)
       fail "OpenBao protected directories must remain outside the repository"
@@ -121,7 +152,10 @@ for protected_dir in "$recovery_dir" "$runtime_dir"; do
   esac
 done
 
-expected="bootstrap-openbao-$profile-$remote"
+case "$action" in
+  kv) expected="bootstrap-openbao-$profile-$remote" ;;
+  pki) expected="bootstrap-openbao-pki-$profile-$remote" ;;
+esac
 [ "${CONFIRM:-}" = "$expected" ] || fail "set CONFIRM=$expected"
 [ -r "$inventory" ] || fail "OpenBao inventory is missing; run make apply"
 [ -r "$recovery_dir/recovery-secret.gpg" ] ||
@@ -195,14 +229,54 @@ root_token_size=$(wc -c <"$root_token_file" | tr -d ' ')
 [ "$root_token_size" -ge 16 ] && [ "$root_token_size" -le 4096 ] ||
   fail "the recovered initial root token has an invalid size"
 
-echo "Bootstrapping OpenBao KV and scoped policies: profile=$profile remote=$remote"
 export OPENBAO_ROOT_TOKEN_FILE="$root_token_file"
-INCUS_CONF="$config_dir" \
-ANSIBLE_CONFIG="$PWD/ansible.cfg" \
-ANSIBLE_HOME="$PWD/.cache/ansible" \
-ANSIBLE_COLLECTIONS_PATH="$PWD/.cache/ansible/collections" \
-ANSIBLE_LOCAL_TEMP="$PWD/.cache/ansible/tmp" \
-.venv/bin/ansible-playbook \
-  --diff \
-  --inventory "$inventory" \
-  ansible/playbooks/bootstrap-openbao.yml
+
+run_playbook()
+{
+  INCUS_CONF="$config_dir" \
+  ANSIBLE_CONFIG="$PWD/ansible.cfg" \
+  ANSIBLE_HOME="$PWD/.cache/ansible" \
+  ANSIBLE_COLLECTIONS_PATH="$PWD/.cache/ansible/collections" \
+  ANSIBLE_LOCAL_TEMP="$PWD/.cache/ansible/tmp" \
+  .venv/bin/ansible-playbook \
+    --diff \
+    --inventory "$inventory" \
+    "$1"
+}
+
+if [ "$action" = "kv" ]; then
+  echo "Bootstrapping OpenBao KV and scoped policies: profile=$profile remote=$remote"
+  run_playbook ansible/playbooks/bootstrap-openbao.yml
+  exit 0
+fi
+
+if [ -e "$intermediate_dir" ] && [ ! -d "$intermediate_dir" ]; then
+  fail "the OpenBao intermediate path exists but is not a directory"
+fi
+install -d -m 0700 "$intermediate_dir"
+[ "$(find "$intermediate_dir" -prune -type d -perm 0700 -print)" = "$intermediate_dir" ] ||
+  fail "the OpenBao intermediate directory must use mode 0700"
+
+echo "Preparing the OpenBao-held intermediate CSR: profile=$profile remote=$remote"
+export OPENBAO_PKI_OUTPUT_DIR="$intermediate_dir"
+run_playbook ansible/playbooks/prepare-openbao-pki.yml
+
+issuer_configured=$(jq -r '
+  if (.issuer_configured | type) == "boolean" then
+    .issuer_configured
+  else
+    error("issuer_configured must be boolean")
+  end
+' "$intermediate_dir/state.json") ||
+  fail "the PKI preparation result is invalid"
+case "$issuer_configured" in
+  true|false) ;;
+  *) fail "the PKI preparation result is invalid" ;;
+esac
+if [ "$issuer_configured" = "false" ]; then
+  RPR_PKI_DIR="$pki_dir" "$repo_dir/scripts/openbao-pki.sh" sign-intermediate
+fi
+
+echo "Importing and validating the signed OpenBao intermediate..."
+run_playbook ansible/playbooks/import-openbao-pki.yml
+validate_pki_dns_publication

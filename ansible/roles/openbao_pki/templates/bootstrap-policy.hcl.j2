@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+path "sys/mounts" {
+  capabilities = ["read"]
+}
+
+path "sys/mounts/{{ openbao_pki_mount }}" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "sys/mounts/{{ openbao_pki_mount }}/tune" {
+  capabilities = ["update", "read"]
+}
+
+path "{{ openbao_pki_mount }}/intermediate/generate/internal" {
+  capabilities = ["update"]
+}
+
+path "{{ openbao_pki_mount }}/intermediate/set-signed" {
+  capabilities = ["update"]
+}
+
+path "{{ openbao_pki_mount }}/config/issuers" {
+  capabilities = ["update", "read"]
+}
+
+path "{{ openbao_pki_mount }}/config/urls" {
+  capabilities = ["update", "read"]
+}
+
+path "{{ openbao_pki_mount }}/issuer/*" {
+  capabilities = ["update", "read"]
+}
+
+path "auth/token/revoke-self" {
+  capabilities = ["update"]
+}

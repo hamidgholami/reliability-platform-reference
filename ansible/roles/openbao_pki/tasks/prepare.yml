@@ -1,0 +1,232 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Read mounted secrets engines before PKI preparation
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/sys/mounts"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_pki_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    return_content: true
+    status_code: 200
+  register: openbao_pki_mounts_before
+  no_log: true
+  diff: false
+
+- name: Reject an incompatible existing PKI mount
+  ansible.builtin.assert:
+    that:
+      - >-
+        (openbao_pki_mount ~ '/') not in openbao_pki_mounts_before.json.data or
+        openbao_pki_mounts_before.json.data[openbao_pki_mount ~ '/'].type == 'pki'
+    fail_msg: The existing pki_int mount is not the reviewed PKI boundary.
+  no_log: true
+  diff: false
+
+- name: Enable the online-intermediate PKI engine
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/sys/mounts/{{ openbao_pki_mount }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_pki_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    body_format: json
+    body:
+      type: pki
+      description: ApadanaLab online intermediate certificate authority
+    status_code: 204
+  when: (openbao_pki_mount ~ '/') not in openbao_pki_mounts_before.json.data
+  changed_when: true
+  no_log: true
+  diff: false
+
+- name: Read mounted secrets engines after PKI enablement
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/sys/mounts"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_pki_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    return_content: true
+    status_code: 200
+  register: openbao_pki_mounts_enabled
+  no_log: true
+  diff: false
+
+- name: Configure the five-year PKI lease ceiling
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/sys/mounts/{{ openbao_pki_mount }}/tune"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_pki_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    body_format: json
+    body:
+      max_lease_ttl: "{{ openbao_pki_max_lease_ttl_seconds }}s"
+    status_code: 204
+  when: >-
+    openbao_pki_mounts_enabled.json.data[openbao_pki_mount ~ '/'].config.max_lease_ttl !=
+    openbao_pki_max_lease_ttl_seconds
+  changed_when: true
+  no_log: true
+  diff: false
+
+- name: Read the issuer configuration before PKI preparation
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/config/issuers"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_pki_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    return_content: true
+    status_code: 200
+  register: openbao_pki_existing_issuer_configuration
+  no_log: true
+  diff: false
+
+- name: Derive whether the online intermediate is already configured
+  ansible.builtin.set_fact:
+    openbao_pki_issuer_configured: >-
+      {{
+        openbao_pki_existing_issuer_configuration.json.data.default
+        | default('')
+        | length > 0
+      }}
+  no_log: true
+  diff: false
+
+- name: Inspect resumable intermediate request files
+  ansible.builtin.stat:
+    path: "{{ openbao_pki_output_dir }}/{{ item }}"
+  loop:
+    - intermediate.csr.pem
+    - request.json
+  loop_control:
+    label: "{{ item }}"
+  delegate_to: localhost
+  register: openbao_pki_request_files
+  no_log: true
+  diff: false
+
+- name: Require a complete resumable intermediate request
+  ansible.builtin.assert:
+    that:
+      - >-
+        (openbao_pki_request_files.results[0].stat.exists | default(false)) ==
+        (openbao_pki_request_files.results[1].stat.exists | default(false))
+      - >-
+        not (openbao_pki_request_files.results[0].stat.exists | default(false)) or
+        openbao_pki_request_files.results[0].stat.mode == '0600'
+      - >-
+        not (openbao_pki_request_files.results[1].stat.exists | default(false)) or
+        openbao_pki_request_files.results[1].stat.mode == '0600'
+    fail_msg: The resumable OpenBao intermediate request is incomplete or unprotected.
+  no_log: true
+  diff: false
+
+- name: Generate the intermediate key internally and return only its CSR
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/intermediate/generate/internal
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_pki_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    body_format: json
+    body:
+      common_name: "{{ openbao_pki_common_name }}"
+      organization:
+        - "{{ openbao_pki_organization }}"
+      ou:
+        - "{{ openbao_pki_organizational_unit }}"
+      exclude_cn_from_sans: true
+      key_type: rsa
+      key_bits: 3072
+      key_name: "{{ openbao_pki_key_name }}"
+      format: pem
+    return_content: true
+    status_code: 200
+  when:
+    - not openbao_pki_issuer_configured
+    - not (openbao_pki_request_files.results[0].stat.exists | default(false))
+  register: openbao_pki_generated_request
+  changed_when: true
+  no_log: true
+  diff: false
+
+- name: Assert that OpenBao did not export the intermediate private key
+  ansible.builtin.assert:
+    that:
+      - openbao_pki_generated_request.json.data.csr is match('^-----BEGIN CERTIFICATE REQUEST-----')
+      - openbao_pki_generated_request.json.data.key_id | length > 0
+      - openbao_pki_generated_request.json.data.private_key is not defined
+    fail_msg: OpenBao did not return the expected internal-key CSR response.
+  when: openbao_pki_generated_request is not skipped
+  no_log: true
+  diff: false
+
+- name: Persist the public intermediate CSR for offline signing
+  ansible.builtin.copy:
+    content: "{{ openbao_pki_generated_request.json.data.csr | trim }}\n"
+    dest: "{{ openbao_pki_output_dir }}/intermediate.csr.pem"
+    mode: "0600"
+  when: openbao_pki_generated_request is not skipped
+  delegate_to: localhost
+  no_log: true
+  diff: false
+
+- name: Persist resumable non-secret intermediate request metadata
+  ansible.builtin.copy:
+    content: >-
+      {{
+        {
+          'key_id': openbao_pki_generated_request.json.data.key_id,
+          'key_name': openbao_pki_key_name,
+          'csr_sha256': (openbao_pki_generated_request.json.data.csr | trim | hash('sha256'))
+        } | to_nice_json
+      }}
+    dest: "{{ openbao_pki_output_dir }}/request.json"
+    mode: "0600"
+  when: openbao_pki_generated_request is not skipped
+  delegate_to: localhost
+  no_log: true
+  diff: false
+
+- name: Validate the retained intermediate CSR
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - req
+      - -in
+      - "{{ openbao_pki_output_dir }}/intermediate.csr.pem"
+      - -verify
+      - -noout
+  when: not openbao_pki_issuer_configured
+  delegate_to: localhost
+  changed_when: false
+  no_log: true
+  diff: false
+
+- name: Record the resumable PKI preparation state
+  ansible.builtin.copy:
+    content: >-
+      {{
+        {
+          'issuer_configured': openbao_pki_issuer_configured
+        } | to_nice_json
+      }}
+    dest: "{{ openbao_pki_output_dir }}/state.json"
+    mode: "0600"
+  delegate_to: localhost
+  no_log: true
+  diff: false
+
+- name: Report redacted OpenBao PKI preparation
+  ansible.builtin.debug:
+    msg:
+      mount: "{{ openbao_pki_mount }}"
+      internal_key: true
+      private_key_exported: false
+      issuer_already_configured: "{{ openbao_pki_issuer_configured }}"

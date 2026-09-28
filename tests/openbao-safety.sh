@@ -94,7 +94,16 @@ expect_failure \
   INCUS_REMOTE=rpr-target \
   RPR_PKI_DIR="$fixture_dir/pki" \
   CONFIRM= \
-  ./scripts/openbao-bootstrap.sh
+  ./scripts/openbao-bootstrap.sh kv
+
+expect_failure \
+  "set CONFIRM=bootstrap-openbao-pki-workstation-validation-rpr-target" \
+  env PROFILE=workstation-validation \
+  INCUS_CONFIG_DIR="$fixture_dir/incus" \
+  INCUS_REMOTE=rpr-target \
+  RPR_PKI_DIR="$fixture_dir/pki" \
+  CONFIRM= \
+  ./scripts/openbao-bootstrap.sh pki
 
 expect_failure \
   "OpenBao protected directories must remain outside the repository" \
@@ -104,7 +113,7 @@ expect_failure \
   RPR_PKI_DIR="$fixture_dir/pki" \
   OPENBAO_RUNTIME_DIR="$PWD/.cache/openbao-runtime" \
   CONFIRM=bootstrap-openbao-workstation-validation-rpr-target \
-  ./scripts/openbao-bootstrap.sh
+  ./scripts/openbao-bootstrap.sh kv
 
 jq -n '{
   all: {

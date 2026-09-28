@@ -31,6 +31,7 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   .markdownlint-cli2.yaml \
   .ansible-lint ansible.cfg requirements.txt ansible/requirements.yml \
   pki/offline-root/root-ca.cnf \
+  pki/offline-root/openbao-intermediate-policy.cnf \
   ansible/inventories/single-node-reference/hosts.example.yml \
   ansible/inventories/single-node-reference/group_vars/incus_hosts.yml \
   ansible/tasks/target_preflight.yml \
@@ -65,12 +66,20 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   tests/fixtures/openbao-ceremony/incus \
   tests/offline-root-policy.sh \
   ansible/playbooks/bootstrap-openbao.yml \
+  ansible/playbooks/prepare-openbao-pki.yml \
+  ansible/playbooks/import-openbao-pki.yml \
   ansible/roles/openbao_bootstrap/defaults/main.yml \
   ansible/roles/openbao_bootstrap/meta/argument_specs.yml \
   ansible/roles/openbao_bootstrap/tasks/main.yml \
   ansible/roles/openbao_bootstrap/templates/bootstrap-admin.hcl.j2 \
   ansible/roles/openbao_bootstrap/templates/operator.hcl.j2 \
   ansible/roles/openbao_bootstrap/templates/machine-read.hcl.j2 \
+  ansible/roles/openbao_pki/defaults/main.yml \
+  ansible/roles/openbao_pki/meta/argument_specs.yml \
+  ansible/roles/openbao_pki/tasks/main.yml \
+  ansible/roles/openbao_pki/tasks/prepare.yml \
+  ansible/roles/openbao_pki/tasks/import.yml \
+  ansible/roles/openbao_pki/templates/bootstrap-policy.hcl.j2 \
   infrastructure/bootstrap/aws-single-node/versions.tf \
   infrastructure/bootstrap/aws-single-node/variables.tf \
   infrastructure/bootstrap/aws-single-node/main.tf \

@@ -76,8 +76,8 @@ run_with_root_passphrase()
 }
 
 case "$action" in
-  create|renew) ;;
-  *) fail "usage: $0 {create|renew}" ;;
+  create|renew|sign-intermediate) ;;
+  *) fail "usage: $0 {create|renew|sign-intermediate}" ;;
 esac
 case "$pki_dir" in
   /*) ;;
@@ -95,7 +95,65 @@ command -v openssl >/dev/null 2>&1 || fail "openssl is required"
 
 root_dir="$pki_dir/root-ca"
 runtime_dir="$pki_dir/openbao-bootstrap"
+intermediate_dir="$pki_dir/openbao-intermediate"
 policy_file="$repo_dir/pki/offline-root/root-ca.cnf"
+intermediate_policy_file="$repo_dir/pki/offline-root/openbao-intermediate-policy.cnf"
+
+validate_intermediate()
+{
+  certificate=$1
+  bundle=$2
+  validation_dir=$3
+
+  openssl req \
+    -in "$intermediate_dir/intermediate.csr.pem" \
+    -verify -noout >/dev/null 2>&1 ||
+    fail "the OpenBao intermediate CSR signature is invalid"
+  subject=$(openssl req \
+    -in "$intermediate_dir/intermediate.csr.pem" \
+    -noout -subject -nameopt RFC2253)
+  [ "$subject" = \
+    "subject=CN=ApadanaLab Online Intermediate CA,OU=Platform Trust,O=ApadanaLab" ] ||
+    fail "the OpenBao intermediate CSR subject is outside the reviewed boundary"
+  openssl req \
+    -in "$intermediate_dir/intermediate.csr.pem" \
+    -pubkey -noout |
+    openssl pkey -pubin -text -noout >"$validation_dir/csr-key.txt"
+  grep -F "Public-Key: (3072 bit)" "$validation_dir/csr-key.txt" >/dev/null ||
+    fail "the OpenBao intermediate CSR must use a 3072-bit RSA key"
+
+  openssl verify \
+    -CAfile "$root_dir/certs/root-ca.crt" \
+    "$certificate" >/dev/null ||
+    fail "the OpenBao intermediate certificate does not chain to the offline root"
+  openssl x509 -in "$certificate" -checkend 31536000 -noout >/dev/null ||
+    fail "the OpenBao intermediate certificate expires within one year"
+  openssl x509 -in "$certificate" -noout -text >"$validation_dir/certificate.txt"
+  grep -F "CA:TRUE, pathlen:0" "$validation_dir/certificate.txt" >/dev/null ||
+    fail "the OpenBao intermediate certificate lacks the path-length-zero CA constraint"
+  grep -F "Certificate Sign, CRL Sign" "$validation_dir/certificate.txt" >/dev/null ||
+    fail "the OpenBao intermediate certificate has invalid key usage"
+
+  openssl req \
+    -in "$intermediate_dir/intermediate.csr.pem" \
+    -pubkey -noout |
+    openssl pkey -pubin -outform DER >"$validation_dir/csr-public.der"
+  openssl x509 \
+    -in "$certificate" \
+    -pubkey -noout |
+    openssl pkey -pubin -outform DER >"$validation_dir/certificate-public.der"
+  cmp -s "$validation_dir/csr-public.der" "$validation_dir/certificate-public.der" ||
+    fail "the OpenBao intermediate certificate does not match its internal key"
+
+  [ "$(grep -c '^-----BEGIN CERTIFICATE-----$' "$bundle")" = "2" ] ||
+    fail "the OpenBao intermediate bundle must contain the intermediate and root"
+  cp "$certificate" "$validation_dir/expected-chain.pem"
+  printf '\n' >>"$validation_dir/expected-chain.pem"
+  openssl x509 \
+    -in "$root_dir/certs/root-ca.crt" >>"$validation_dir/expected-chain.pem"
+  cmp -s "$bundle" "$validation_dir/expected-chain.pem" ||
+    fail "the OpenBao intermediate bundle differs from the reviewed public chain"
+}
 
 if [ "$action" = "create" ]; then
   if [ -e "$pki_dir" ] || [ -L "$pki_dir" ]; then
@@ -203,6 +261,86 @@ fi
 [ -r "$root_dir/root-ca.cnf" ] || fail "the root CA policy is missing"
 cmp -s "$policy_file" "$root_dir/root-ca.cnf" ||
   fail "the stored root CA policy differs from the reviewed repository policy"
+[ -r "$intermediate_policy_file" ] ||
+  fail "the reviewed OpenBao intermediate policy is missing"
+
+if [ "$action" = "sign-intermediate" ]; then
+  [ -d "$intermediate_dir" ] || fail "the OpenBao intermediate directory is missing"
+  [ "$(find "$intermediate_dir" -prune -type d -perm 0700 -print)" = "$intermediate_dir" ] ||
+    fail "the OpenBao intermediate directory must use mode 0700"
+  [ -r "$intermediate_dir/intermediate.csr.pem" ] ||
+    fail "the OpenBao-generated intermediate CSR is missing"
+  [ "$(find "$intermediate_dir/intermediate.csr.pem" -prune -type f -perm 0600 -print)" = \
+    "$intermediate_dir/intermediate.csr.pem" ] ||
+    fail "the OpenBao intermediate CSR must use mode 0600"
+
+  stage_dir=$(mktemp -d "$pki_dir/.sign-intermediate.XXXXXX")
+  if [ -s "$intermediate_dir/intermediate.crt" ] &&
+    [ -s "$intermediate_dir/chain.pem" ]; then
+    validate_intermediate \
+      "$intermediate_dir/intermediate.crt" \
+      "$intermediate_dir/chain.pem" \
+      "$stage_dir"
+    echo "The existing OpenBao intermediate certificate and chain are valid."
+    exit 0
+  fi
+  if [ -e "$intermediate_dir/intermediate.crt" ] ||
+    [ -e "$intermediate_dir/chain.pem" ]; then
+    fail "the OpenBao intermediate signing output is incomplete; refusing to overwrite it"
+  fi
+
+  recorded_request="$root_dir/requests/openbao-online-intermediate.csr"
+  if [ -e "$recorded_request" ]; then
+    cmp -s "$intermediate_dir/intermediate.csr.pem" "$recorded_request" ||
+      fail "the recorded intermediate CSR differs from the OpenBao-generated request"
+  else
+    install -m 0600 "$intermediate_dir/intermediate.csr.pem" "$recorded_request"
+  fi
+
+  read_root_passphrase false
+  run_with_root_passphrase openssl pkey \
+    -in "$root_dir/private/root-ca.key" \
+    -passin stdin \
+    -check -noout
+
+  echo "Signing the five-year OpenBao online intermediate..."
+  cp "$root_dir/root-ca.cnf" "$stage_dir/intermediate-signing.cnf"
+  printf '\n' >>"$stage_dir/intermediate-signing.cnf"
+  cat "$intermediate_policy_file" >>"$stage_dir/intermediate-signing.cnf"
+  chmod 0600 "$stage_dir/intermediate-signing.cnf"
+  (
+    cd "$root_dir"
+    printf '%s\n' "$root_passphrase" | openssl ca \
+      -batch \
+      -config "$stage_dir/intermediate-signing.cnf" \
+      -policy policy_openbao_intermediate \
+      -extensions openbao_intermediate_ca \
+      -days 1825 \
+      -notext \
+      -md sha384 \
+      -passin stdin \
+      -in "$recorded_request" \
+      -out "$stage_dir/intermediate.crt"
+  )
+  root_passphrase=
+
+  cp "$stage_dir/intermediate.crt" "$stage_dir/chain.pem"
+  printf '\n' >>"$stage_dir/chain.pem"
+  openssl x509 -in "$root_dir/certs/root-ca.crt" >>"$stage_dir/chain.pem"
+  chmod 0600 "$stage_dir/intermediate.crt" "$stage_dir/chain.pem"
+  validate_intermediate \
+    "$stage_dir/intermediate.crt" \
+    "$stage_dir/chain.pem" \
+    "$stage_dir"
+
+  install -m 0600 \
+    "$stage_dir/intermediate.crt" \
+    "$stage_dir/chain.pem" \
+    "$intermediate_dir/"
+  echo "Signed the OpenBao intermediate CSR without receiving its private key."
+  echo "Back up the updated root-ca directory before relying on this issuance."
+  exit 0
+fi
 
 read_root_passphrase false
 run_with_root_passphrase openssl pkey \

@@ -1,0 +1,24 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+openbao_pki_action: prepare
+openbao_pki_api_address: 10.20.0.20
+openbao_pki_api_port: 8200
+openbao_pki_api_dns_name: openbao.dev.apadanalab.de
+openbao_pki_ca_path: /opt/openbao/tls/ca.crt
+openbao_pki_root_token_file: >-
+  {{ lookup('ansible.builtin.env', 'OPENBAO_ROOT_TOKEN_FILE') }}
+openbao_pki_root_token: >-
+  {{ lookup('ansible.builtin.file', openbao_pki_root_token_file) | trim }}
+openbao_pki_output_dir: >-
+  {{ lookup('ansible.builtin.env', 'OPENBAO_PKI_OUTPUT_DIR') }}
+openbao_pki_mount: pki_int
+openbao_pki_policy_name: rpr-pki-bootstrap
+openbao_pki_token_ttl: 15m
+openbao_pki_max_lease_ttl_seconds: 157680000
+openbao_pki_key_name: rpr-online-intermediate
+openbao_pki_issuer_name: rpr-online-intermediate
+openbao_pki_common_name: ApadanaLab Online Intermediate CA
+openbao_pki_organization: ApadanaLab
+openbao_pki_organizational_unit: Platform Trust

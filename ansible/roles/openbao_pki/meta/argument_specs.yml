@@ -1,0 +1,52 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+argument_specs:
+  main:
+    short_description: Bootstrap the OpenBao-held online intermediate CA
+    options:
+      openbao_pki_action:
+        type: str
+        choices:
+          - prepare
+          - import
+        required: true
+      openbao_pki_api_address:
+        type: str
+        required: true
+      openbao_pki_api_port:
+        type: int
+        required: true
+      openbao_pki_api_dns_name:
+        type: str
+        required: true
+      openbao_pki_ca_path:
+        type: path
+      openbao_pki_root_token_file:
+        type: path
+      openbao_pki_root_token:
+        type: str
+        required: true
+        no_log: true
+      openbao_pki_output_dir:
+        type: path
+        required: true
+      openbao_pki_mount:
+        type: str
+      openbao_pki_policy_name:
+        type: str
+      openbao_pki_token_ttl:
+        type: str
+      openbao_pki_max_lease_ttl_seconds:
+        type: int
+      openbao_pki_key_name:
+        type: str
+      openbao_pki_issuer_name:
+        type: str
+      openbao_pki_common_name:
+        type: str
+      openbao_pki_organization:
+        type: str
+      openbao_pki_organizational_unit:
+        type: str

@@ -28,6 +28,8 @@ detailed machine evidence remain outside Git or in ignored local paths.
 | Initialization and unseal | OpenBao encrypted its 1-of-1 Shamir share and initial root token to a dedicated passphrase-protected operator recovery key before returning them. The protected recovery directory remained outside Git, the share was streamed to the stdin-aware API path, and the final health check confirmed the unsealed state. |
 | Audit behavior | Denied synthetic API activity produced request and response entries without reading or publishing audit contents. Forced logrotate preserved protected ownership and mode, created a new active file, and subsequent activity continued writing. With the sole audit path temporarily unavailable, the excluded health endpoint remained healthy while the audited request failed closed; restoration returned the service to healthy operation and audit writes resumed. |
 | KV and policy bootstrap | The guarded bootstrap configured `rpr-kv/` as KV v2 with ten retained versions and mandatory check-and-set writes. Ephemeral operator and machine tokens proved two successive versions, machine reads within `machines/ci/`, and denial outside that path. The ceremony deleted its synthetic data, revoked every temporary token, and removed the transient plaintext root-token file. |
+| Online intermediate | OpenBao generated and retained the named 3072-bit RSA intermediate key and returned only its CSR. The operator-managed root signed a five-year, path-length-zero CA certificate, and OpenBao imported the signed certificate plus public root chain as its fixed default issuer. No intermediate private key entered the handoff directory. |
+| Private PKI publication | The configured issuing-certificate and CRL URLs use `openbao.dev.apadanalab.de`. The CA, two-certificate chain, and CRL were readable without a token over validated private TLS; both authoritative BIND secondaries returned the reviewed alias and `10.20.0.20` target. The temporary PKI bootstrap tokens were revoked and no plaintext initial root-token file remained. |
 | Plaintext rejection | A plaintext HTTP probe did not reach an OpenBao health endpoint; the accepted service path requires TLS and the supplied CA. |
 | Protected files | Configuration, Raft, TLS, audit directory, and rotation configuration ownership and modes passed validation. Logrotate syntax also passed. |
 | Idempotence | A complete second configuration run reported `changed=0`; the separate validation run also reported `changed=0`. |
@@ -38,9 +40,9 @@ detailed machine evidence remain outside Git or in ignored local paths.
   `single-node-reference` host.
 - The single-operator 1-of-1 seal is intentionally not a production quorum.
   The initial root token remains encrypted and active pending recovery-capable
-  administrative access. The KV mount and scoped policies exist, but no
-  persistent human or machine credential, authentication method, or online
-  intermediate exists yet.
+  administrative access. The KV mount, scoped policies, and online intermediate
+  exist, but no persistent human or machine credential or authentication method
+  exists yet.
 - Browser access from the Mac remains deferred to the private VPN and split-DNS
   slice. No `/etc/hosts` entry or public route was added.
 

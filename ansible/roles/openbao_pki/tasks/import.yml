@@ -1,0 +1,279 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Read the issuer configuration before import
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/config/issuers"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_pki_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    return_content: true
+    status_code: 200
+  register: openbao_pki_issuer_configuration_before_import
+  no_log: true
+  diff: false
+
+- name: Derive whether the intermediate is already imported
+  ansible.builtin.set_fact:
+    openbao_pki_issuer_configured: >-
+      {{
+        openbao_pki_issuer_configuration_before_import.json.data.default
+        | default('')
+        | length > 0
+      }}
+  no_log: true
+  diff: false
+
+- name: Inspect signed intermediate inputs on the controller
+  ansible.builtin.stat:
+    path: "{{ openbao_pki_output_dir }}/{{ item }}"
+  loop:
+    - request.json
+    - intermediate.crt
+    - chain.pem
+  loop_control:
+    label: "{{ item }}"
+  delegate_to: localhost
+  register: openbao_pki_signed_files
+  no_log: true
+  diff: false
+
+- name: Require protected signed inputs when the issuer is not configured
+  ansible.builtin.assert:
+    that:
+      - openbao_pki_issuer_configured or openbao_pki_signed_files.results[0].stat.exists
+      - openbao_pki_issuer_configured or openbao_pki_signed_files.results[1].stat.exists
+      - openbao_pki_issuer_configured or openbao_pki_signed_files.results[2].stat.exists
+      - >-
+        openbao_pki_issuer_configured or
+        openbao_pki_signed_files.results[0].stat.mode == '0600'
+      - >-
+        openbao_pki_issuer_configured or
+        openbao_pki_signed_files.results[1].stat.mode == '0600'
+      - >-
+        openbao_pki_issuer_configured or
+        openbao_pki_signed_files.results[2].stat.mode == '0600'
+    fail_msg: The signed OpenBao intermediate inputs are missing or unprotected.
+  no_log: true
+  diff: false
+
+- name: Load the resumable request metadata
+  ansible.builtin.set_fact:
+    openbao_pki_request_metadata: >-
+      {{ lookup('ansible.builtin.file', openbao_pki_output_dir ~ '/request.json') | from_json }}
+    openbao_pki_signed_certificate: >-
+      {{ lookup('ansible.builtin.file', openbao_pki_output_dir ~ '/intermediate.crt') | trim }}
+    openbao_pki_signed_chain: >-
+      {{ lookup('ansible.builtin.file', openbao_pki_output_dir ~ '/chain.pem') | trim }}
+  when: not openbao_pki_issuer_configured
+  no_log: true
+  diff: false
+
+- name: Import the signed intermediate and its public root chain
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/intermediate/set-signed"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_pki_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    body_format: json
+    body:
+      certificate: "{{ openbao_pki_signed_chain }}"
+    return_content: true
+    status_code: 200
+  when: not openbao_pki_issuer_configured
+  register: openbao_pki_import_response
+  changed_when: true
+  no_log: true
+  diff: false
+
+- name: Resolve the imported intermediate issuer ID
+  ansible.builtin.set_fact:
+    openbao_pki_issuer_id: >-
+      {{
+        (
+          openbao_pki_import_response.json.data.mapping
+          | dict2items
+          | selectattr('value', 'equalto', openbao_pki_request_metadata.key_id)
+          | map(attribute='key')
+          | list
+          | first
+        )
+        if not openbao_pki_issuer_configured
+        else openbao_pki_issuer_configuration_before_import.json.data.default
+      }}
+  no_log: true
+  diff: false
+
+- name: Require the issuer backed by the OpenBao-generated key
+  ansible.builtin.assert:
+    that:
+      - openbao_pki_issuer_id | length > 0
+    fail_msg: The signed certificate did not match the OpenBao-held intermediate key.
+  no_log: true
+  diff: false
+
+- name: Read the resolved intermediate issuer before naming
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/issuer/{{ openbao_pki_issuer_id }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_pki_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    return_content: true
+    status_code: 200
+  register: openbao_pki_resolved_issuer
+  no_log: true
+  diff: false
+
+- name: Give the online intermediate a stable issuer name
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/issuer/{{ openbao_pki_issuer_id }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_pki_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    body_format: json
+    body:
+      issuer_name: "{{ openbao_pki_issuer_name }}"
+    return_content: true
+    status_code: 200
+  when: openbao_pki_resolved_issuer.json.data.issuer_name != openbao_pki_issuer_name
+  register: openbao_pki_named_issuer
+  changed_when: true
+  no_log: true
+  diff: false
+
+- name: Pin the default issuer to the online intermediate
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/config/issuers"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_pki_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    body_format: json
+    body:
+      default: "{{ openbao_pki_issuer_id }}"
+      default_follows_latest_issuer: false
+    return_content: true
+    status_code: 200
+  register: openbao_pki_issuer_configuration_write
+  changed_when: true
+  no_log: true
+  diff: false
+
+- name: Publish private issuing-certificate and CRL URLs
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/config/urls"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_pki_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    body_format: json
+    body:
+      issuing_certificates:
+        - "{{ openbao_pki_issuing_certificate_url }}"
+      crl_distribution_points:
+        - "{{ openbao_pki_crl_url }}"
+      enable_templating: false
+    return_content: true
+    status_code: 200
+  register: openbao_pki_urls_write
+  changed_when: true
+  no_log: true
+  diff: false
+
+- name: Read back the online intermediate issuer
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/issuer/{{ openbao_pki_issuer_id }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_pki_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    return_content: true
+    status_code: 200
+  register: openbao_pki_issuer
+  no_log: true
+  diff: false
+
+- name: Read back the issuer and URL configuration
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/{{ item }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_pki_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    return_content: true
+    status_code: 200
+  loop:
+    - config/issuers
+    - config/urls
+  loop_control:
+    label: "{{ item }}"
+  register: openbao_pki_configuration
+  no_log: true
+  diff: false
+
+- name: Fetch the issuing certificate over TLS without a token
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/ca/pem"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    return_content: true
+    status_code: 200
+  register: openbao_pki_public_ca
+
+- name: Fetch the trust chain over TLS without a token
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/ca_chain"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    return_content: true
+    status_code: 200
+  register: openbao_pki_public_chain
+
+- name: Fetch the CRL over TLS without a token
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/crl/pem"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    return_content: true
+    status_code: 200
+  register: openbao_pki_public_crl
+
+- name: Assert the online intermediate and private publication boundary
+  ansible.builtin.assert:
+    that:
+      - openbao_pki_issuer.json.data.issuer_name == openbao_pki_issuer_name
+      - openbao_pki_issuer.json.data.key_id | length > 0
+      - not openbao_pki_issuer.json.data.revoked
+      - >-
+        openbao_pki_configuration.results[0].json.data.default == openbao_pki_issuer_id
+      - not openbao_pki_configuration.results[0].json.data.default_follows_latest_issuer
+      - >-
+        openbao_pki_configuration.results[1].json.data.issuing_certificates ==
+        [openbao_pki_issuing_certificate_url]
+      - >-
+        openbao_pki_configuration.results[1].json.data.crl_distribution_points ==
+        [openbao_pki_crl_url]
+      - >-
+        (openbao_pki_public_ca.content | trim) ==
+        (openbao_pki_issuer.json.data.certificate | trim)
+      - >-
+        (openbao_pki_public_chain.content |
+        regex_findall('-----BEGIN CERTIFICATE-----') | length) >= 2
+      - openbao_pki_public_crl.content is search('-----BEGIN X509 CRL-----')
+  no_log: true
+  diff: false
+
+- name: Report redacted OpenBao online-intermediate acceptance
+  ansible.builtin.debug:
+    msg:
+      mount: "{{ openbao_pki_mount }}"
+      issuer_name: "{{ openbao_pki_issuer_name }}"
+      internal_key: true
+      private_key_exported: false
+      max_lease_ttl: 43800h
+      issuing_certificate_url: "{{ openbao_pki_issuing_certificate_url }}"
+      crl_distribution_point: "{{ openbao_pki_crl_url }}"
+      public_endpoints_require_token: false
+      temporary_token_revoked: true

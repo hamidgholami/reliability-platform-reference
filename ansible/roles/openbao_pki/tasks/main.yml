@@ -1,0 +1,168 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Confirm the bounded OpenBao PKI inputs
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname == 'bao-01'
+      - rpr_deployment_profile in ['workstation-validation', 'single-node-reference']
+      - openbao_pki_action in ['prepare', 'import']
+      - openbao_pki_api_address == '10.20.0.20'
+      - openbao_pki_api_port == 8200
+      - openbao_pki_api_dns_name == 'openbao.dev.apadanalab.de'
+      - openbao_pki_ca_path == '/opt/openbao/tls/ca.crt'
+      - openbao_pki_mount == 'pki_int'
+      - openbao_pki_policy_name == 'rpr-pki-bootstrap'
+      - openbao_pki_token_ttl == '15m'
+      - openbao_pki_max_lease_ttl_seconds == 157680000
+      - openbao_pki_key_name == 'rpr-online-intermediate'
+      - openbao_pki_issuer_name == 'rpr-online-intermediate'
+      - openbao_pki_common_name == 'ApadanaLab Online Intermediate CA'
+      - openbao_pki_organization == 'ApadanaLab'
+      - openbao_pki_organizational_unit == 'Platform Trust'
+      - openbao_pki_output_dir | length > 1
+      - openbao_pki_root_token | length >= 16
+    fail_msg: The OpenBao PKI boundary or protected token input is invalid.
+  no_log: true
+  diff: false
+
+- name: Inspect the protected intermediate directory on the controller
+  ansible.builtin.stat:
+    path: "{{ openbao_pki_output_dir }}"
+  delegate_to: localhost
+  register: openbao_pki_output_directory
+  no_log: true
+  diff: false
+
+- name: Require the protected intermediate directory
+  ansible.builtin.assert:
+    that:
+      - openbao_pki_output_directory.stat.isdir | default(false)
+      - openbao_pki_output_directory.stat.mode == '0700'
+    fail_msg: The protected OpenBao intermediate directory must exist with mode 0700.
+  no_log: true
+  diff: false
+
+- name: Derive non-secret OpenBao PKI configuration
+  ansible.builtin.set_fact:
+    openbao_pki_api_url: >-
+      https://{{ openbao_pki_api_address }}:{{ openbao_pki_api_port }}/v1
+    openbao_pki_policy_document: >-
+      {{ lookup('ansible.builtin.template', 'bootstrap-policy.hcl.j2') | trim }}
+    openbao_pki_issuing_certificate_url: >-
+      https://{{ openbao_pki_api_dns_name }}:{{ openbao_pki_api_port }}/v1/{{ openbao_pki_mount }}/ca
+    openbao_pki_crl_url: >-
+      https://{{ openbao_pki_api_dns_name }}:{{ openbao_pki_api_port }}/v1/{{ openbao_pki_mount }}/crl
+
+- name: Require an initialized and unsealed OpenBao service
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/sys/health"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    return_content: true
+    status_code: 200
+  register: openbao_pki_health
+
+- name: Assert the active OpenBao PKI state
+  ansible.builtin.assert:
+    that:
+      - openbao_pki_health.json.initialized
+      - not openbao_pki_health.json.sealed
+      - not openbao_pki_health.json.standby
+
+- name: Read the PKI bootstrap policy with the initial root token
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/sys/policies/acl/{{ openbao_pki_policy_name }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_pki_root_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    return_content: true
+    status_code:
+      - 200
+      - 404
+  register: openbao_pki_existing_policy
+  no_log: true
+  diff: false
+
+- name: Install the PKI bootstrap policy with the initial root token
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/sys/policies/acl/{{ openbao_pki_policy_name }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_pki_root_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    body_format: json
+    body:
+      policy: "{{ openbao_pki_policy_document }}"
+    status_code: 204
+  when: >-
+    openbao_pki_existing_policy.status == 404 or
+    (openbao_pki_existing_policy.json.data.policy | default('') | trim) !=
+    openbao_pki_policy_document
+  changed_when: true
+  no_log: true
+  diff: false
+
+- name: Create a bounded PKI bootstrap token
+  ansible.builtin.uri:
+    url: "{{ openbao_pki_api_url }}/auth/token/create-orphan"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_pki_root_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    body_format: json
+    body:
+      policies:
+        - "{{ openbao_pki_policy_name }}"
+      no_default_policy: true
+      renewable: false
+      ttl: "{{ openbao_pki_token_ttl }}"
+      explicit_max_ttl: "{{ openbao_pki_token_ttl }}"
+      display_name: rpr-pki-bootstrap
+      meta:
+        purpose: p2-02-online-intermediate
+    return_content: true
+    status_code: 200
+  register: openbao_pki_token_response
+  changed_when: true
+  no_log: true
+  diff: false
+
+- name: Retain the PKI bootstrap token only for this play
+  ansible.builtin.set_fact:
+    openbao_pki_token: "{{ openbao_pki_token_response.json.auth.client_token }}"
+    openbao_pki_token_created: true
+  no_log: true
+  diff: false
+
+- name: Configure the selected OpenBao PKI phase
+  block:
+    - name: Validate the bounded PKI bootstrap token
+      ansible.builtin.assert:
+        that:
+          - openbao_pki_token_response.json.auth.orphan
+          - not openbao_pki_token_response.json.auth.renewable
+          - openbao_pki_token_response.json.auth.lease_duration <= 900
+          - openbao_pki_token_response.json.auth.policies == [openbao_pki_policy_name]
+      no_log: true
+      diff: false
+
+    - name: Run the selected OpenBao PKI phase
+      ansible.builtin.include_tasks: "{{ openbao_pki_action }}.yml"
+
+  always:
+    - name: Revoke the bounded PKI bootstrap token
+      ansible.builtin.uri:
+        url: "{{ openbao_pki_api_url }}/auth/token/revoke-self"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_pki_token }}"
+        ca_path: "{{ openbao_pki_ca_path }}"
+        body_format: json
+        body: {}
+        status_code: 204
+      when: openbao_pki_token_created | default(false)
+      changed_when: true
+      no_log: true
+      diff: false

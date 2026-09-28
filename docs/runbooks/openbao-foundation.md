@@ -121,11 +121,10 @@ Keycloak, DNS-provider, or machine-authentication credentials.
 
 The service-foundation and operator-ceremony slices expose
 `configure-openbao`, `openbao-status`, `validate-openbao`,
-`initialize-openbao`, and `unseal-openbao`. The later API-object slice adds
-`bootstrap-openbao` only when its implementation is complete. Mutation targets
-require the selected profile, target identity, protected input locations,
-expected effect, and exact confirmation. Status and validation remain
-read-only.
+`initialize-openbao`, `unseal-openbao`, `bootstrap-openbao`, and
+`bootstrap-openbao-pki`. Mutation targets require the selected profile, target
+identity, protected input locations, expected effect, and exact confirmation.
+Status and validation remain read-only.
 
 Prepare a mode-`0700` directory outside the checkout containing `ca.crt`,
 `ca.crl`, `tls.crt`, and the unencrypted service key `tls.key`, each mode
@@ -272,6 +271,46 @@ synthetic key and revokes all three temporary tokens. Only the empty KV-v2 mount
 and three policies persist. The initial root token remains encrypted and active
 until recovery-capable administrative access is proven later in P2-02.
 
+## Bootstrap the online intermediate
+
+The online-intermediate ceremony is one guarded command even though it crosses
+the OpenBao and operator-root trust boundaries:
+
+```sh
+RPR_PKI_DIR=/absolute/protected/pki \
+PROFILE=workstation-validation \
+INCUS_CONFIG_DIR=/absolute/path/to/incus-client \
+INCUS_REMOTE=rpr-target \
+CONFIRM=bootstrap-openbao-pki-workstation-validation-rpr-target \
+make bootstrap-openbao-pki
+```
+
+The target asks once for the OpenBao recovery-key passphrase and, when a new
+signature is required, once for the offline-root passphrase. It then:
+
+1. creates `pki_int/` with a five-year maximum lease TTL;
+2. creates a 15-minute, non-renewable orphan token under the dedicated
+   `rpr-pki-bootstrap` policy;
+3. generates a named 3072-bit RSA key inside OpenBao and writes only its public
+   CSR under `RPR_PKI_DIR/openbao-intermediate`;
+4. validates the CSR subject, signature, algorithm, and strength before the
+   operator root signs a five-year, path-length-zero intermediate;
+5. imports the signed certificate and public root chain back into OpenBao;
+6. fixes the named default issuer and publishes its issuing-certificate and
+   CRL URLs under `openbao.dev.apadanalab.de`; and
+7. fetches the CA, chain, and CRL over authenticated TLS without a token,
+   confirms the configured endpoint name through both private BIND
+   secondaries, and revokes every temporary bootstrap token.
+
+No intermediate private key crosses the OpenBao API. The protected handoff
+directory contains only the CSR, signed certificates, and non-secret resumable
+metadata, all mode `0600`; the temporary plaintext initial root-token file is
+removed by a trap. A fixed OpenBao key name and the retained CSR allow the same
+command to resume after interruption without silently generating another key.
+If the issuer is already configured, the command validates and converges its
+name, default selection, URLs, and public endpoints without asking for the
+offline-root passphrase.
+
 Recovery uses a fresh isolated instance with no production DNS alias or client
 route. Verify the snapshot checksum, restore it, present the external Shamir
 share, and confirm one versioned synthetic KV value plus the non-secret PKI
@@ -301,5 +340,6 @@ maintain a compatibility abstraction.
 - [File audit device and rotation](https://openbao.org/docs/audit/file/)
 - [KV-v2 policy paths](https://openbao.org/docs/secrets/kv/kv-v2/)
 - [Token creation](https://openbao.org/docs/commands/token/create/)
+- [Intermediate CA setup](https://openbao.org/docs/2.6.x/secrets/pki/quick-start-intermediate-ca/)
 - [Operator initialization](https://openbao.org/docs/2.6.x/commands/operator/init/)
 - [OpenBao 2.0 mlock removal](https://openbao.org/docs/release-notes/2-0-0/)

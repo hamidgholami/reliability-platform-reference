@@ -43,6 +43,11 @@ The passphrase is neither stored nor accepted through an environment variable
 or command argument. Losing both the passphrase and recoverable root copy means
 creating a new trust hierarchy.
 
+The later `make bootstrap-openbao-pki` ceremony adds
+`openbao-intermediate/`. That handoff directory contains only the
+OpenBao-generated CSR, signed public chain, and resumable non-secret metadata;
+the intermediate private key remains inside OpenBao.
+
 ## Validate at any time
 
 ```sh
@@ -100,13 +105,18 @@ For stronger custody, remove the working `root-ca` directory from the Mac only
 after both restore checks pass. Restore it to the same protected layout when a
 renewal, revocation, or intermediate-signing operation is needed. The
 `openbao-bootstrap` runtime directory may remain on the Mac until OpenBao has
-replaced that certificate through its future online intermediate.
+replaced that certificate through its online intermediate.
 
 ## Policy and rollback
 
-The committed [`root-ca.cnf`](../../pki/offline-root/root-ca.cnf) is the
-non-secret issuance policy. It refuses CSR-provided extensions, allows only one
-path-length-zero intermediate, and fixes the bootstrap listener identities.
+The committed [`root-ca.cnf`](../../pki/offline-root/root-ca.cnf) and
+[`openbao-intermediate-policy.cnf`](../../pki/offline-root/openbao-intermediate-policy.cnf)
+are the non-secret issuance policy. CSR-provided extensions are refused, the
+intermediate is restricted to path length zero, and the signing wrapper checks
+its exact subject, signature, algorithm, strength, and public-key match. The
+separate intermediate policy tolerates the ASN.1 string-type difference between
+OpenBao's Go-generated CSR and the OpenSSL-generated root without weakening the
+bootstrap-listener policy.
 
 If creation fails, its staging directory is removed and no destination is
 installed. If renewal cannot install its validated output, the previous

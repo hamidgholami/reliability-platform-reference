@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+# OpenBao's Go-generated CSR uses PrintableString for this ASCII subject while
+# the OpenSSL-created root uses UTF8String. Exact subject values are enforced by
+# openbao-pki.sh before this presence-only OpenSSL policy is selected.
+[ policy_openbao_intermediate ]
+organizationName       = supplied
+organizationalUnitName = supplied
+commonName             = supplied
