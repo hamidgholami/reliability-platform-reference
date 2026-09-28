@@ -9,7 +9,7 @@ profile=${PROFILE:-}
 config_dir=${INCUS_CONFIG_DIR:-}
 remote=${INCUS_REMOTE:-}
 inventory=${OPENBAO_INVENTORY:-"$PWD/.cache/incus-substrate/openbao-hosts.json"}
-tls_input_dir=${OPENBAO_TLS_INPUT_DIR:-}
+tls_input_dir=${OPENBAO_TLS_INPUT_DIR:-${RPR_PKI_DIR:+$RPR_PKI_DIR/openbao-bootstrap}}
 
 fail()
 {

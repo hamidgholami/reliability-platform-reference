@@ -60,9 +60,9 @@ part of the trust boundary.
 
 The internal root profile, bootstrap listener issuance, CRL, custody, and
 rollback procedure are fixed in the
-[offline-root ceremony](runbooks/offline-root-ca.md). The committed OpenSSL
-configuration is non-secret policy; all CA state and private material remain
-outside the repository and platform.
+[operator-managed root workflow](runbooks/offline-root-ca.md). The committed
+OpenSSL configuration is non-secret policy; all CA state and private material
+remain outside the repository and platform.
 
 The internal DNS design is documented in
 [ADR-0003](adr/0003-separate-platform-and-kubernetes-dns-roles.md). Incus

@@ -115,7 +115,7 @@ scope.
 | Capacity | Every slice | Develop in the retained local Lima VM. P2-02 adds one 1-vCPU, 512-MiB, 4-GiB container and keeps AWS `t4g.small` plus 30-GiB `gp3`; measure before promotion and change the paid profile only after evidence of a capacity failure. |
 | DNS bootstrap secrets | P2-01 | Generate one random TSIG value per zone and secondary in a mode-`0600` ignored runtime file. Pass that file independently to OpenTofu and Ansible; never recover a key from state or output. |
 | Remaining bootstrap secrets and rotation | P2-02 onward | Closed for P2-02 by the secret inventory and ceremony in the OpenBao foundation runbook; later services extend that inventory before use. Bootstrap never depends on a healthy OpenBao instance to create OpenBao. |
-| Secrets-service configuration owner | P2-02 | Closed: OpenTofu owns the instance, host-enforced network ACL, and DNS records; Ansible owns the guest and static service configuration; narrowly scoped Ansible HTTP API tasks own OpenBao objects; and humans own offline-root and seal ceremonies. |
+| Secrets-service configuration owner | P2-02 | Closed: OpenTofu owns the instance, host-enforced network ACL, and DNS records; Ansible owns the guest and static service configuration; narrowly scoped Ansible HTTP API tasks own OpenBao objects; and humans retain root-key and seal custody. |
 | Operator browser access | P2-04 | Required before browser acceptance. Prefer route-limited WireGuard with split DNS; resolve endpoint placement, peer custody, revocation, and profile-specific ingress before implementation. Do not expose private services publicly. |
 
 Any choice that changes a platform or trust boundary requires an ADR. Version
@@ -204,8 +204,8 @@ captures the completed workstation run. Promotion to the real
 
 ### P2-02 — Internal PKI and secrets foundation
 
-- [x] Implement the reviewed offline-root procedure without committing or
-  automating custody of the root private key.
+- [x] Implement the reviewed operator-managed root workflow without committing
+  or transferring custody of the root private key to the platform or CI.
 - [ ] Create one bounded secrets-service instance with TLS, integrated storage,
   swap disabled at the service boundary, a host-enforced Incus network ACL,
   and no public listener. Do not configure obsolete OpenBao `mlock` settings.

@@ -8,9 +8,8 @@ fixture_dir=$(mktemp -d)
 output_file=$(mktemp)
 trap 'rm -rf "$fixture_dir"; rm -f "$output_file"' EXIT HUP INT TERM
 
-root_dir="$fixture_dir/root"
-tls_dir="$fixture_dir/tls"
-passphrase_file="$fixture_dir/root-passphrase"
+pki_dir="$fixture_dir/operator-pki"
+passphrase=$(openssl rand -hex 24)
 
 expect_failure()
 {
@@ -30,60 +29,51 @@ expect_failure()
 }
 
 expect_failure \
-  "OPENBAO_TLS_INPUT_DIR must be an absolute protected directory" \
-  env OPENBAO_TLS_INPUT_DIR=relative \
-  ./scripts/validate-openbao-bootstrap-tls.sh
+  "RPR_PKI_DIR must be an absolute path outside the repository" \
+  env RPR_PKI_DIR=relative \
+  ./scripts/openbao-pki.sh create
 
-install -d -m 0700 \
-  "$root_dir/certs" "$root_dir/crl" "$root_dir/newcerts" \
-  "$root_dir/private" "$tls_dir"
-install -m 0600 pki/offline-root/root-ca.cnf "$root_dir/root-ca.cnf"
-: >"$root_dir/index.txt"
-printf '1000\n' >"$root_dir/serial"
-printf '1000\n' >"$root_dir/crlnumber"
-openssl rand -hex 24 >"$passphrase_file"
-chmod 0600 "$passphrase_file"
+printf '%s\n%s\n' "$passphrase" "$passphrase" |
+  env RPR_PKI_DIR="$pki_dir" \
+  ./scripts/openbao-pki.sh create >"$output_file" 2>&1
 
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
-  -aes-256-cbc -pass file:"$passphrase_file" \
-  -out "$root_dir/private/root-ca.key" >/dev/null 2>&1
+[ -s "$pki_dir/root-ca/private/root-ca.key" ]
+[ -s "$pki_dir/root-ca/index.txt" ]
+[ -s "$pki_dir/root-ca/crl/root-ca.crl" ]
+[ -s "$pki_dir/openbao-bootstrap/ca.crt" ]
+[ -s "$pki_dir/openbao-bootstrap/ca.crl" ]
+[ -s "$pki_dir/openbao-bootstrap/tls.crt" ]
+[ -s "$pki_dir/openbao-bootstrap/tls.key" ]
 
-(
-  cd "$root_dir"
-  openssl req -config root-ca.cnf -new -x509 -days 3650 -sha384 \
-    -extensions root_ca_extensions \
-    -key private/root-ca.key -passin file:"$passphrase_file" \
-    -subj '/O=ApadanaLab/OU=Platform Trust/CN=ApadanaLab Offline Root CA' \
-    -out certs/root-ca.crt >/dev/null 2>&1
-)
-
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
-  -out "$tls_dir/tls.key" >/dev/null 2>&1
-openssl req -new -sha384 -key "$tls_dir/tls.key" \
-  -subj '/O=ApadanaLab/OU=Platform Services/CN=openbao.dev.apadanalab.de' \
-  -out "$root_dir/openbao-bootstrap.csr" >/dev/null 2>&1
-
-(
-  cd "$root_dir"
-  openssl ca -batch -config root-ca.cnf \
-    -extensions openbao_bootstrap_server -days 30 -notext -md sha384 \
-    -passin file:"$passphrase_file" \
-    -in openbao-bootstrap.csr -out "$tls_dir/tls.crt" >/dev/null 2>&1
-  openssl ca -batch -config root-ca.cnf -gencrl \
-    -passin file:"$passphrase_file" \
-    -out "$tls_dir/ca.crl" >/dev/null 2>&1
-)
-
-install -m 0600 "$root_dir/certs/root-ca.crt" "$tls_dir/ca.crt"
-chmod 0600 "$tls_dir/tls.crt" "$tls_dir/tls.key" "$tls_dir/ca.crl"
-
-OPENBAO_TLS_INPUT_DIR="$tls_dir" \
+RPR_PKI_DIR="$pki_dir" \
   ./scripts/validate-openbao-bootstrap-tls.sh >/dev/null
 
-chmod 0644 "$tls_dir/tls.key"
+first_fingerprint=$(openssl x509 \
+  -in "$pki_dir/openbao-bootstrap/tls.crt" \
+  -noout -fingerprint -sha256)
+
+expect_failure \
+  "RPR_PKI_DIR already exists; refusing to overwrite root CA state" \
+  env RPR_PKI_DIR="$pki_dir" \
+  ./scripts/openbao-pki.sh create
+
+printf '%s\n' "$passphrase" |
+  env RPR_PKI_DIR="$pki_dir" \
+  ./scripts/openbao-pki.sh renew >"$output_file" 2>&1
+
+second_fingerprint=$(openssl x509 \
+  -in "$pki_dir/openbao-bootstrap/tls.crt" \
+  -noout -fingerprint -sha256)
+[ "$first_fingerprint" != "$second_fingerprint" ]
+[ "$(find "$pki_dir/archive" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" = "1" ]
+
+RPR_PKI_DIR="$pki_dir" \
+  ./scripts/validate-openbao-bootstrap-tls.sh >/dev/null
+
+chmod 0644 "$pki_dir/openbao-bootstrap/tls.key"
 expect_failure \
   "every OpenBao TLS input file must use mode 0600" \
-  env OPENBAO_TLS_INPUT_DIR="$tls_dir" \
+  env RPR_PKI_DIR="$pki_dir" \
   ./scripts/validate-openbao-bootstrap-tls.sh
 
-echo "Offline-root policy checks passed."
+echo "Operator-managed root policy checks passed."

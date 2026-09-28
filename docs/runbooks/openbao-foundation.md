@@ -62,9 +62,9 @@ architecture. It must:
 
 | Material | Producer and consumers | Storage and backup | Rotation or retirement | Evidence rule |
 | --- | --- | --- | --- | --- |
-| Offline-root private key and passphrase | Human offline ceremony; root signs only intermediates and its CRL | Encrypted removable storage in at least two independently recoverable locations, with the passphrase held separately; never on the platform | Replace before expiry or after suspected exposure; remove the old root from trust only after migration | Never publish the key, passphrase, filesystem path, or unredacted command output |
+| Root private key and passphrase | Guarded operator workflow; root signs only approved leaves, intermediates, and its CRL | Protected workstation storage during bootstrap plus two independently recoverable encrypted backups, with the passphrase held separately; never on the platform | Replace before expiry or after suspected exposure; remove the old root from trust only after migration | Never publish the key, passphrase, filesystem path, or unredacted command output |
 | Root certificate and CRL | Offline ceremony; clients and OpenBao PKI consume public copies | Published trust bundle and recovery kit; safe to back up with configuration | Reissue CRL on intermediate revocation; distribute replacement root deliberately | Certificate, fingerprint, serial, validity, and CRL are publishable |
-| Bootstrap listener private key and certificate | Offline-root ceremony; Ansible installs them for first TLS startup | Mode-`0600` runtime input outside Git; no long-term backup | Replace with an online-intermediate leaf after PKI bootstrap, revoke when applicable, then delete the runtime copy | Publish only subject, issuer, serial, validity, and fingerprints |
+| Bootstrap listener private key and certificate | Operator-root workflow; Ansible installs them for first TLS startup | Mode-`0600` runtime input outside Git; no long-term backup | Replace with an online-intermediate leaf after PKI bootstrap, revoke when applicable, then delete the runtime copy | Publish only subject, issuer, serial, validity, and fingerprints |
 | Shamir unseal shares | `bao operator init`; human custodians decrypt and present a threshold | Each encrypted share is stored separately outside Git and ordinary backups | Rotate after custodian change or suspected exposure; invalidate the prior set after validation | Never publish encrypted or decrypted shares, QR codes, paths, or command output |
 | Initial root token | `bao operator init`; used only for first policy and token-role configuration | PGP-encrypted ceremony output; decrypt only for the bounded bootstrap session | Revoke after a scoped bootstrap administrator and root-regeneration recovery are proven; no backup afterward | Record only the revocation result and token accessor when safe |
 | Bootstrap administrator token | Created under the initial root token; consumed by protected API automation | Mode-`0600` file outside Git for one bounded work session | Short explicit maximum TTL, no renewal; revoke on completion or exposure | Never publish the value; accessor, policy names, TTL, and revocation result are publishable |
@@ -81,12 +81,12 @@ Keycloak, DNS-provider, or machine-authentication credentials.
 
 1. Verify the signed repository revision, target host identity, time sync, and
    OpenBao release provenance.
-2. In the offline-root environment, create or recover the root CA and its CA
-   database. Produce the public root certificate, current CRL, and one
-   short-lived bootstrap listener certificate for the reviewed private names
-   and address by following the
-   [offline-root ceremony](offline-root-ca.md). Custody of the root key and
-   passphrase is never automated.
+2. On the trusted operator workstation, create or recover the root CA and its
+   CA database through the guarded
+   [operator-root workflow](offline-root-ca.md). Produce the public root
+   certificate, current CRL, and one-year bootstrap listener certificate
+   for the reviewed private names and address. Back up the root state to
+   encrypted offline storage; neither the platform nor CI receives custody.
 3. OpenTofu creates only the bounded instance, profile, address, network ACL,
    and private DNS data.
 4. Ansible installs and verifies OpenBao, places the supplied TLS material,

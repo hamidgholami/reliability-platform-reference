@@ -1,159 +1,115 @@
-# Offline Root CA Ceremony
+# Operator-Managed Root CA Workflow
 
-This procedure creates or recovers the human-owned internal root CA and issues
-the short-lived bootstrap listener certificate required by P2-02. Run the root
-steps on a deliberately offline device. The private root key, its passphrase,
-the CA database, and their storage paths are never repository or platform
-inputs.
+This is the P2-02 workstation workflow for creating and renewing the internal
+root CA and OpenBao bootstrap listener certificate. It deliberately optimizes
+for a non-production reference environment: generation happens on the trusted
+operator Mac, while encrypted offline backup can follow after validation.
 
-The committed [`root-ca.cnf`](../../pki/offline-root/root-ca.cnf) is policy, not
-custody automation. It fixes the allowed OpenBao listener identities, refuses
-CSR-provided extensions, permits only one path-length-zero intermediate below
-the root, and uses SHA-384 signatures. Review it from a signed repository
-revision before transferring it to the offline environment.
+The root key remains human-owned, encrypted, and outside the repository. It is
+never copied to OpenBao, Ansible, Incus, CI, or repository state.
 
-## Fixed lifetimes and names
+## Create the CA and listener certificate
 
-| Artifact | Lifetime | Required identity or constraint |
-| --- | --- | --- |
-| Offline root | 10 years | `ApadanaLab Offline Root CA`, CA path length 1 |
-| Root CRL | 30 days | Signed by the offline root |
-| Bootstrap listener | 30 days | TLS server only; the two private DNS names and `10.20.0.20` |
-| Future online intermediate | Set during the later PKI slice | CA path length 0; private key generated inside OpenBao |
-
-Thirty days is long enough for the bounded bootstrap and short enough that the
-temporary listener certificate cannot silently become permanent. Stop if the
-bootstrap cannot finish within that window; issue a new leaf rather than
-extending the existing one.
-
-## 1. Prepare the connected workstation request
-
-Use a protected directory outside the checkout. The listener key is
-intentionally unencrypted because the OpenBao service must start unattended;
-its filesystem mode and short lifetime are the compensating controls.
+Choose one absolute protected path outside the checkout and run:
 
 ```sh
-umask 077
-export RPR_OPENBAO_TLS_DIR=/absolute/protected/openbao-bootstrap
-export RPR_OPENBAO_CSR_DIR=/absolute/protected/csr-transfer
-install -d -m 0700 "$RPR_OPENBAO_TLS_DIR" "$RPR_OPENBAO_CSR_DIR"
-
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 \
-  -out "$RPR_OPENBAO_TLS_DIR/tls.key"
-chmod 0600 "$RPR_OPENBAO_TLS_DIR/tls.key"
-
-openssl req -new -sha384 \
-  -key "$RPR_OPENBAO_TLS_DIR/tls.key" \
-  -subj '/O=ApadanaLab/OU=Platform Services/CN=openbao.dev.apadanalab.de' \
-  -out "$RPR_OPENBAO_CSR_DIR/openbao-bootstrap.csr"
-
-openssl req -in "$RPR_OPENBAO_CSR_DIR/openbao-bootstrap.csr" \
-  -noout -verify -subject
-openssl dgst -sha256 "$RPR_OPENBAO_CSR_DIR/openbao-bootstrap.csr"
+RPR_PKI_DIR=/absolute/protected/pki make openbao-pki-create
 ```
 
-Transfer only `openbao-bootstrap.csr` and the reviewed `root-ca.cnf` to the
-offline device. Compare their SHA-256 digests through a separate trusted
-channel before signing. The listener private key never enters the offline-root
-kit or removable transfer media.
+The target prompts twice for a new root passphrase and then:
 
-## 2. Create or recover the offline root
+- creates an AES-256-encrypted 4096-bit root key and ten-year root certificate;
+- initializes the OpenSSL CA database and serial/CRL state;
+- creates a 3072-bit OpenBao listener key and one-year certificate;
+- fixes the listener SANs to `openbao.dev.apadanalab.de`,
+  `bao-01.dev.apadanalab.de`, and `10.20.0.20`;
+- generates a one-year CRL;
+- applies mode `0700` to protected directories and `0600` to their files; and
+- validates the chain, CRL, purpose, lifetime, SANs, modes, and key match.
 
-For a new root, initialize an empty protected CA database. Choose a strong root
-passphrase interactively; do not put it in an environment variable, command
-argument, script, terminal recording, or ordinary password manager export.
+Creation is staged beside the selected destination and installed only after
+validation. It refuses to run if `RPR_PKI_DIR` already exists, so it cannot
+silently replace the root or CA database.
 
-```sh
-umask 077
-export RPR_ROOT_CA_DIR=/absolute/offline/apadanalab-root-ca
-install -d -m 0700 \
-  "$RPR_ROOT_CA_DIR" \
-  "$RPR_ROOT_CA_DIR/certs" \
-  "$RPR_ROOT_CA_DIR/crl" \
-  "$RPR_ROOT_CA_DIR/newcerts" \
-  "$RPR_ROOT_CA_DIR/private" \
-  "$RPR_ROOT_CA_DIR/incoming" \
-  "$RPR_ROOT_CA_DIR/outgoing"
-install -m 0600 /trusted/transfer/root-ca.cnf \
-  "$RPR_ROOT_CA_DIR/root-ca.cnf"
-touch "$RPR_ROOT_CA_DIR/index.txt"
-printf '1000\n' >"$RPR_ROOT_CA_DIR/serial"
-printf '1000\n' >"$RPR_ROOT_CA_DIR/crlnumber"
+The result has this shape:
 
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 \
-  -aes-256-cbc -out "$RPR_ROOT_CA_DIR/private/root-ca.key"
-chmod 0600 "$RPR_ROOT_CA_DIR/private/root-ca.key"
-
-cd "$RPR_ROOT_CA_DIR"
-openssl req -config root-ca.cnf -new -x509 -days 3650 -sha384 \
-  -extensions root_ca_extensions \
-  -key private/root-ca.key \
-  -subj '/O=ApadanaLab/OU=Platform Trust/CN=ApadanaLab Offline Root CA' \
-  -out certs/root-ca.crt
+```text
+RPR_PKI_DIR/
+├── root-ca/                 # encrypted key, CA database, policy, and CRL
+└── openbao-bootstrap/       # ca.crt, ca.crl, tls.crt, and tls.key
 ```
 
-For an existing root, restore the entire CA directory—not only the key and
-certificate—and verify its backup checksum before continuing. Recreating
-`index.txt`, serial state, or CRL numbering would break revocation history.
+The passphrase is neither stored nor accepted through an environment variable
+or command argument. Losing both the passphrase and recoverable root copy means
+creating a new trust hierarchy.
 
-## 3. Inspect and sign the bootstrap request
-
-Place the transported CSR at `incoming/openbao-bootstrap.csr`. Review its
-signature, subject, and public-key size. The CA policy supplies the SANs and
-does not copy unreviewed CSR extensions.
+## Validate at any time
 
 ```sh
-cd "$RPR_ROOT_CA_DIR"
-openssl req -in incoming/openbao-bootstrap.csr \
-  -noout -verify -subject -text
-
-openssl ca -config root-ca.cnf \
-  -extensions openbao_bootstrap_server \
-  -days 30 -notext -md sha384 \
-  -in incoming/openbao-bootstrap.csr \
-  -out outgoing/tls.crt
-
-openssl ca -config root-ca.cnf -gencrl \
-  -out crl/root-ca.crl
-
-install -m 0600 certs/root-ca.crt outgoing/ca.crt
-install -m 0600 crl/root-ca.crl outgoing/ca.crl
-```
-
-Do not use `-batch` for the real signing ceremony: the two OpenSSL confirmation
-prompts are intentional human review gates. Transfer only `ca.crt`, `ca.crl`,
-and `tls.crt` back to the connected workstation and verify transfer digests
-through the separate trusted channel.
-
-## 4. Assemble and validate the runtime input
-
-Install the returned public artifacts beside the listener key. Although the
-CRL is public, mode `0600` keeps the entire one-use transfer directory under a
-single simple protection rule.
-
-```sh
-install -m 0600 /trusted/return/ca.crt "$RPR_OPENBAO_TLS_DIR/ca.crt"
-install -m 0600 /trusted/return/ca.crl "$RPR_OPENBAO_TLS_DIR/ca.crl"
-install -m 0600 /trusted/return/tls.crt "$RPR_OPENBAO_TLS_DIR/tls.crt"
-
-OPENBAO_TLS_INPUT_DIR="$RPR_OPENBAO_TLS_DIR" \
+RPR_PKI_DIR=/absolute/protected/pki \
 make validate-openbao-bootstrap-tls
 ```
 
-The validation checks the root and CRL signatures, current revocation state,
-remaining lifetime, TLS-server purpose, exact SANs, key match, and modes. Its
-output contains only publishable certificate and CRL metadata.
+The output contains only publishable certificate and CRL metadata. Do not
+publish the root directory path, listener key, CA database, or passphrase.
 
-## Custody, backup, and rollback
+## Configure OpenBao
 
-Before using the root, make two independently recoverable encrypted copies of
-the complete CA directory. Hold the passphrase separately and record custodians,
-media identifiers, root fingerprint, CRL number, and next-update time without
-recording private paths or secrets. Prove one restore on an isolated offline
-device before describing the copies as recoverable.
+`RPR_PKI_DIR` also supplies the TLS input to the guarded service workflow:
 
-If inspection or validation fails, do not edit an issued certificate. Revoke
-it from the offline CA database, generate a new CRL, destroy the connected
-listener key and certificate, and begin again with a fresh key and CSR. If the
-root key or passphrase may be exposed, stop platform bootstrap and replace the
-root; deleting local files alone does not repair lost trust.
+```sh
+RPR_PKI_DIR=/absolute/protected/pki \
+PROFILE=workstation-validation \
+INCUS_CONFIG_DIR=/absolute/path/to/incus-client \
+INCUS_REMOTE=rpr-target \
+CONFIRM=configure-openbao-workstation-validation-rpr-target \
+make configure-openbao
+```
+
+Only the root certificate and listener material enter `bao-01`. The encrypted
+root key and CA database stay in `root-ca` on the operator side.
+
+## Renew the listener certificate
+
+Before expiry, run:
+
+```sh
+RPR_PKI_DIR=/absolute/protected/pki make openbao-pki-renew
+```
+
+The target prompts once for the existing root passphrase, verifies the key and
+committed policy, creates a new listener key and one-year certificate, refreshes
+the CRL, validates the result, and moves the previous listener input under the
+protected `archive` directory for rollback. It never replaces the root.
+
+Rerun `configure-openbao` to install the renewed listener material. After the
+new certificate is proven in service and rollback is no longer required,
+remove the archived listener key through a separately reviewed cleanup action.
+
+Renewal changes the CA database, serial, CRL number, and CRL. Back up the
+updated `root-ca` directory after every issuance, renewal, or revocation.
+
+## Backup and optional offline custody
+
+After creation succeeds, copy the complete `root-ca` directory—not merely its
+key and certificate—to two independently recoverable encrypted locations.
+Verify that each copy can decrypt the key and that the certificate, CA database,
+serial files, and CRL are present.
+
+For stronger custody, remove the working `root-ca` directory from the Mac only
+after both restore checks pass. Restore it to the same protected layout when a
+renewal, revocation, or intermediate-signing operation is needed. The
+`openbao-bootstrap` runtime directory may remain on the Mac until OpenBao has
+replaced that certificate through its future online intermediate.
+
+## Policy and rollback
+
+The committed [`root-ca.cnf`](../../pki/offline-root/root-ca.cnf) is the
+non-secret issuance policy. It refuses CSR-provided extensions, allows only one
+path-length-zero intermediate, and fixes the bootstrap listener identities.
+
+If creation fails, its staging directory is removed and no destination is
+installed. If renewal cannot install its validated output, the previous
+listener directory is restored. A suspected root-key or passphrase compromise
+requires replacing the trust hierarchy; deleting a local copy alone does not
+repair lost trust.

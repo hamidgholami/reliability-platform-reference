@@ -4,7 +4,7 @@
 
 set -eu
 
-tls_input_dir=${OPENBAO_TLS_INPUT_DIR:-}
+tls_input_dir=${OPENBAO_TLS_INPUT_DIR:-${RPR_PKI_DIR:+$RPR_PKI_DIR/openbao-bootstrap}}
 
 fail()
 {

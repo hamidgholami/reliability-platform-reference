@@ -48,7 +48,7 @@ must not substitute for an attributable human approval. See
 
 The signed repository and verified OpenBao package may create an empty, sealed
 service, but they cannot produce their own external trust. A human operator
-supplies a bootstrap listener certificate from the offline-root procedure,
+supplies a bootstrap listener certificate from the operator-root workflow,
 initializes OpenBao with encrypted Shamir outputs, and presents the threshold
 shares only through interactive unseal input. The initial root token exists only
 long enough to install scoped policy and a bounded bootstrap administrator.

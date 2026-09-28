@@ -15,7 +15,8 @@ ANSIBLE_ENV = ANSIBLE_CONFIG=$(CURDIR)/ansible.cfg ANSIBLE_HOME=$(CURDIR)/.cache
 	private-dns-primary-check private-dns-primary validate-private-dns-primary \
 	incus-client-check test-ansible-safety test-lima-safety \
 	test-incus-substrate-safety test-private-dns-safety test-openbao-safety \
-	test-offline-root-policy validate-openbao-bootstrap-tls \
+	test-offline-root-policy openbao-pki-create openbao-pki-renew \
+	validate-openbao-bootstrap-tls \
 	private-dns-secrets configure-private-dns validate-private-dns \
 	accept-private-dns configure-openbao openbao-status validate-openbao \
 	bootstrap-incus plan apply validate destroy aws-plan aws-apply \
@@ -170,6 +171,12 @@ accept-private-dns: ## Exercise DNS propagation and one-secondary continuity (re
 
 validate-openbao-bootstrap-tls: ## Validate protected bootstrap certificate inputs and print public metadata.
 	@./scripts/validate-openbao-bootstrap-tls.sh
+
+openbao-pki-create: ## Create a protected local root CA and one-year OpenBao listener certificate.
+	@./scripts/openbao-pki.sh create
+
+openbao-pki-renew: ## Renew the OpenBao listener certificate and archive its previous input.
+	@./scripts/openbao-pki.sh renew
 
 configure-openbao: ## Install and configure OpenBao (requires protected TLS input and exact CONFIRM).
 	@./scripts/openbao.sh configure
