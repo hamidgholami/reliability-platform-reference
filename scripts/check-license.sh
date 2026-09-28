@@ -61,6 +61,8 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   scripts/ansible-target.sh scripts/openbao-pki.sh scripts/openbao-ceremony.sh \
   scripts/openbao-audit.sh scripts/openbao-audit-acceptance-remote.sh \
   scripts/openbao-bootstrap.sh \
+  scripts/openbao-root-retirement.sh \
+  scripts/openbao-root-retirement-remote.py \
   scripts/validate-openbao-bootstrap-tls.sh \
   tests/ansible-target-safety.sh \
   tests/fixtures/openbao-ceremony/incus \
@@ -69,6 +71,7 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   ansible/playbooks/prepare-openbao-pki.yml \
   ansible/playbooks/import-openbao-pki.yml \
   ansible/playbooks/rotate-openbao-certificate.yml \
+  ansible/playbooks/configure-openbao-root-recovery.yml \
   ansible/roles/openbao_bootstrap/defaults/main.yml \
   ansible/roles/openbao_bootstrap/meta/argument_specs.yml \
   ansible/roles/openbao_bootstrap/tasks/main.yml \
@@ -83,6 +86,11 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   ansible/roles/openbao_pki/tasks/rotate.yml \
   ansible/roles/openbao_pki/templates/bootstrap-policy.hcl.j2 \
   ansible/roles/openbao_pki/templates/leaf-policy.hcl.j2 \
+  ansible/roles/openbao_root_recovery/defaults/main.yml \
+  ansible/roles/openbao_root_recovery/meta/argument_specs.yml \
+  ansible/roles/openbao_root_recovery/tasks/main.yml \
+  ansible/roles/openbao_root_recovery/templates/bootstrap-policy.hcl.j2 \
+  ansible/roles/openbao_root_recovery/templates/root-generation-policy.hcl.j2 \
   infrastructure/bootstrap/aws-single-node/versions.tf \
   infrastructure/bootstrap/aws-single-node/variables.tf \
   infrastructure/bootstrap/aws-single-node/main.tf \

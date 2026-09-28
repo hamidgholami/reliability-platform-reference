@@ -1,0 +1,20 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+openbao_root_recovery_api_address: 10.20.0.20
+openbao_root_recovery_api_port: 8200
+openbao_root_recovery_api_dns_name: openbao.dev.apadanalab.de
+openbao_root_recovery_ca_path: /opt/openbao/tls/ca.crt
+openbao_root_recovery_initial_token_file: >-
+  {{ lookup('ansible.builtin.env', 'OPENBAO_ROOT_TOKEN_FILE') }}
+openbao_root_recovery_initial_token: >-
+  {{ lookup('ansible.builtin.file', openbao_root_recovery_initial_token_file) | trim }}
+openbao_root_recovery_client_dir: >-
+  {{ lookup('ansible.builtin.env', 'OPENBAO_ROOT_RECOVERY_CLIENT_DIR') }}
+openbao_root_recovery_policy_name: rpr-root-generation
+openbao_root_recovery_bootstrap_policy_name: rpr-root-recovery-bootstrap
+openbao_root_recovery_auth_mount: cert
+openbao_root_recovery_auth_role_name: rpr-root-generation
+openbao_root_recovery_token_ttl: 5m
+openbao_root_recovery_bootstrap_token_ttl: 15m

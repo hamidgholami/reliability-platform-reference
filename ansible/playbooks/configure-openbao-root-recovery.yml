@@ -1,0 +1,15 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Configure authenticated OpenBao root-token recovery
+  hosts: openbao_service
+  gather_facts: false
+  any_errors_fatal: true
+  become: false
+  roles:
+    - role: openbao_root_recovery
+      vars:
+        openbao_root_recovery_api_address: "{{ openbao_api_address }}"
+        openbao_root_recovery_api_port: "{{ openbao_api_port }}"
+        openbao_root_recovery_api_dns_name: "{{ openbao_api_dns_name }}"

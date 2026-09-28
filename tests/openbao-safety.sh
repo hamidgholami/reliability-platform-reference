@@ -115,6 +115,15 @@ expect_failure \
   ./scripts/openbao-bootstrap.sh leaf
 
 expect_failure \
+  "set CONFIRM=retire-openbao-root-token-workstation-validation-rpr-target" \
+  env PROFILE=workstation-validation \
+  INCUS_CONFIG_DIR="$fixture_dir/incus" \
+  INCUS_REMOTE=rpr-target \
+  RPR_PKI_DIR="$fixture_dir/pki" \
+  CONFIRM= \
+  ./scripts/openbao-root-retirement.sh
+
+expect_failure \
   "OpenBao protected directories must remain outside the repository" \
   env PROFILE=workstation-validation \
   INCUS_CONFIG_DIR="$fixture_dir/incus" \
@@ -141,6 +150,29 @@ if grep -F \
   echo "Listener rotation must sign a service-local CSR, not export a generated key." >&2
   exit 1
 fi
+
+grep -F 'path "sys/generate-root-token/attempt"' \
+  ansible/roles/openbao_root_recovery/templates/root-generation-policy.hcl.j2 \
+  >/dev/null
+grep -F 'path "sys/generate-root-token/update"' \
+  ansible/roles/openbao_root_recovery/templates/root-generation-policy.hcl.j2 \
+  >/dev/null
+if grep -R -F 'path "sys/generate-root/' \
+  ansible/roles/openbao_root_recovery >/dev/null; then
+  echo "Root recovery must not enable the legacy unauthenticated endpoint." >&2
+  exit 1
+fi
+grep -F 'token_no_default_policy: true' \
+  ansible/roles/openbao_root_recovery/tasks/main.yml >/dev/null
+grep -F 'token_type: service' \
+  ansible/roles/openbao_root_recovery/tasks/main.yml >/dev/null
+if grep -F 'token_type: default-service' \
+  ansible/roles/openbao_root_recovery/tasks/main.yml >/dev/null; then
+  echo "OpenBao 2.6.3 certificate auth rejects default-service." >&2
+  exit 1
+fi
+grep -F 'initial_root_revoked' scripts/openbao-root-retirement-remote.py >/dev/null
+grep -F "jq 'del(.root_token)'" scripts/openbao-root-retirement.sh >/dev/null
 
 jq -n '{
   all: {

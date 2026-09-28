@@ -67,6 +67,7 @@ architecture. It must:
 | Bootstrap listener private key and certificate | Operator-root workflow; Ansible installs them for first TLS startup | Mode-`0600` runtime input outside Git; no long-term backup | Replace with an online-intermediate leaf after PKI bootstrap, revoke when applicable, then delete the runtime copy | Publish only subject, issuer, serial, validity, and fingerprints |
 | Shamir unseal share | `bao operator init`; the human operator decrypts and presents it | PGP-encrypted to a dedicated passphrase-protected recovery key outside Git; back up the complete recovery directory twice | Rekey after suspected exposure or before adding real independent custodians | Never publish the encrypted or decrypted share, recovery key, passphrase, path, or command output |
 | Initial root token | `bao operator init`; used only for first policy and token-role configuration | PGP-encrypted to the same dedicated recovery key; decrypt only as a stream for the bounded bootstrap session | Revoke after a scoped bootstrap administrator and root-regeneration recovery are proven; no backup afterward | Record only the revocation result and token accessor when safe |
+| Root-generation client credential | Guarded retirement workflow; OpenBao certificate auth exact-pins its public certificate | Self-signed client certificate and PGP-encrypted private key in the protected recovery kit outside Git; back up with the Shamir material | Five-year certificate; replace before expiry or immediately after suspected exposure | Publish only its subject, validity, and the fact that exact pinning succeeded |
 | Bootstrap administrator token | Created under the initial root token; consumed by protected API automation | Mode-`0600` file outside Git for one bounded work session | Short explicit maximum TTL, no renewal; revoke on completion or exposure | Never publish the value; accessor, policy names, TTL, and revocation result are publishable |
 | Online-intermediate private key | Generated and retained by the OpenBao PKI engine | Encrypted Raft storage and encrypted snapshots; never exported | Rotate before expiry or on compromise; offline root revokes and replaces it | Publish only CSR, certificates, fingerprints, serials, validity, and CRL URLs |
 | Service leaf private keys | Generated for the consuming service or by its approved issuance flow | Only the consuming service's protected runtime; backup is not required for replaceable leaves | Renew before expiry and revoke on exposure or decommission | Never publish keys or full issuance responses |
@@ -115,17 +116,20 @@ Keycloak, DNS-provider, or machine-authentication credentials.
    exporting either the intermediate key or the service key. After issuance and
    renewal acceptance, the operator removes the retired bootstrap listener key
    from ordinary workstation storage.
-10. Validate scoped administration and a root-regeneration ceremony using the
-    external unseal share, revoke the generated recovery root token, then
-    revoke the initial root token. Routine automation must fail if only that
-    retired token exists.
+10. Exact-pin a dedicated root-generation client certificate, then validate
+    scoped administration through an authenticated root-regeneration ceremony
+    using that certificate and the external unseal share. Revoke the scoped
+    administrator, generated root, and certificate-login tokens before
+    revoking the initial root token and removing it from the recovery bundle.
+    The legacy unauthenticated root-generation endpoint remains disabled.
 
 The service-foundation and operator-ceremony slices expose
 `configure-openbao`, `openbao-status`, `validate-openbao`,
-`initialize-openbao`, `unseal-openbao`, `bootstrap-openbao`, and
-`bootstrap-openbao-pki`. Mutation targets require the selected profile, target
-identity, protected input locations, expected effect, and exact confirmation.
-Status and validation remain read-only.
+`initialize-openbao`, `unseal-openbao`, `bootstrap-openbao`,
+`bootstrap-openbao-pki`, `rotate-openbao-certificate`, and
+`retire-openbao-root-token`. Mutation targets require the selected profile,
+target identity, protected input locations, expected effect, and exact
+confirmation. Status and validation remain read-only.
 
 Prepare a mode-`0700` directory outside the checkout containing `ca.crt`,
 `ca.crl`, `tls.crt`, and the unencrypted service key `tls.key`, each mode
@@ -270,7 +274,7 @@ synthetic versions with exact CAS, confirms version metadata, and proves the
 machine policy is denied on the operator path. An `always` cleanup removes the
 synthetic key and revokes all three temporary tokens. Only the empty KV-v2 mount
 and three policies persist. The initial root token remains encrypted and active
-until recovery-capable administrative access is proven later in P2-02.
+until recovery-capable administrative access is proven at the end of P2-02.
 
 ## Bootstrap the online intermediate
 
@@ -354,7 +358,51 @@ restored, and OpenBao is reloaded again. Staged keys and rollback copies are
 removed on success and ordinary failure. The operator-held bootstrap key is not
 deleted automatically; remove its `tls.key` from ordinary workstation storage
 only after both accepted runs and independently recoverable offline-root state
-have been confirmed.
+have been confirmed. This target uses the initial root only during P2-02
+bootstrap. After root retirement, P2-03 must replace that bootstrap
+authorization with bounded machine or operator authentication before the next
+routine renewal.
+
+## Retire the initial root token
+
+Run this irreversible ceremony only after initial listener issuance and renewal
+have both passed:
+
+```sh
+RPR_PKI_DIR=/absolute/protected/pki \
+PROFILE=workstation-validation \
+INCUS_CONFIG_DIR=/absolute/path/to/incus-client \
+INCUS_REMOTE=rpr-target \
+CONFIRM=retire-openbao-root-token-workstation-validation-rpr-target \
+make retire-openbao-root-token
+```
+
+The target asks once for the recovery-key passphrase and creates a five-year,
+self-signed RSA-3072 client credential in the protected
+`openbao-root-generation` directory. Its private key is immediately encrypted
+to the existing recovery OpenPGP key. OpenBao exact-pins the leaf certificate;
+certificate login produces only a five-minute token with permission to use the
+authenticated root-generation endpoints and revoke itself. It cannot generate
+a root token without the external Shamir share and grants no KV, PKI, policy,
+mount, or token-creation capability.
+
+The ceremony decrypts the client key, Shamir share, and initial root token only
+into protected temporary files or process streams. It generates a temporary
+root token, creates and exercises a five-minute `rpr-bootstrap-admin` token,
+then revokes that administrator and the generated root. Only after those
+checks pass does it revoke the certificate-login session and, last, the initial
+root. It verifies each revocation, removes `.root_token` from the protected
+initialization response atomically, and cleans the temporary material from the
+workstation and service container. The encrypted Shamir share remains for
+unseal and recovery.
+
+There is no rollback that restores a revoked root token. Back up the complete
+recovery directory and root-generation credential together, with the
+passphrase held separately. Losing either the exact-pinned client private key
+or the Shamir share removes this authenticated recovery path. Replace the
+client credential well before its five-year expiry while valid administrative
+access still exists. The workflow deliberately does not enable OpenBao's
+legacy unauthenticated root-generation endpoint.
 
 Recovery uses a fresh isolated instance with no production DNS alias or client
 route. Verify the snapshot checksum, restore it, present the external Shamir

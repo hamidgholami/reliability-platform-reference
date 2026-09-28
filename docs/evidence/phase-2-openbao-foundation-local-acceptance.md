@@ -31,6 +31,7 @@ detailed machine evidence remain outside Git or in ignored local paths.
 | Online intermediate | OpenBao generated and retained the named 3072-bit RSA intermediate key and returned only its CSR. The operator-managed root signed a five-year, path-length-zero CA certificate, and OpenBao imported the signed certificate plus public root chain as its fixed default issuer. No intermediate private key entered the handoff directory. |
 | Private PKI publication | The configured issuing-certificate and CRL URLs use `openbao.dev.apadanalab.de`. The CA, two-certificate chain, and CRL were readable without a token over validated private TLS; both authoritative BIND secondaries returned the reviewed alias and `10.20.0.20` target. The temporary PKI bootstrap tokens were revoked and no plaintext initial root-token file remained. |
 | Listener issuance and renewal | The exact-name `openbao-listener` role issued a 90-day server certificate for the two reviewed DNS names and private address from a CSR generated inside `bao-01`. A second guarded run reported `renewal`, produced a different serial, and served the renewed leaf plus intermediate after a `SIGHUP` reload. Both runs kept the leaf and intermediate private keys inside the service boundary, left OpenBao active and unsealed, revoked their temporary tokens, and removed protected staging and rollback copies. |
+| Root-token retirement | Certificate auth exact-pinned a dedicated five-year recovery client and issued only a five-minute `rpr-root-generation` token. That token and the external Shamir share generated a temporary root, which created and proved one five-minute `rpr-bootstrap-admin` token. The administrator, generated root, and certificate-login tokens were all revoked before the initial root was revoked. The legacy unauthenticated root-generation endpoint remained disabled, `.root_token` was removed from the protected initialization response, and the encrypted unseal share was retained. |
 | Plaintext rejection | A plaintext HTTP probe did not reach an OpenBao health endpoint; the accepted service path requires TLS and the supplied CA. |
 | Protected files | Configuration, Raft, TLS, audit directory, and rotation configuration ownership and modes passed validation. Logrotate syntax also passed. |
 | Idempotence | A complete second configuration run reported `changed=0`; the separate validation run also reported `changed=0`. |
@@ -40,10 +41,10 @@ detailed machine evidence remain outside Git or in ignored local paths.
 - This is local integration evidence, not promotion on the
   `single-node-reference` host.
 - The single-operator 1-of-1 seal is intentionally not a production quorum.
-  The initial root token remains encrypted and active pending recovery-capable
-  administrative access. The KV mount, scoped policies, and online intermediate
-  exist and listener issuance and renewal are proven, but no persistent human
-  or machine credential or authentication method exists yet.
+  The initial root token is revoked. The exact-pinned recovery credential is
+  restricted to authenticated root generation and still requires the external
+  Shamir share; it is not routine human or machine authentication. Those paths
+  remain P2-03 and P2-05 work.
 - Browser access from the Mac remains deferred to the private VPN and split-DNS
   slice. No `/etc/hosts` entry or public route was added.
 

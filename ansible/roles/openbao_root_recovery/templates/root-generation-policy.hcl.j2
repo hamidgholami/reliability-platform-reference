@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+path "sys/generate-root-token/attempt" {
+  capabilities = ["create", "update", "read", "delete"]
+}
+
+path "sys/generate-root-token/update" {
+  capabilities = ["create", "update"]
+}
+
+path "auth/token/lookup-self" {
+  capabilities = ["read"]
+}
+
+path "auth/token/revoke-self" {
+  capabilities = ["update"]
+}

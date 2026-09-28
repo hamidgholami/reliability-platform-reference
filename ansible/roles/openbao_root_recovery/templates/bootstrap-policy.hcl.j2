@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+path "sys/auth" {
+  capabilities = ["read"]
+}
+
+path "sys/auth/{{ openbao_root_recovery_auth_mount }}" {
+  capabilities = ["create", "update", "read", "sudo"]
+}
+
+path "auth/{{ openbao_root_recovery_auth_mount }}/certs/{{ openbao_root_recovery_auth_role_name }}" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "auth/token/revoke-self" {
+  capabilities = ["update"]
+}

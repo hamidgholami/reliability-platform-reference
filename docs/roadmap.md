@@ -35,8 +35,9 @@ destroy, recreate, and cleanup lifecycle. The
 [redacted acceptance record](evidence/phase-1-acceptance.md) captures the
 results and limitations. The
 [Phase 2 trust, secrets, and identity plan](plans/phase-2-trust-secrets-and-identity.md)
-is active after P2-01 private DNS passed retained-local runtime acceptance and
-clean recreation. Reference-host promotion remains before Phase 2 closes.
+is active after P2-01 private DNS and P2-02 OpenBao foundation passed local
+acceptance. P2-03 machine identity, dynamic secrets, and SSH certificates is
+next. Reference-host promotion remains before Phase 2 closes.
 
 Phase 4 will introduce a small, coherent Java Spring Boot application as the
 system under delivery. It will demonstrate build, unit and integration tests,

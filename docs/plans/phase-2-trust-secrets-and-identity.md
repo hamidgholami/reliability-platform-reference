@@ -1,6 +1,6 @@
 # Phase 2 Plan: Trust, Secrets, and Identity
 
-- Status: active; P2-01 accepted and the P2-02 readiness gate is closed
+- Status: active; P2-01 and P2-02 accepted, with P2-03 next
 - Started: 2026-09-23
 - Owner: Hamid Gholami
 - Default deployment profile: `single-node-reference`
@@ -220,7 +220,7 @@ captures the completed workstation run. Promotion to the real
   endpoints through private DNS.
 - [x] Issue and renew one service certificate without exporting the intermediate
   private key.
-- [ ] Revoke the initial root token after recovery-capable administrative access
+- [x] Revoke the initial root token after recovery-capable administrative access
   is proven.
 
 Acceptance: the selected service starts from documented inputs, serves only TLS,

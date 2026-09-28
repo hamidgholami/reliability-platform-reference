@@ -1,0 +1,328 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Confirm the bounded OpenBao root-recovery inputs
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname == 'bao-01'
+      - rpr_deployment_profile in ['workstation-validation', 'single-node-reference']
+      - openbao_root_recovery_api_address == '10.20.0.20'
+      - openbao_root_recovery_api_port == 8200
+      - openbao_root_recovery_api_dns_name == 'openbao.dev.apadanalab.de'
+      - openbao_root_recovery_ca_path == '/opt/openbao/tls/ca.crt'
+      - openbao_root_recovery_initial_token | length >= 16
+      - openbao_root_recovery_client_dir | length > 1
+      - openbao_root_recovery_policy_name == 'rpr-root-generation'
+      - openbao_root_recovery_bootstrap_policy_name == 'rpr-root-recovery-bootstrap'
+      - openbao_root_recovery_auth_mount == 'cert'
+      - openbao_root_recovery_auth_role_name == 'rpr-root-generation'
+      - openbao_root_recovery_token_ttl == '5m'
+      - openbao_root_recovery_bootstrap_token_ttl == '15m'
+    fail_msg: The OpenBao root-recovery boundary or protected input is invalid.
+  no_log: true
+  diff: false
+
+- name: Inspect the protected recovery-client directory on the controller
+  ansible.builtin.stat:
+    path: "{{ openbao_root_recovery_client_dir }}"
+  delegate_to: localhost
+  register: openbao_root_recovery_client_directory
+  no_log: true
+  diff: false
+
+- name: Inspect the pinned recovery-client certificate on the controller
+  ansible.builtin.stat:
+    path: "{{ openbao_root_recovery_client_dir }}/client.crt"
+  delegate_to: localhost
+  register: openbao_root_recovery_client_certificate_file
+  no_log: true
+  diff: false
+
+- name: Require protected recovery-client inputs
+  ansible.builtin.assert:
+    that:
+      - openbao_root_recovery_client_directory.stat.isdir | default(false)
+      - openbao_root_recovery_client_directory.stat.mode == '0700'
+      - openbao_root_recovery_client_certificate_file.stat.isreg | default(false)
+      - openbao_root_recovery_client_certificate_file.stat.mode == '0600'
+    fail_msg: The protected root-recovery client input is missing or unsafe.
+  no_log: true
+  diff: false
+
+- name: Derive root-recovery policy and certificate inputs
+  ansible.builtin.set_fact:
+    openbao_root_recovery_api_url: >-
+      https://{{ openbao_root_recovery_api_address }}:{{ openbao_root_recovery_api_port }}/v1
+    openbao_root_recovery_policy_document: >-
+      {{ lookup('ansible.builtin.template', 'root-generation-policy.hcl.j2') | trim }}
+    openbao_root_recovery_bootstrap_policy_document: >-
+      {{ lookup('ansible.builtin.template', 'bootstrap-policy.hcl.j2') | trim }}
+    openbao_root_recovery_client_certificate: >-
+      {{
+        lookup(
+          'ansible.builtin.file',
+          openbao_root_recovery_client_dir ~ '/client.crt'
+        ) | trim
+      }}
+  no_log: true
+  diff: false
+
+- name: Require an initialized and unsealed OpenBao service
+  ansible.builtin.uri:
+    url: "{{ openbao_root_recovery_api_url }}/sys/health"
+    ca_path: "{{ openbao_root_recovery_ca_path }}"
+    return_content: true
+    status_code: 200
+  register: openbao_root_recovery_health
+
+- name: Assert the active OpenBao recovery target
+  ansible.builtin.assert:
+    that:
+      - openbao_root_recovery_health.json.initialized
+      - not openbao_root_recovery_health.json.sealed
+      - not openbao_root_recovery_health.json.standby
+
+- name: Read root-recovery policies with the initial root token
+  ansible.builtin.uri:
+    url: "{{ openbao_root_recovery_api_url }}/sys/policies/acl/{{ item.name }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_root_recovery_initial_token }}"
+    ca_path: "{{ openbao_root_recovery_ca_path }}"
+    return_content: true
+    status_code:
+      - 200
+      - 404
+  loop:
+    - name: "{{ openbao_root_recovery_policy_name }}"
+      document: "{{ openbao_root_recovery_policy_document }}"
+    - name: "{{ openbao_root_recovery_bootstrap_policy_name }}"
+      document: "{{ openbao_root_recovery_bootstrap_policy_document }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: openbao_root_recovery_policies_before
+  no_log: true
+  diff: false
+
+- name: Install exact root-recovery policies with the initial root token
+  ansible.builtin.uri:
+    url: "{{ openbao_root_recovery_api_url }}/sys/policies/acl/{{ item.item.name }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_root_recovery_initial_token }}"
+    ca_path: "{{ openbao_root_recovery_ca_path }}"
+    body_format: json
+    body:
+      policy: "{{ item.item.document }}"
+    status_code: 204
+  loop: "{{ openbao_root_recovery_policies_before.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: >-
+    item.status == 404 or
+    (item.json.data.policy | default('') | trim) != item.item.document
+  changed_when: true
+  no_log: true
+  diff: false
+
+- name: Create a bounded root-recovery bootstrap token
+  ansible.builtin.uri:
+    url: "{{ openbao_root_recovery_api_url }}/auth/token/create-orphan"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_root_recovery_initial_token }}"
+    ca_path: "{{ openbao_root_recovery_ca_path }}"
+    body_format: json
+    body:
+      policies:
+        - "{{ openbao_root_recovery_bootstrap_policy_name }}"
+      no_default_policy: true
+      renewable: false
+      ttl: "{{ openbao_root_recovery_bootstrap_token_ttl }}"
+      explicit_max_ttl: "{{ openbao_root_recovery_bootstrap_token_ttl }}"
+      display_name: rpr-root-recovery-bootstrap
+      meta:
+        purpose: p2-02-root-token-retirement
+    return_content: true
+    status_code: 200
+  register: openbao_root_recovery_bootstrap_token_response
+  changed_when: true
+  no_log: true
+  diff: false
+
+- name: Retain the root-recovery bootstrap token only for this play
+  ansible.builtin.set_fact:
+    openbao_root_recovery_bootstrap_token: >-
+      {{ openbao_root_recovery_bootstrap_token_response.json.auth.client_token }}
+    openbao_root_recovery_bootstrap_token_created: true
+  no_log: true
+  diff: false
+
+- name: Configure authenticated root recovery
+  block:
+    - name: Validate the bounded root-recovery bootstrap token
+      ansible.builtin.assert:
+        that:
+          - openbao_root_recovery_bootstrap_token_response.json.auth.orphan
+          - not openbao_root_recovery_bootstrap_token_response.json.auth.renewable
+          - openbao_root_recovery_bootstrap_token_response.json.auth.lease_duration <= 900
+          - >-
+            openbao_root_recovery_bootstrap_token_response.json.auth.policies ==
+            [openbao_root_recovery_bootstrap_policy_name]
+      no_log: true
+      diff: false
+
+    - name: Read enabled authentication methods
+      ansible.builtin.uri:
+        url: "{{ openbao_root_recovery_api_url }}/sys/auth"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ openbao_root_recovery_bootstrap_token }}"
+        ca_path: "{{ openbao_root_recovery_ca_path }}"
+        return_content: true
+        status_code: 200
+      register: openbao_root_recovery_auth_methods
+      no_log: true
+      diff: false
+
+    - name: Require an absent or compatible certificate auth mount
+      ansible.builtin.assert:
+        that:
+          - >-
+            (openbao_root_recovery_auth_mount ~ '/') not in
+            openbao_root_recovery_auth_methods.json.data or
+            openbao_root_recovery_auth_methods.json.data[
+              openbao_root_recovery_auth_mount ~ '/'
+            ].type == 'cert'
+        fail_msg: The existing certificate auth path has an incompatible type.
+      no_log: true
+      diff: false
+
+    - name: Enable the certificate authentication method
+      ansible.builtin.uri:
+        url: "{{ openbao_root_recovery_api_url }}/sys/auth/{{ openbao_root_recovery_auth_mount }}"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_root_recovery_bootstrap_token }}"
+        ca_path: "{{ openbao_root_recovery_ca_path }}"
+        body_format: json
+        body:
+          type: cert
+          description: Authenticated emergency root-token generation
+        status_code: 204
+      when: >-
+        (openbao_root_recovery_auth_mount ~ '/') not in
+        openbao_root_recovery_auth_methods.json.data
+      changed_when: true
+      no_log: true
+      diff: false
+
+    - name: Configure the exact-pinned root-generation client
+      ansible.builtin.uri:
+        url: >-
+          {{ openbao_root_recovery_api_url }}/auth/{{ openbao_root_recovery_auth_mount }}/certs/{{ openbao_root_recovery_auth_role_name }}
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_root_recovery_bootstrap_token }}"
+        ca_path: "{{ openbao_root_recovery_ca_path }}"
+        body_format: json
+        body:
+          certificate: "{{ openbao_root_recovery_client_certificate }}"
+          display_name: rpr-root-generation
+          allowed_common_names:
+            - RPR OpenBao Root Generation
+          allowed_organizational_units:
+            - Platform Recovery
+          token_policies:
+            - "{{ openbao_root_recovery_policy_name }}"
+          token_ttl: "{{ openbao_root_recovery_token_ttl }}"
+          token_max_ttl: "{{ openbao_root_recovery_token_ttl }}"
+          token_no_default_policy: true
+          # OpenBao 2.6.3 cert auth accepts service, not default-service.
+          token_type: service
+        status_code:
+          - 200
+          - 204
+      changed_when: true
+      no_log: true
+      diff: false
+
+    - name: Read back the root-generation client configuration
+      ansible.builtin.uri:
+        url: >-
+          {{ openbao_root_recovery_api_url }}/auth/{{ openbao_root_recovery_auth_mount }}/certs/{{ openbao_root_recovery_auth_role_name }}
+        method: GET
+        headers:
+          X-Vault-Token: "{{ openbao_root_recovery_bootstrap_token }}"
+        ca_path: "{{ openbao_root_recovery_ca_path }}"
+        return_content: true
+        status_code: 200
+      register: openbao_root_recovery_client_configuration
+      no_log: true
+      diff: false
+
+    - name: Assert the root-generation authentication boundary
+      ansible.builtin.assert:
+        that:
+          - >-
+            (openbao_root_recovery_client_configuration.json.data.certificate | trim) ==
+            openbao_root_recovery_client_certificate
+          - >-
+            openbao_root_recovery_client_configuration.json.data.display_name ==
+            'rpr-root-generation'
+          - >-
+            openbao_root_recovery_client_configuration.json.data.allowed_common_names ==
+            ['RPR OpenBao Root Generation']
+          - >-
+            openbao_root_recovery_client_configuration.json.data.allowed_organizational_units ==
+            ['Platform Recovery']
+          - >-
+            openbao_root_recovery_client_configuration.json.data.token_policies ==
+            [openbao_root_recovery_policy_name]
+          - openbao_root_recovery_client_configuration.json.data.token_ttl == 300
+          - openbao_root_recovery_client_configuration.json.data.token_max_ttl == 300
+          - openbao_root_recovery_client_configuration.json.data.token_no_default_policy
+          - openbao_root_recovery_client_configuration.json.data.token_type == 'service'
+      no_log: true
+      diff: false
+
+  always:
+    - name: Revoke the bounded root-recovery bootstrap token
+      ansible.builtin.uri:
+        url: "{{ openbao_root_recovery_api_url }}/auth/token/revoke-self"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_root_recovery_bootstrap_token }}"
+        ca_path: "{{ openbao_root_recovery_ca_path }}"
+        body_format: json
+        body: {}
+        status_code: 204
+      when: openbao_root_recovery_bootstrap_token_created | default(false)
+      changed_when: true
+      no_log: true
+      diff: false
+
+    - name: Remove the temporary root-recovery bootstrap policy
+      ansible.builtin.uri:
+        url: >-
+          {{ openbao_root_recovery_api_url }}/sys/policies/acl/{{ openbao_root_recovery_bootstrap_policy_name }}
+        method: DELETE
+        headers:
+          X-Vault-Token: "{{ openbao_root_recovery_initial_token }}"
+        ca_path: "{{ openbao_root_recovery_ca_path }}"
+        status_code: 204
+      changed_when: true
+      no_log: true
+      diff: false
+
+- name: Report redacted authenticated root-recovery configuration
+  ansible.builtin.debug:
+    msg:
+      auth_method: cert
+      credential: exact-pinned-client-certificate
+      policy: "{{ openbao_root_recovery_policy_name }}"
+      token_ttl: "{{ openbao_root_recovery_token_ttl }}"
+      requires_shamir_share: true
+      unauthenticated_root_generation_enabled: false
+      temporary_token_revoked: true

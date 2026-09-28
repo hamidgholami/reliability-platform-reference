@@ -1,0 +1,40 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+argument_specs:
+  main:
+    short_description: Configure authenticated emergency root-token generation
+    options:
+      openbao_root_recovery_api_address:
+        type: str
+        required: true
+      openbao_root_recovery_api_port:
+        type: int
+        required: true
+      openbao_root_recovery_api_dns_name:
+        type: str
+        required: true
+      openbao_root_recovery_ca_path:
+        type: path
+      openbao_root_recovery_initial_token_file:
+        type: path
+      openbao_root_recovery_initial_token:
+        type: str
+        required: true
+        no_log: true
+      openbao_root_recovery_client_dir:
+        type: path
+        required: true
+      openbao_root_recovery_policy_name:
+        type: str
+      openbao_root_recovery_bootstrap_policy_name:
+        type: str
+      openbao_root_recovery_auth_mount:
+        type: str
+      openbao_root_recovery_auth_role_name:
+        type: str
+      openbao_root_recovery_token_ttl:
+        type: str
+      openbao_root_recovery_bootstrap_token_ttl:
+        type: str
