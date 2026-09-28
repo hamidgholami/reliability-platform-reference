@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+path "{{ openbao_bootstrap_kv_mount }}/data/operator/*" {
+  capabilities = ["create", "update", "read", "delete", "patch"]
+}
+
+path "{{ openbao_bootstrap_kv_mount }}/metadata/operator/*" {
+  capabilities = ["read", "list", "delete"]
+}
+
+path "{{ openbao_bootstrap_kv_mount }}/delete/operator/*" {
+  capabilities = ["update"]
+}
+
+path "{{ openbao_bootstrap_kv_mount }}/undelete/operator/*" {
+  capabilities = ["update"]
+}
+
+path "auth/token/revoke-self" {
+  capabilities = ["update"]
+}

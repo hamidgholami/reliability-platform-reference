@@ -1,0 +1,37 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+argument_specs:
+  main:
+    short_description: Bootstrap bounded OpenBao API objects
+    options:
+      openbao_bootstrap_api_address:
+        type: str
+        required: true
+      openbao_bootstrap_api_port:
+        type: int
+        required: true
+      openbao_bootstrap_api_dns_name:
+        type: str
+        required: true
+      openbao_bootstrap_ca_path:
+        type: path
+      openbao_bootstrap_root_token_file:
+        type: path
+      openbao_bootstrap_root_token:
+        type: str
+        required: true
+        no_log: true
+      openbao_bootstrap_kv_mount:
+        type: str
+      openbao_bootstrap_policy_name:
+        type: str
+      openbao_bootstrap_operator_policy_name:
+        type: str
+      openbao_bootstrap_machine_policy_name:
+        type: str
+      openbao_bootstrap_token_ttl:
+        type: str
+      openbao_bootstrap_test_token_ttl:
+        type: str

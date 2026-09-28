@@ -1,0 +1,508 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Confirm the bounded OpenBao bootstrap inputs
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname == 'bao-01'
+      - rpr_deployment_profile in ['workstation-validation', 'single-node-reference']
+      - openbao_bootstrap_api_address == '10.20.0.20'
+      - openbao_bootstrap_api_port == 8200
+      - openbao_bootstrap_api_dns_name == 'openbao.dev.apadanalab.de'
+      - openbao_bootstrap_ca_path == '/opt/openbao/tls/ca.crt'
+      - openbao_bootstrap_kv_mount == 'rpr-kv'
+      - openbao_bootstrap_policy_name == 'rpr-bootstrap-admin'
+      - openbao_bootstrap_operator_policy_name == 'rpr-operator'
+      - openbao_bootstrap_machine_policy_name == 'rpr-machine-read'
+      - openbao_bootstrap_token_ttl == '15m'
+      - openbao_bootstrap_test_token_ttl == '5m'
+      - openbao_bootstrap_root_token | length >= 16
+    fail_msg: The OpenBao bootstrap boundary or protected token input is invalid.
+  no_log: true
+  diff: false
+
+- name: Derive non-secret OpenBao bootstrap configuration
+  ansible.builtin.set_fact:
+    openbao_bootstrap_api_url: >-
+      https://{{ openbao_bootstrap_api_address }}:{{ openbao_bootstrap_api_port }}/v1
+    openbao_bootstrap_policy_document: >-
+      {{ lookup('ansible.builtin.template', 'bootstrap-admin.hcl.j2') | trim }}
+    openbao_bootstrap_operator_policy_document: >-
+      {{ lookup('ansible.builtin.template', 'operator.hcl.j2') | trim }}
+    openbao_bootstrap_machine_policy_document: >-
+      {{ lookup('ansible.builtin.template', 'machine-read.hcl.j2') | trim }}
+
+- name: Require an initialized and unsealed OpenBao service
+  ansible.builtin.uri:
+    url: "{{ openbao_bootstrap_api_url }}/sys/health"
+    ca_path: "{{ openbao_bootstrap_ca_path }}"
+    return_content: true
+    status_code: 200
+  register: openbao_bootstrap_health
+
+- name: Assert the active OpenBao bootstrap state
+  ansible.builtin.assert:
+    that:
+      - openbao_bootstrap_health.json.initialized
+      - not openbao_bootstrap_health.json.sealed
+      - not openbao_bootstrap_health.json.standby
+
+- name: Read the bootstrap administrator policy with the initial root token
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_bootstrap_api_url }}/sys/policies/acl/{{ openbao_bootstrap_policy_name }}
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_root_token }}"
+    ca_path: "{{ openbao_bootstrap_ca_path }}"
+    return_content: true
+    status_code:
+      - 200
+      - 404
+  register: openbao_bootstrap_existing_policy
+  no_log: true
+  diff: false
+
+- name: Install the bootstrap administrator policy with the initial root token
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_bootstrap_api_url }}/sys/policies/acl/{{ openbao_bootstrap_policy_name }}
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_root_token }}"
+    ca_path: "{{ openbao_bootstrap_ca_path }}"
+    body_format: json
+    body:
+      policy: "{{ openbao_bootstrap_policy_document }}"
+    status_code: 204
+  when: >-
+    openbao_bootstrap_existing_policy.status == 404 or
+    (openbao_bootstrap_existing_policy.json.data.policy | default('') | trim) !=
+    openbao_bootstrap_policy_document
+  changed_when: true
+  no_log: true
+  diff: false
+
+- name: Create a bounded bootstrap administrator token
+  ansible.builtin.uri:
+    url: "{{ openbao_bootstrap_api_url }}/auth/token/create-orphan"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_root_token }}"
+    ca_path: "{{ openbao_bootstrap_ca_path }}"
+    body_format: json
+    body:
+      policies:
+        - "{{ openbao_bootstrap_policy_name }}"
+      no_default_policy: true
+      renewable: false
+      ttl: "{{ openbao_bootstrap_token_ttl }}"
+      explicit_max_ttl: "{{ openbao_bootstrap_token_ttl }}"
+      display_name: rpr-bootstrap
+      meta:
+        purpose: p2-02-bootstrap
+    return_content: true
+    status_code: 200
+  register: openbao_bootstrap_token_response
+  changed_when: true
+  no_log: true
+  diff: false
+
+- name: Retain the bootstrap token only for this play
+  ansible.builtin.set_fact:
+    openbao_bootstrap_token: "{{ openbao_bootstrap_token_response.json.auth.client_token }}"
+    openbao_bootstrap_token_created: true
+  no_log: true
+  diff: false
+
+- name: Configure and prove the bounded OpenBao bootstrap objects
+  block:
+    - name: Validate the bounded bootstrap token
+      ansible.builtin.assert:
+        that:
+          - openbao_bootstrap_token_response.json.auth.orphan
+          - not openbao_bootstrap_token_response.json.auth.renewable
+          - openbao_bootstrap_token_response.json.auth.lease_duration <= 900
+          - openbao_bootstrap_token_response.json.auth.policies == [openbao_bootstrap_policy_name]
+      no_log: true
+      diff: false
+
+    - name: Read mounted secrets engines
+      ansible.builtin.uri:
+        url: "{{ openbao_bootstrap_api_url }}/sys/mounts"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        return_content: true
+        status_code: 200
+      register: openbao_bootstrap_mounts_before
+      no_log: true
+      diff: false
+
+    - name: Reject an incompatible existing rpr-kv mount
+      ansible.builtin.assert:
+        that:
+          - >-
+            (openbao_bootstrap_kv_mount ~ '/') not in
+            openbao_bootstrap_mounts_before.json.data or
+            (
+              openbao_bootstrap_mounts_before.json.data[openbao_bootstrap_kv_mount ~ '/'].type == 'kv'
+              and
+              openbao_bootstrap_mounts_before.json.data[openbao_bootstrap_kv_mount ~ '/'].options.version == '2'
+            )
+        fail_msg: The existing rpr-kv mount is not the reviewed KV-v2 boundary.
+      no_log: true
+      diff: false
+
+    - name: Enable the rpr-kv versioned secrets engine
+      ansible.builtin.uri:
+        url: "{{ openbao_bootstrap_api_url }}/sys/mounts/{{ openbao_bootstrap_kv_mount }}"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        body_format: json
+        body:
+          type: kv
+          description: Versioned non-production platform secrets
+          options:
+            version: "2"
+        status_code: 204
+      when: >-
+        (openbao_bootstrap_kv_mount ~ '/') not in
+        openbao_bootstrap_mounts_before.json.data
+      changed_when: true
+      no_log: true
+      diff: false
+
+    - name: Configure bounded KV-v2 versioning behavior
+      ansible.builtin.uri:
+        url: "{{ openbao_bootstrap_api_url }}/{{ openbao_bootstrap_kv_mount }}/config"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        body_format: json
+        body:
+          max_versions: 10
+          cas_required: true
+          delete_version_after: 0s
+        status_code: 204
+      changed_when: true
+      no_log: true
+      diff: false
+
+    - name: Install scoped operator and machine policies
+      ansible.builtin.uri:
+        url: "{{ openbao_bootstrap_api_url }}/sys/policies/acl/{{ item.name }}"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        body_format: json
+        body:
+          policy: "{{ item.document }}"
+        status_code: 204
+      loop:
+        - name: "{{ openbao_bootstrap_operator_policy_name }}"
+          document: "{{ openbao_bootstrap_operator_policy_document }}"
+        - name: "{{ openbao_bootstrap_machine_policy_name }}"
+          document: "{{ openbao_bootstrap_machine_policy_document }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: true
+      no_log: true
+      diff: false
+
+    - name: Read back the KV-v2 configuration
+      ansible.builtin.uri:
+        url: "{{ openbao_bootstrap_api_url }}/{{ openbao_bootstrap_kv_mount }}/config"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        return_content: true
+        status_code: 200
+      register: openbao_bootstrap_kv_config
+      no_log: true
+      diff: false
+
+    - name: Read back scoped policies
+      ansible.builtin.uri:
+        url: "{{ openbao_bootstrap_api_url }}/sys/policies/acl/{{ item }}"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        return_content: true
+        status_code: 200
+      loop:
+        - "{{ openbao_bootstrap_operator_policy_name }}"
+        - "{{ openbao_bootstrap_machine_policy_name }}"
+      register: openbao_bootstrap_scoped_policies
+      no_log: true
+      diff: false
+
+    - name: Assert persistent KV and policy configuration
+      ansible.builtin.assert:
+        that:
+          - openbao_bootstrap_kv_config.json.data.max_versions == 10
+          - openbao_bootstrap_kv_config.json.data.cas_required
+          - openbao_bootstrap_kv_config.json.data.delete_version_after == '0s'
+          - >-
+            (openbao_bootstrap_scoped_policies.results[0].json.data.policy | trim) ==
+            openbao_bootstrap_operator_policy_document
+          - >-
+            (openbao_bootstrap_scoped_policies.results[1].json.data.policy | trim) ==
+            openbao_bootstrap_machine_policy_document
+      no_log: true
+      diff: false
+
+    - name: Remove stale synthetic acceptance data before the exercise
+      ansible.builtin.uri:
+        url: >-
+          {{ openbao_bootstrap_api_url }}/{{ openbao_bootstrap_kv_mount }}/metadata/operator/acceptance
+        method: DELETE
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        status_code:
+          - 204
+          - 404
+      changed_when: false
+      no_log: true
+      diff: false
+
+    - name: Create a bounded operator acceptance token
+      ansible.builtin.uri:
+        url: "{{ openbao_bootstrap_api_url }}/auth/token/create-orphan"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        body_format: json
+        body:
+          policies:
+            - "{{ openbao_bootstrap_operator_policy_name }}"
+          no_default_policy: true
+          renewable: false
+          ttl: "{{ openbao_bootstrap_test_token_ttl }}"
+          explicit_max_ttl: "{{ openbao_bootstrap_test_token_ttl }}"
+          display_name: rpr-operator-acceptance
+        return_content: true
+        status_code: 200
+      register: openbao_bootstrap_operator_token_response
+      changed_when: true
+      no_log: true
+      diff: false
+
+    - name: Retain the operator token only for this play
+      ansible.builtin.set_fact:
+        openbao_bootstrap_operator_token: >-
+          {{ openbao_bootstrap_operator_token_response.json.auth.client_token }}
+        openbao_bootstrap_operator_token_created: true
+      no_log: true
+      diff: false
+
+    - name: Write the first synthetic KV version with create-only CAS
+      ansible.builtin.uri:
+        url: >-
+          {{ openbao_bootstrap_api_url }}/{{ openbao_bootstrap_kv_mount }}/data/operator/acceptance
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_operator_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        body_format: json
+        body:
+          data:
+            marker: synthetic-version-one
+          options:
+            cas: 0
+        return_content: true
+        status_code: 200
+      register: openbao_bootstrap_kv_version_one
+      changed_when: true
+      no_log: true
+      diff: false
+
+    - name: Write the second synthetic KV version with exact CAS
+      ansible.builtin.uri:
+        url: >-
+          {{ openbao_bootstrap_api_url }}/{{ openbao_bootstrap_kv_mount }}/data/operator/acceptance
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_operator_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        body_format: json
+        body:
+          data:
+            marker: synthetic-version-two
+          options:
+            cas: 1
+        return_content: true
+        status_code: 200
+      register: openbao_bootstrap_kv_version_two
+      changed_when: true
+      no_log: true
+      diff: false
+
+    - name: Read synthetic KV version metadata
+      ansible.builtin.uri:
+        url: >-
+          {{ openbao_bootstrap_api_url }}/{{ openbao_bootstrap_kv_mount }}/metadata/operator/acceptance
+        method: GET
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_operator_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        return_content: true
+        status_code: 200
+      register: openbao_bootstrap_kv_metadata
+      no_log: true
+      diff: false
+
+    - name: Create a bounded machine-policy acceptance token
+      ansible.builtin.uri:
+        url: "{{ openbao_bootstrap_api_url }}/auth/token/create-orphan"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        body_format: json
+        body:
+          policies:
+            - "{{ openbao_bootstrap_machine_policy_name }}"
+          no_default_policy: true
+          renewable: false
+          ttl: "{{ openbao_bootstrap_test_token_ttl }}"
+          explicit_max_ttl: "{{ openbao_bootstrap_test_token_ttl }}"
+          display_name: rpr-machine-policy-acceptance
+        return_content: true
+        status_code: 200
+      register: openbao_bootstrap_machine_token_response
+      changed_when: true
+      no_log: true
+      diff: false
+
+    - name: Retain the machine-policy token only for this play
+      ansible.builtin.set_fact:
+        openbao_bootstrap_machine_token: >-
+          {{ openbao_bootstrap_machine_token_response.json.auth.client_token }}
+        openbao_bootstrap_machine_token_created: true
+      no_log: true
+      diff: false
+
+    - name: Resolve machine token capabilities at allowed and denied paths
+      ansible.builtin.uri:
+        url: "{{ openbao_bootstrap_api_url }}/sys/capabilities-self"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_machine_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        body_format: json
+        body:
+          paths:
+            - "{{ openbao_bootstrap_kv_mount }}/data/machines/ci/example"
+            - "{{ openbao_bootstrap_kv_mount }}/data/operator/example"
+        return_content: true
+        status_code: 200
+      register: openbao_bootstrap_machine_capabilities
+      no_log: true
+      diff: false
+
+    - name: Assert versioning and least-privilege behavior
+      ansible.builtin.assert:
+        that:
+          - openbao_bootstrap_kv_version_one.json.data.version == 1
+          - openbao_bootstrap_kv_version_two.json.data.version == 2
+          - openbao_bootstrap_kv_metadata.json.data.current_version == 2
+          - "'1' in openbao_bootstrap_kv_metadata.json.data.versions"
+          - "'2' in openbao_bootstrap_kv_metadata.json.data.versions"
+          - >-
+            openbao_bootstrap_machine_capabilities.json.data[
+              openbao_bootstrap_kv_mount ~ '/data/machines/ci/example'
+            ] == ['read']
+          - >-
+            openbao_bootstrap_machine_capabilities.json.data[
+              openbao_bootstrap_kv_mount ~ '/data/operator/example'
+            ] == ['deny']
+      no_log: true
+      diff: false
+
+  always:
+    - name: Remove synthetic KV acceptance data
+      ansible.builtin.uri:
+        url: >-
+          {{ openbao_bootstrap_api_url }}/{{ openbao_bootstrap_kv_mount }}/metadata/operator/acceptance
+        method: DELETE
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        status_code:
+          - 204
+          - 404
+      when: openbao_bootstrap_token_created | default(false)
+      changed_when: false
+      no_log: true
+      diff: false
+
+    - name: Revoke the temporary operator token
+      ansible.builtin.uri:
+        url: "{{ openbao_bootstrap_api_url }}/auth/token/revoke-self"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_operator_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        body_format: json
+        body: {}
+        status_code: 204
+      when: openbao_bootstrap_operator_token_created | default(false)
+      changed_when: true
+      no_log: true
+      diff: false
+
+    - name: Revoke the temporary machine-policy token
+      ansible.builtin.uri:
+        url: "{{ openbao_bootstrap_api_url }}/auth/token/revoke-self"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_machine_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        body_format: json
+        body: {}
+        status_code: 204
+      when: openbao_bootstrap_machine_token_created | default(false)
+      changed_when: true
+      no_log: true
+      diff: false
+
+    - name: Revoke the bounded bootstrap administrator token
+      ansible.builtin.uri:
+        url: "{{ openbao_bootstrap_api_url }}/auth/token/revoke-self"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_bootstrap_token }}"
+        ca_path: "{{ openbao_bootstrap_ca_path }}"
+        body_format: json
+        body: {}
+        status_code: 204
+      when: openbao_bootstrap_token_created | default(false)
+      changed_when: true
+      no_log: true
+      diff: false
+
+- name: Report redacted OpenBao bootstrap acceptance
+  ansible.builtin.debug:
+    msg:
+      kv_mount: "{{ openbao_bootstrap_kv_mount }}"
+      kv_version: 2
+      cas_required: true
+      retained_versions: 10
+      policies:
+        - "{{ openbao_bootstrap_policy_name }}"
+        - "{{ openbao_bootstrap_operator_policy_name }}"
+        - "{{ openbao_bootstrap_machine_policy_name }}"
+      acceptance_versions: 2
+      synthetic_data_removed: true
+      temporary_tokens_revoked: true

@@ -1,0 +1,18 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+openbao_bootstrap_api_address: 10.20.0.20
+openbao_bootstrap_api_port: 8200
+openbao_bootstrap_api_dns_name: openbao.dev.apadanalab.de
+openbao_bootstrap_ca_path: /opt/openbao/tls/ca.crt
+openbao_bootstrap_root_token_file: >-
+  {{ lookup('ansible.builtin.env', 'OPENBAO_ROOT_TOKEN_FILE') }}
+openbao_bootstrap_root_token: >-
+  {{ lookup('ansible.builtin.file', openbao_bootstrap_root_token_file) | trim }}
+openbao_bootstrap_kv_mount: rpr-kv
+openbao_bootstrap_policy_name: rpr-bootstrap-admin
+openbao_bootstrap_operator_policy_name: rpr-operator
+openbao_bootstrap_machine_policy_name: rpr-machine-read
+openbao_bootstrap_token_ttl: 15m
+openbao_bootstrap_test_token_ttl: 5m

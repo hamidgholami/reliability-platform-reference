@@ -19,7 +19,7 @@ ANSIBLE_ENV = ANSIBLE_CONFIG=$(CURDIR)/ansible.cfg ANSIBLE_HOME=$(CURDIR)/.cache
 	validate-openbao-bootstrap-tls \
 	private-dns-secrets configure-private-dns validate-private-dns \
 	accept-private-dns configure-openbao openbao-status validate-openbao \
-	initialize-openbao unseal-openbao accept-openbao-audit \
+	initialize-openbao unseal-openbao accept-openbao-audit bootstrap-openbao \
 	bootstrap-incus plan apply validate destroy aws-plan aws-apply \
 	aws-destroy aws-orphan-check test-aws-safety
 
@@ -68,6 +68,7 @@ syntax-ansible: ## Syntax-check active Ansible inventories and playbooks offline
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/openbao/hosts.example.yml --syntax-check ansible/playbooks/configure-openbao.yml >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/openbao/hosts.example.yml --syntax-check ansible/playbooks/openbao-status.yml >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/openbao/hosts.example.yml --syntax-check ansible/playbooks/validate-openbao.yml >/dev/null
+	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/openbao/hosts.example.yml --syntax-check ansible/playbooks/bootstrap-openbao.yml >/dev/null
 
 lint-hcl: ## Check OpenTofu formatting without changing files.
 	@tofu fmt -check -recursive infrastructure
@@ -196,6 +197,9 @@ unseal-openbao: ## Unseal OpenBao from protected operator recovery material.
 
 accept-openbao-audit: ## Exercise OpenBao audit writes, rotation, and fail-closed recovery.
 	@./scripts/openbao-audit.sh
+
+bootstrap-openbao: ## Configure and prove KV v2 and scoped policies with ephemeral tokens.
+	@./scripts/openbao-bootstrap.sh
 
 plan: ## Verify Incus trust and save a non-destructive substrate plan.
 	@./scripts/incus-substrate.sh plan

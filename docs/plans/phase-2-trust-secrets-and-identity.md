@@ -213,7 +213,7 @@ captures the completed workstation run. Promotion to the real
   material outside the repository and outside ordinary command logs.
 - [x] Enable at least one durable audit device before routine use and validate
   its permissions, rotation, and failure behavior.
-- [ ] Configure a versioned non-production KV path and narrowly scoped operator
+- [x] Configure a versioned non-production KV path and narrowly scoped operator
   and machine policies.
 - [ ] Generate the online intermediate key inside the secrets service, sign only
   its CSR with the offline root, and publish the non-secret trust chain and CRL

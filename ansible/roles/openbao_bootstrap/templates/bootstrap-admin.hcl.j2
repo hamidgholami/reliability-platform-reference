@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+path "sys/mounts" {
+  capabilities = ["read"]
+}
+
+path "sys/mounts/{{ openbao_bootstrap_kv_mount }}" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_bootstrap_kv_mount }}/config" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "sys/policies/acl/{{ openbao_bootstrap_operator_policy_name }}" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "sys/policies/acl/{{ openbao_bootstrap_machine_policy_name }}" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "auth/token/create-orphan" {
+  capabilities = ["create", "update", "sudo"]
+}
+
+path "auth/token/revoke-self" {
+  capabilities = ["update"]
+}
+
+path "{{ openbao_bootstrap_kv_mount }}/metadata/operator/acceptance" {
+  capabilities = ["read", "delete"]
+}

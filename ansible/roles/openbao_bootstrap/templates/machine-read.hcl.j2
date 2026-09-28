@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+path "{{ openbao_bootstrap_kv_mount }}/data/machines/ci/*" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_bootstrap_kv_mount }}/metadata/machines/ci/*" {
+  capabilities = ["read", "list"]
+}
+
+path "sys/capabilities-self" {
+  capabilities = ["update"]
+}
+
+path "auth/token/revoke-self" {
+  capabilities = ["update"]
+}

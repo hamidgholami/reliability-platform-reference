@@ -237,6 +237,41 @@ probe fails closed. A trap restores ownership and mode and signals OpenBao to
 reopen the device even if the exercise is interrupted. Final checks require
 service health and resumed audit writes.
 
+## Bootstrap KV and scoped policy
+
+After audit acceptance, configure the persistent KV-v2 and policy boundary with
+one guarded session:
+
+```sh
+RPR_PKI_DIR=/absolute/protected/pki \
+PROFILE=workstation-validation \
+INCUS_CONFIG_DIR=/absolute/path/to/incus-client \
+INCUS_REMOTE=rpr-target \
+CONFIRM=bootstrap-openbao-workstation-validation-rpr-target \
+make bootstrap-openbao
+```
+
+The target asks once for the recovery-key passphrase and decrypts the initial
+root token into a mode-`0600` temporary file under the protected operator
+runtime directory. A trap removes that plaintext file and the temporary GPG
+home on every exit. The token is never accepted through a command argument or
+environment variable and every Ansible task that handles it uses `no_log` and
+disables diff output.
+
+The initial root token creates only the `rpr-bootstrap-admin` policy and one
+non-renewable, orphan bootstrap token with a 15-minute explicit maximum TTL.
+That token configures an `rpr-kv/` KV-v2 mount with ten retained versions and
+mandatory check-and-set, plus `rpr-operator` and `rpr-machine-read` policies.
+The machine policy is read-only under `rpr-kv/data/machines/ci/*`; no machine
+credential or authentication method is created in this slice.
+
+Acceptance creates five-minute operator and machine-policy tokens, writes two
+synthetic versions with exact CAS, confirms version metadata, and proves the
+machine policy is denied on the operator path. An `always` cleanup removes the
+synthetic key and revokes all three temporary tokens. Only the empty KV-v2 mount
+and three policies persist. The initial root token remains encrypted and active
+until recovery-capable administrative access is proven later in P2-02.
+
 Recovery uses a fresh isolated instance with no production DNS alias or client
 route. Verify the snapshot checksum, restore it, present the external Shamir
 share, and confirm one versioned synthetic KV value plus the non-secret PKI
@@ -264,5 +299,7 @@ maintain a compatibility abstraction.
 - [Integrated Raft storage](https://openbao.org/docs/2.6.x/configuration/storage/raft/)
 - [Declarative audit devices](https://openbao.org/docs/2.6.x/configuration/audit/)
 - [File audit device and rotation](https://openbao.org/docs/audit/file/)
+- [KV-v2 policy paths](https://openbao.org/docs/secrets/kv/kv-v2/)
+- [Token creation](https://openbao.org/docs/commands/token/create/)
 - [Operator initialization](https://openbao.org/docs/2.6.x/commands/operator/init/)
 - [OpenBao 2.0 mlock removal](https://openbao.org/docs/release-notes/2-0-0/)

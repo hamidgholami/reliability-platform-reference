@@ -27,6 +27,7 @@ detailed machine evidence remain outside Git or in ignored local paths.
 | Runtime state | The service is active and enabled on OpenBao 2.6.3. After the guarded operator ceremony, its health response reports `initialized=true`, `sealed=false`, and `standby=false`. |
 | Initialization and unseal | OpenBao encrypted its 1-of-1 Shamir share and initial root token to a dedicated passphrase-protected operator recovery key before returning them. The protected recovery directory remained outside Git, the share was streamed to the stdin-aware API path, and the final health check confirmed the unsealed state. |
 | Audit behavior | Denied synthetic API activity produced request and response entries without reading or publishing audit contents. Forced logrotate preserved protected ownership and mode, created a new active file, and subsequent activity continued writing. With the sole audit path temporarily unavailable, the excluded health endpoint remained healthy while the audited request failed closed; restoration returned the service to healthy operation and audit writes resumed. |
+| KV and policy bootstrap | The guarded bootstrap configured `rpr-kv/` as KV v2 with ten retained versions and mandatory check-and-set writes. Ephemeral operator and machine tokens proved two successive versions, machine reads within `machines/ci/`, and denial outside that path. The ceremony deleted its synthetic data, revoked every temporary token, and removed the transient plaintext root-token file. |
 | Plaintext rejection | A plaintext HTTP probe did not reach an OpenBao health endpoint; the accepted service path requires TLS and the supplied CA. |
 | Protected files | Configuration, Raft, TLS, audit directory, and rotation configuration ownership and modes passed validation. Logrotate syntax also passed. |
 | Idempotence | A complete second configuration run reported `changed=0`; the separate validation run also reported `changed=0`. |
@@ -36,9 +37,10 @@ detailed machine evidence remain outside Git or in ignored local paths.
 - This is local integration evidence, not promotion on the
   `single-node-reference` host.
 - The single-operator 1-of-1 seal is intentionally not a production quorum.
-  The initial root token remains encrypted and active pending creation and
-  validation of scoped administrative access; no bootstrap administrator, KV
-  mount, or online intermediate exists yet.
+  The initial root token remains encrypted and active pending recovery-capable
+  administrative access. The KV mount and scoped policies exist, but no
+  persistent human or machine credential, authentication method, or online
+  intermediate exists yet.
 - Browser access from the Mac remains deferred to the private VPN and split-DNS
   slice. No `/etc/hosts` entry or public route was added.
 

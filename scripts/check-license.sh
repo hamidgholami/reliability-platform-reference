@@ -59,10 +59,18 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   scripts/init-hcl.sh scripts/validate-hcl.sh scripts/not-implemented.sh \
   scripts/ansible-target.sh scripts/openbao-pki.sh scripts/openbao-ceremony.sh \
   scripts/openbao-audit.sh scripts/openbao-audit-acceptance-remote.sh \
+  scripts/openbao-bootstrap.sh \
   scripts/validate-openbao-bootstrap-tls.sh \
   tests/ansible-target-safety.sh \
   tests/fixtures/openbao-ceremony/incus \
   tests/offline-root-policy.sh \
+  ansible/playbooks/bootstrap-openbao.yml \
+  ansible/roles/openbao_bootstrap/defaults/main.yml \
+  ansible/roles/openbao_bootstrap/meta/argument_specs.yml \
+  ansible/roles/openbao_bootstrap/tasks/main.yml \
+  ansible/roles/openbao_bootstrap/templates/bootstrap-admin.hcl.j2 \
+  ansible/roles/openbao_bootstrap/templates/operator.hcl.j2 \
+  ansible/roles/openbao_bootstrap/templates/machine-read.hcl.j2 \
   infrastructure/bootstrap/aws-single-node/versions.tf \
   infrastructure/bootstrap/aws-single-node/variables.tf \
   infrastructure/bootstrap/aws-single-node/main.tf \
