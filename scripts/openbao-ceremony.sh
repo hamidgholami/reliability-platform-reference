@@ -330,7 +330,7 @@ status_file=$(mktemp)
 jq -er '.unseal_keys_b64[0]' "$recovery_dir/initialization.json" |
   openssl base64 -d -A |
   gpg_with_passphrase --decrypt |
-  bao_cli operator unseal -format=json >"$status_file" ||
+  bao_cli write -format=json sys/unseal key=- >"$status_file" ||
   fail "OpenBao unseal failed"
 recovery_passphrase=
 

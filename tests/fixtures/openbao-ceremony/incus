@@ -54,8 +54,22 @@ if [ "${1:-}" = "status" ]; then
   exit 2
 fi
 
-[ "${1:-}" = "operator" ]
-shift
+case "${1:-}" in
+  write)
+    shift
+    [ "${1:-}" = "-format=json" ]
+    [ "${2:-}" = "sys/unseal" ]
+    [ "${3:-}" = "key=-" ]
+    IFS= read -r share
+    [ "$share" = "synthetic-unseal-share" ]
+    : >"$state_dir/unsealed"
+    printf '{"initialized":true,"sealed":false}\n'
+    exit 0
+    ;;
+  operator) shift ;;
+  *) exit 1 ;;
+esac
+
 case "${1:-}" in
   init)
     [ -s "$public_key" ]
@@ -83,12 +97,6 @@ case "${1:-}" in
       --arg token "$encrypted_token" \
       '{unseal_keys_b64: [$share], unseal_keys_hex: [], root_token: $token}'
     : >"$state_dir/initialized"
-    ;;
-  unseal)
-    IFS= read -r share
-    [ "$share" = "synthetic-unseal-share" ]
-    : >"$state_dir/unsealed"
-    printf '{"initialized":true,"sealed":false}\n'
     ;;
   *) exit 1 ;;
 esac
