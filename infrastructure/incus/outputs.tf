@@ -46,3 +46,18 @@ output "private_dns" {
     }
   }
 }
+
+output "openbao_foundation" {
+  description = "Non-secret OpenBao service substrate and private endpoint."
+  value = {
+    profile       = incus_profile.openbao.name
+    instance      = incus_instance.openbao.name
+    instance_type = incus_instance.openbao.type
+    ipv4_address  = incus_instance.openbao.ipv4_address
+    dns_name      = local.openbao_dns_name
+    alias_name    = local.openbao_alias_name
+    api_port      = 8200
+    network_acl   = incus_network_acl.openbao.name
+    status        = incus_instance.openbao.status
+  }
+}

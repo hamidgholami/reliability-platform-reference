@@ -24,6 +24,7 @@ inventory_file="$cache_dir/inventory.json"
 evidence_file="$cache_dir/validation.json"
 private_dns_secrets_file=${PRIVATE_DNS_SECRETS_FILE:-"$PWD/.cache/private-dns/tsig.auto.tfvars.json"}
 private_dns_inventory_file="$cache_dir/private-dns-hosts.json"
+openbao_inventory_file="$cache_dir/openbao-hosts.json"
 
 fail()
 {
@@ -192,6 +193,8 @@ storage_api_project
 network_dns
 network_dns_records
 projects_networks_zones
+network_acl
+network_bridge_acl
 "
 
   for extension in $required_extensions; do
@@ -366,13 +369,22 @@ write_inventory()
     schema_version: 1,
     remote: $remote,
     project: .substrate.value.project,
-    instances: [{
-      name: .substrate.value.instance,
-      type: .substrate.value.instance_type,
-      ipv4_address: .substrate.value.instance_ipv4,
-      dns_name: .substrate.value.instance_dns_name,
-      status: .substrate.value.instance_status
-    }]
+    instances: [
+      {
+        name: .substrate.value.instance,
+        type: .substrate.value.instance_type,
+        ipv4_address: .substrate.value.instance_ipv4,
+        dns_name: .substrate.value.instance_dns_name,
+        status: .substrate.value.instance_status
+      },
+      {
+        name: .openbao_foundation.value.instance,
+        type: .openbao_foundation.value.instance_type,
+        ipv4_address: .openbao_foundation.value.ipv4_address,
+        dns_name: .openbao_foundation.value.dns_name,
+        status: .openbao_foundation.value.status
+      }
+    ]
   }' >"$inventory_file"
   printf '%s' "$outputs" | jq \
     --arg remote "$remote" \
@@ -413,6 +425,34 @@ write_inventory()
         }
       }
     }' >"$private_dns_inventory_file"
+  printf '%s' "$outputs" | jq \
+    --arg remote "$remote" \
+    --arg profile "$profile" \
+    --arg client_cidr "$platform_ipv4_cidr" \
+    --arg project "$(printf '%s' "$outputs" | jq -r '.substrate.value.project')" '{
+      all: {
+        children: {
+          openbao_service: {
+            vars: {
+              ansible_connection: "community.general.incus",
+              ansible_incus_remote: $remote,
+              ansible_incus_project: $project,
+              ansible_user: "root",
+              rpr_deployment_profile: $profile,
+              openbao_platform_cidr: $client_cidr,
+              openbao_api_address: .openbao_foundation.value.ipv4_address,
+              openbao_api_port: .openbao_foundation.value.api_port,
+              openbao_api_dns_name: .openbao_foundation.value.alias_name
+            },
+            hosts: {
+              (.openbao_foundation.value.instance): {
+                ansible_host: .openbao_foundation.value.instance
+              }
+            }
+          }
+        }
+      }
+    }' >"$openbao_inventory_file"
 }
 
 apply_plan()
@@ -439,6 +479,7 @@ apply_plan()
   rm -f "$create_plan"
   echo "Generated ignored inventory: $inventory_file"
   echo "Generated ignored private DNS inventory: $private_dns_inventory_file"
+  echo "Generated ignored OpenBao inventory: $openbao_inventory_file"
   echo "Run make validate, then make plan again to prove no drift."
 }
 
@@ -464,6 +505,13 @@ validate_substrate()
   dns_profile_name="$(printf '%s' "$outputs" | jq -er '.private_dns.value.profile')"
   forward_zone="$(printf '%s' "$outputs" | jq -er '.private_dns.value.forward_zone')"
   reverse_zone="$(printf '%s' "$outputs" | jq -er '.private_dns.value.reverse_zone')"
+  openbao_profile_name="$(printf '%s' "$outputs" | jq -er '.openbao_foundation.value.profile')"
+  openbao_instance_name="$(printf '%s' "$outputs" | jq -er '.openbao_foundation.value.instance')"
+  openbao_ipv4_address="$(printf '%s' "$outputs" | jq -er '.openbao_foundation.value.ipv4_address')"
+  openbao_dns_name="$(printf '%s' "$outputs" | jq -er '.openbao_foundation.value.dns_name')"
+  openbao_alias_name="$(printf '%s' "$outputs" | jq -er '.openbao_foundation.value.alias_name')"
+  openbao_api_port="$(printf '%s' "$outputs" | jq -er '.openbao_foundation.value.api_port')"
+  openbao_acl_name="$(printf '%s' "$outputs" | jq -er '.openbao_foundation.value.network_acl')"
   planned_image="$(printf '%s' "$outputs" | jq -er '.substrate.value.instance_image')"
   [ "$planned_image" = "$session_image" ] ||
     fail "the state image differs from the reviewed Incus session"
@@ -472,8 +520,14 @@ validate_substrate()
     "${remote}:/1.0/projects/${project_name}")"
   [ "$(printf '%s' "$project_json" | jq -r '.config.restricted')" = "true" ] ||
     fail "the Incus project is not restricted"
-  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.containers"]')" = "3" ] ||
-    fail "the Incus project does not enforce the three-container limit"
+  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.containers"]')" = "4" ] ||
+    fail "the Incus project does not enforce the four-container limit"
+  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.instances"]')" = "4" ] ||
+    fail "the Incus project does not enforce the four-instance limit"
+  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.cpu"]')" = "4" ] ||
+    fail "the Incus project aggregate CPU limit differs from the active boundary"
+  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.memory"]')" = "1536MiB" ] ||
+    fail "the Incus project aggregate memory limit differs from the active boundary"
   [ "$(printf '%s' "$project_json" | jq -r '.config["limits.virtual-machines"]')" = "0" ] ||
     fail "the Incus project permits virtual machines"
   [ "$(printf '%s' "$project_json" | jq -r '.config["restricted.networks.access"]')" = "$network_name" ] ||
@@ -482,10 +536,10 @@ validate_substrate()
     fail "the Incus project does not isolate its network zones"
   [ "$(printf '%s' "$project_json" | jq -r '.config["restricted.networks.zones"]')" = "${session_dns_domain},${reverse_zone}" ] ||
     fail "the Incus project permits unexpected network zones"
-  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.disk"]')" = "8GiB" ] ||
+  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.disk"]')" = "12GiB" ] ||
     fail "the Incus project aggregate disk limit differs from the active boundary"
   [ "$(printf '%s' "$project_json" |
-    jq -r --arg key "limits.disk.pool.${pool_name}" '.config[$key]')" = "8GiB" ] ||
+    jq -r --arg key "limits.disk.pool.${pool_name}" '.config[$key]')" = "12GiB" ] ||
     fail "the Incus project per-pool disk limit differs from the active boundary"
 
   network_json="$(INCUS_CONF="$config_dir" incus query \
@@ -528,6 +582,21 @@ validate_substrate()
   [ "$(printf '%s' "$dns_profile_json" | jq -r '.devices.root.size')" = "2GiB" ] ||
     fail "the DNS profile disk limit differs from the reviewed boundary"
 
+  openbao_profile_json="$(INCUS_CONF="$config_dir" incus query \
+    "${remote}:/1.0/profiles/${openbao_profile_name}?project=${project_name}")"
+  [ "$(printf '%s' "$openbao_profile_json" | jq -r '.config["limits.cpu"]')" = "1" ] ||
+    fail "the OpenBao profile CPU limit differs from the reviewed boundary"
+  [ "$(printf '%s' "$openbao_profile_json" | jq -r '.config["limits.memory"]')" = "512MiB" ] ||
+    fail "the OpenBao profile memory limit differs from the reviewed boundary"
+  [ "$(printf '%s' "$openbao_profile_json" | jq -r '.config["security.nesting"]')" = "false" ] ||
+    fail "the OpenBao profile permits container nesting"
+  [ "$(printf '%s' "$openbao_profile_json" | jq -r '.config["security.privileged"]')" = "false" ] ||
+    fail "the OpenBao profile does not enforce an unprivileged container"
+  [ "$(printf '%s' "$openbao_profile_json" | jq -r '.devices.root.pool')" = "$pool_name" ] ||
+    fail "the OpenBao profile root disk uses the wrong pool"
+  [ "$(printf '%s' "$openbao_profile_json" | jq -r '.devices.root.size')" = "4GiB" ] ||
+    fail "the OpenBao profile disk limit differs from the reviewed boundary"
+
   instance_json="$(INCUS_CONF="$config_dir" incus query \
     "${remote}:/1.0/instances/${instance_name}?project=${project_name}")"
   [ "$(printf '%s' "$instance_json" | jq -r '.type')" = "container" ] ||
@@ -565,6 +634,49 @@ validate_substrate()
       fail "$dns_name does not use its reviewed static address"
   done
 
+  openbao_acl_json="$(INCUS_CONF="$config_dir" incus query \
+    "${remote}:/1.0/network-acls/${openbao_acl_name}?project=default")"
+  printf '%s' "$openbao_acl_json" | jq -e \
+    --arg source "$session_ipv4_cidr" \
+    --arg destination "$openbao_ipv4_address" \
+    --arg port "$openbao_api_port" '
+      (.ingress | length) == 1
+      and (.egress | length) == 0
+      and .ingress[0].action == "allow"
+      and .ingress[0].source == $source
+      and .ingress[0].destination == $destination
+      and .ingress[0].destination_port == $port
+      and .ingress[0].protocol == "tcp"
+      and .ingress[0].state == "enabled"
+    ' >/dev/null || fail "the OpenBao network ACL differs from the reviewed boundary"
+
+  openbao_instance_json="$(INCUS_CONF="$config_dir" incus query \
+    "${remote}:/1.0/instances/${openbao_instance_name}?project=${project_name}")"
+  [ "$(printf '%s' "$openbao_instance_json" | jq -r '.type')" = "container" ] ||
+    fail "the OpenBao instance is not a system container"
+  [ "$(printf '%s' "$openbao_instance_json" | jq -r '.devices.eth0.network')" = "$network_name" ] ||
+    fail "the OpenBao instance NIC uses the wrong network"
+  [ "$(printf '%s' "$openbao_instance_json" | jq -r '.devices.eth0["ipv4.address"]')" = "$openbao_ipv4_address" ] ||
+    fail "the OpenBao instance NIC does not use its reviewed static address"
+  [ "$(printf '%s' "$openbao_instance_json" | jq -r '.devices.eth0["security.acls"]')" = "$openbao_acl_name" ] ||
+    fail "the OpenBao instance NIC does not use its reviewed ACL"
+  [ "$(printf '%s' "$openbao_instance_json" | jq -r '.devices.eth0["security.acls.default.ingress.action"]')" = "reject" ] ||
+    fail "the OpenBao instance NIC does not reject unmatched ingress"
+  [ "$(printf '%s' "$openbao_instance_json" | jq -r '.devices.eth0["security.acls.default.egress.action"]')" = "allow" ] ||
+    fail "the OpenBao instance NIC does not explicitly allow egress"
+
+  openbao_state_json="$(INCUS_CONF="$config_dir" incus query \
+    "${remote}:/1.0/instances/${openbao_instance_name}/state?project=${project_name}")"
+  [ "$(printf '%s' "$openbao_state_json" | jq -r '.status')" = "Running" ] ||
+    fail "the OpenBao container is not running"
+  actual_openbao_ipv4="$(printf '%s' "$openbao_state_json" | jq -er '
+    [.network.eth0.addresses[]
+      | select(.family == "inet" and .scope == "global")
+      | .address][0]
+  ')" || fail "the OpenBao container has no global IPv4 address on eth0"
+  [ "$actual_openbao_ipv4" = "$openbao_ipv4_address" ] ||
+    fail "the OpenBao container does not use its reviewed static address"
+
   forward_zone_json="$(INCUS_CONF="$config_dir" incus query \
     "${remote}:/1.0/network-zones/${forward_zone}?project=${project_name}")"
   reverse_zone_json="$(INCUS_CONF="$config_dir" incus query \
@@ -590,6 +702,15 @@ validate_substrate()
     "${remote}:/1.0/network-zones/${forward_zone}/records/resolver?project=${project_name}")"
   [ "$(printf '%s' "$resolver_record_json" | jq '[.entries[] | select(.type == "A")] | length')" = "2" ] ||
     fail "the provider-owned resolver record does not contain two A entries"
+  openbao_record_json="$(INCUS_CONF="$config_dir" incus query \
+    "${remote}:/1.0/network-zones/${forward_zone}/records/openbao?project=${project_name}")"
+  printf '%s' "$openbao_record_json" | jq -e --arg target "${openbao_dns_name}." '
+    (.entries | length) == 1
+    and .entries[0].type == "CNAME"
+    and .entries[0].value == $target
+  ' >/dev/null || fail "the private OpenBao alias differs from the reviewed target"
+  INCUS_CONF="$config_dir" incus exec --project "$project_name" \
+    "${remote}:${instance_name}" -- getent ahostsv4 "$openbao_alias_name" >/dev/null
 
   umask 077
   jq -n \
@@ -604,6 +725,7 @@ validate_substrate()
     --arg forward_zone "$forward_zone" \
     --arg reverse_zone "$reverse_zone" \
     --argjson secondaries "$(printf '%s' "$outputs" | jq '.private_dns.value.secondaries')" \
+    --argjson openbao "$(printf '%s' "$outputs" | jq '.openbao_foundation.value')" \
     --arg dns_name "$instance_dns_name" '{
       schema_version: 1,
       deployment_profile: $profile,
@@ -623,11 +745,13 @@ validate_substrate()
       private_dns_forward_zone: $forward_zone,
       private_dns_reverse_zone: $reverse_zone,
       private_dns_secondaries: $secondaries,
+      openbao_foundation_ready: true,
+      openbao: $openbao,
       ipv6_policy: "disabled"
     }' >"$evidence_file"
   write_inventory
 
-  echo "Incus substrate validation passed: $instance_name ($instance_ipv4)"
+  echo "Incus substrate validation passed: $instance_name ($instance_ipv4), $openbao_instance_name ($actual_openbao_ipv4)"
   echo "Generated ignored validation evidence: $evidence_file"
 }
 
@@ -666,7 +790,7 @@ destroy()
     fail "provider-managed Incus resources remain in state"
   }
   rm -f "$create_plan" "$destroy_plan" "$inventory_file" \
-    "$private_dns_inventory_file" "$evidence_file"
+    "$private_dns_inventory_file" "$openbao_inventory_file" "$evidence_file"
   echo "Incus provider destroy finished; the Incus server remains installed and initialized."
 }
 

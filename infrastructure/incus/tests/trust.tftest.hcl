@@ -63,10 +63,15 @@ run "trusted_standalone_boundary" {
   assert {
     condition = (
       incus_project.development.config["restricted"] == "true" &&
-      incus_project.development.config["limits.containers"] == "3" &&
+      incus_project.development.config["limits.containers"] == "4" &&
+      incus_project.development.config["limits.cpu"] == "4" &&
+      incus_project.development.config["limits.disk"] == "12GiB" &&
+      incus_project.development.config["limits.disk.pool.rpr-local"] == "12GiB" &&
+      incus_project.development.config["limits.instances"] == "4" &&
+      incus_project.development.config["limits.memory"] == "1536MiB" &&
       incus_project.development.config["limits.virtual-machines"] == "0"
     )
-    error_message = "The development project must be restricted to three containers and no VMs."
+    error_message = "The development project must fit exactly four bounded containers and no VMs."
   }
 
   assert {
@@ -101,6 +106,63 @@ run "trusted_standalone_boundary" {
       incus_instance.smoke.profiles[0] == incus_profile.system.name
     )
     error_message = "The smoke workload must be a system container using only the managed profile."
+  }
+
+  assert {
+    condition = (
+      incus_profile.openbao.config["limits.cpu"] == "1" &&
+      incus_profile.openbao.config["limits.memory"] == "512MiB" &&
+      incus_profile.openbao.config["security.nesting"] == "false" &&
+      incus_profile.openbao.config["security.privileged"] == "false" &&
+      one([
+        for device in incus_profile.openbao.device : device
+        if device.name == "root"
+      ]).properties["size"] == "4GiB" &&
+      one([
+        for device in incus_profile.openbao.device : device
+        if device.name == "root"
+      ]).properties["pool"] == incus_storage_pool.local.name
+    )
+    error_message = "The OpenBao profile must retain the reviewed CPU, memory, disk, and isolation limits."
+  }
+
+  assert {
+    condition = (
+      incus_instance.openbao.name == "bao-01" &&
+      incus_instance.openbao.type == "container" &&
+      length(incus_instance.openbao.profiles) == 1 &&
+      incus_instance.openbao.profiles[0] == incus_profile.openbao.name &&
+      one(incus_instance.openbao.device).properties["ipv4.address"] == "10.20.0.20" &&
+      one(incus_instance.openbao.device).properties["security.acls"] == incus_network_acl.openbao.name &&
+      one(incus_instance.openbao.device).properties["security.acls.default.ingress.action"] == "reject" &&
+      one(incus_instance.openbao.device).properties["security.acls.default.egress.action"] == "allow"
+    )
+    error_message = "OpenBao must be one bounded container with a static address and fail-closed ingress ACL."
+  }
+
+  assert {
+    condition = (
+      incus_network_acl.openbao.project == "default" &&
+      length(incus_network_acl.openbao.ingress) == 1 &&
+      length(incus_network_acl.openbao.egress) == 0 &&
+      one(incus_network_acl.openbao.ingress).action == "allow" &&
+      one(incus_network_acl.openbao.ingress).source == "10.20.0.0/24" &&
+      one(incus_network_acl.openbao.ingress).destination == "10.20.0.20" &&
+      one(incus_network_acl.openbao.ingress).destination_port == "8200" &&
+      one(incus_network_acl.openbao.ingress).protocol == "tcp" &&
+      one(incus_network_acl.openbao.ingress).state == "enabled"
+    )
+    error_message = "The host ACL must allow only the private platform CIDR to reach the OpenBao API port."
+  }
+
+  assert {
+    condition = (
+      incus_network_zone_record.openbao.name == "openbao" &&
+      one(incus_network_zone_record.openbao.entry).type == "CNAME" &&
+      one(incus_network_zone_record.openbao.entry).value == "bao-01.dev.apadanalab.de." &&
+      output.openbao_foundation.alias_name == "openbao.dev.apadanalab.de"
+    )
+    error_message = "The private OpenBao alias must target the Incus-generated service name."
   }
 }
 
