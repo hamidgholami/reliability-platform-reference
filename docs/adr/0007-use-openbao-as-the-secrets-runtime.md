@@ -13,7 +13,7 @@ recovery. The roadmap allows Vault Community Edition or OpenBao, but operating
 both would double security updates, configuration paths, tests, backup work, and
 documentation without serving a second runtime requirement.
 
-The required capabilities are available in OpenBao 2.6.2: integrated Raft
+The required capabilities are available in OpenBao 2.6.3: integrated Raft
 storage and snapshots, declarative audit devices, JWT/OIDC authentication, PKI,
 the PostgreSQL database plugin, and SSH certificate signing. OpenBao is governed
 as an open-source project and distributed under MPL-2.0. Official signed release
@@ -28,7 +28,7 @@ no-cost open-source goals.
 ## Decision
 
 Use OpenBao as the only Phase 2 secrets runtime. Start with exact release
-`2.6.2`, verify its signed checksum and package provenance during dependency
+`2.6.3`, verify its signed checksum and package provenance during dependency
 setup, and use the official `bao` CLI and HTTP API without a custom compatibility
 wrapper.
 
@@ -75,7 +75,7 @@ documented interfaces, and rerun the complete behavior and recovery contract.
 ## Validation and reversal
 
 Phase 2 must prove on the authoritative reference environment that OpenBao
-`2.6.2` can:
+`2.6.3` can:
 
 - run with TLS, integrated storage, and declarative audit configuration;
 - snapshot and restore a non-production secret in isolation;
@@ -92,11 +92,16 @@ license cost.
 
 ## References
 
-- [OpenBao 2.6.2 release](https://github.com/openbao/openbao/releases/tag/v2.6.2)
-- [OpenBao installation](https://openbao.org/docs/install/)
-- [OpenBao integrated storage](https://openbao.org/docs/concepts/integrated-storage/)
-- [OpenBao declarative audit devices](https://openbao.org/docs/configuration/audit/)
-- [OpenBao PKI setup](https://openbao.org/docs/secrets/pki/setup/)
-- [OpenBao PostgreSQL database secrets](https://openbao.org/docs/secrets/databases/postgresql/)
-- [OpenBao signed SSH certificates](https://openbao.org/docs/secrets/ssh/signed-ssh-certificates/)
-- [OpenBao JWT/OIDC authentication](https://openbao.org/docs/auth/jwt/)
+- [OpenBao 2.6.3 release](https://github.com/openbao/openbao/releases/tag/v2.6.3)
+- [OpenBao installation](https://openbao.org/docs/2.6.x/install/)
+- [OpenBao integrated storage](https://openbao.org/docs/2.6.x/concepts/integrated-storage/)
+- [OpenBao declarative audit devices](https://openbao.org/docs/2.6.x/configuration/audit/)
+- [OpenBao PKI setup](https://openbao.org/docs/2.6.x/secrets/pki/setup/)
+- [OpenBao PostgreSQL database secrets](https://openbao.org/docs/2.6.x/secrets/databases/postgresql/)
+- [OpenBao signed SSH certificates](https://openbao.org/docs/2.6.x/secrets/ssh/signed-ssh-certificates/)
+- [OpenBao JWT/OIDC authentication](https://openbao.org/docs/2.6.x/auth/jwt/)
+
+Implementation baseline note: on 2026-09-28 the exact patch baseline advanced
+from 2.6.2 to 2.6.3 because 2.6.3 contains published security fixes. The
+OpenBao product, release line, ownership, and trust-boundary decision did not
+change, so this update does not supersede the ADR.

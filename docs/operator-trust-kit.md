@@ -30,5 +30,6 @@ locations. Examples in this repository must be synthetic.
 5. Issue short-lived credentials; do not distribute reusable deployment keys.
 6. Record the ceremony, participants, revision, and validation evidence.
 
-The detailed executable ceremony and recovery drill arrive with the foundation
-and secrets phases. Phase 0 defines the contract only.
+The [OpenBao foundation runbook](runbooks/openbao-foundation.md) defines the
+Phase 2 custody, initialization, unseal, root-signing, rotation, and recovery
+contract. Its private inputs and outputs remain outside this repository.

@@ -42,4 +42,7 @@ Phase 4 will introduce a small, coherent Java Spring Boot application as the
 system under delivery. It will demonstrate build, unit and integration tests,
 artifact publication, promotion, deployment, observability, rollback, and
 eventually browser-based QA with Selenium or an equivalent maintained tool. No
-application implementation belongs in the current phase.
+application implementation belongs in the current phase. The separate
+[Jenkins platform library](https://github.com/hamidgholami/jenkins-platform-library)
+is already implemented; Phase 4 will consume a reviewed release rather than
+duplicate or vendor it into this repository.

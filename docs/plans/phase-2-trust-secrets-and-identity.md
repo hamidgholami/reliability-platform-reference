@@ -1,6 +1,6 @@
 # Phase 2 Plan: Trust, Secrets, and Identity
 
-- Status: active; P2-01 accepted on `workstation-validation`
+- Status: active; P2-01 accepted and the P2-02 readiness gate is closed
 - Started: 2026-09-23
 - Owner: Hamid Gholami
 - Default deployment profile: `single-node-reference`
@@ -96,22 +96,26 @@ and proves the required authentication claims. The application that consumes an
 approval belongs with the Phase 4 delivery path and is not pulled into this
 phase.
 
-## P2-00 decision gates
+## P2-00 phase-wide decision register
 
 Resolve each choice before the work item that consumes it. A later service must
 not block an earlier dependency slice when the two choices are independent.
+P2-00 is therefore a rolling control track, not a sequential milestone that
+must close before P2-01 or P2-02 can begin. It closes with the Phase 2 exit
+review after every row has either been resolved or explicitly removed from
+scope.
 
 | Decision | Gate | Status |
 | --- | --- | --- |
 | BIND version and source | P2-01 | Use the Debian 13 stable/security `bind9` and `bind9-dnsutils` 9.20 package line; accept patched Debian revisions and record the installed version in acceptance evidence. |
 | PostgreSQL version and source | P2-03 | Open; prefer the Debian 13 package when it satisfies the dynamic-credential contract. |
 | Keycloak version, installation, realm export, database ownership, and WebAuthn ceremony | P2-04 | Open; resolve before storing identity data. |
-| OpenBao installation and bootstrap | P2-02 | Open beyond the accepted OpenBao 2.6.2 product choice. |
+| OpenBao installation and bootstrap | P2-02 | Closed: use the signed OpenBao 2.6.3 native Debian package for the target architecture, integrated Raft storage, manual Shamir initialization, and no auto-unseal dependency. |
 | Netcup API generation and maintained DNS-01 client | P2-05 | Open; it is not needed for private DNS and no custom ACME client is authorized. |
-| Capacity | Every slice | Develop in the retained local Lima VM. Keep AWS `t4g.small` until measurements show a failure or an upstream minimum requires a change. |
+| Capacity | Every slice | Develop in the retained local Lima VM. P2-02 adds one 1-vCPU, 512-MiB, 4-GiB container and keeps AWS `t4g.small` plus 30-GiB `gp3`; measure before promotion and change the paid profile only after evidence of a capacity failure. |
 | DNS bootstrap secrets | P2-01 | Generate one random TSIG value per zone and secondary in a mode-`0600` ignored runtime file. Pass that file independently to OpenTofu and Ansible; never recover a key from state or output. |
-| Remaining bootstrap secrets and rotation | P2-02 onward | Open; bootstrap must not require a healthy secrets service to create that same service. |
-| Secrets-service configuration owner | P2-02 | Open; prefer narrowly scoped idempotent Ansible or HTTP API tasks over another provider. |
+| Remaining bootstrap secrets and rotation | P2-02 onward | Closed for P2-02 by the secret inventory and ceremony in the OpenBao foundation runbook; later services extend that inventory before use. Bootstrap never depends on a healthy OpenBao instance to create OpenBao. |
+| Secrets-service configuration owner | P2-02 | Closed: OpenTofu owns the instance, host-enforced network ACL, and DNS records; Ansible owns the guest and static service configuration; narrowly scoped Ansible HTTP API tasks own OpenBao objects; and humans own offline-root and seal ceremonies. |
 | Operator browser access | P2-04 | Required before browser acceptance. Prefer route-limited WireGuard with split DNS; resolve endpoint placement, peer custody, revocation, and profile-specific ingress before implementation. Do not expose private services publicly. |
 
 Any choice that changes a platform or trust boundary requires an ADR. Version
@@ -120,24 +124,43 @@ plan and the dependency inventory, not in an ADR.
 
 ## Work items
 
-### P2-00 — Capability, ownership, and bootstrap review
+### P2-00 — Rolling capability, ownership, and bootstrap review
 
-- [x] Select OpenBao 2.6.2 as the single Phase 2 secrets runtime in ADR-0007;
-  retain Vault as a documented migration, not a parallel compatibility matrix.
-- [ ] Resolve each decision gate before its consuming work item, using maintained
-  upstream documentation and only the runtime spikes needed to distinguish
-  alternatives.
-- [ ] Map every new secret-bearing value to its producer, consumers, storage,
-  rotation, revocation, backup, and evidence-redaction rules.
-- [ ] Define the ordered bootstrap and recovery data flows and update the threat
-  model with the implemented boundaries.
-- [ ] Record exact resource assumptions and cost impact before changing the AWS
-  reference size or lifetime.
-- [ ] Add or supersede ADRs only where the accepted architecture changes.
+P2-00 governs every slice rather than representing an unfinished deployment.
+For each consuming work item, resolve its rows in the register, extend the
+secret inventory and recovery flow, record capacity assumptions, and add an ADR
+only when an accepted architecture boundary changes. Phase-wide acceptance is
+reviewed at P2-06: every dependency must close a named capability gap, have one
+configuration owner, and have a test and removal or migration path. No service
+is created merely to compare products.
 
-Acceptance: every Phase 2 dependency closes a named capability gap, has one
-configuration owner, and has a test and removal or migration path. No service is
-created merely to compare products.
+### P2-02 readiness gate — accepted 2026-09-28
+
+- [x] Advance the selected 2.6 release line from OpenBao 2.6.2 to 2.6.3 because
+  the patch release contains published security fixes; this does not change the
+  ADR-0007 product or architecture decision.
+- [x] Select the official native Debian package for `amd64` or `arm64`, verify
+  the signed checksum manifest against the pinned OpenBao release-key
+  fingerprint, and verify the package checksum before installation.
+- [x] Assign one owner to each layer: OpenTofu for the Incus resource, network
+  ACL, and DNS data; Ansible for the guest and static configuration; Ansible
+  HTTP API tasks for declarative OpenBao objects; and the human operator for
+  root and seal ceremonies.
+- [x] Keep the offline CA root and OpenBao Shamir material outside the repository
+  and require protected, encrypted inputs for every ceremony. Do not introduce
+  a cloud KMS merely to auto-unseal one reference node.
+- [x] Define the bootstrap, rotation, recovery, redaction, and teardown contract
+  in the [OpenBao foundation runbook](../runbooks/openbao-foundation.md) and
+  update the threat model for the new trust boundary.
+- [x] Keep the paid AWS profile at `t4g.small` and 30-GiB `gp3`; the bounded
+  container request and retained-local measurements must justify any later
+  increase.
+- [x] Record that OpenBao removed `mlock` in 2.0.0. Rely on the package's
+  `MemorySwapMax=0` service boundary and do not add obsolete capability grants
+  or a meaningless `disable_mlock` setting.
+
+Acceptance: the P2-02 implementation may begin without an unresolved product,
+ownership, secret-bootstrap, recovery, capacity, or provenance decision.
 
 ### P2-01 — Private authoritative DNS
 
@@ -184,8 +207,8 @@ captures the completed workstation run. Promotion to the real
 - [ ] Implement the reviewed offline-root procedure without committing or
   automating custody of the root private key.
 - [ ] Create one bounded secrets-service instance with TLS, integrated storage,
-  memory locking where supported, a host firewall boundary, and no public
-  listener.
+  swap disabled at the service boundary, a host-enforced Incus network ACL,
+  and no public listener. Do not configure obsolete OpenBao `mlock` settings.
 - [ ] Initialize and unseal through an explicit human ceremony. Store recovery
   material outside the repository and outside ordinary command logs.
 - [ ] Enable at least one durable audit device before routine use and validate
@@ -343,8 +366,8 @@ selection.
 
 ## Verification interface
 
-P2-00 chooses exact new target names before implementation. The existing public
-foundation interface remains supported:
+The P2-02 readiness gate fixes the OpenBao target names in its runbook. The
+existing public foundation interface remains supported:
 
 ```sh
 make doctor

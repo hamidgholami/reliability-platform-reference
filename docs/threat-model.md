@@ -30,6 +30,10 @@ identity/secrets services, backup storage, and each cloud account or tenant.
 | Supply-chain substitution | Exact versions, pinned actions, checksums/signatures, dependency review |
 | Destructive or costly automation | Plan-first workflow, explicit environment confirmation, TTL/budget labels, least-privilege credentials |
 | Backup exists but cannot restore | Separate failure domain and scheduled restore validation with evidence |
+| Compromised secrets-service bootstrap | Signed package provenance, trusted-host access, encrypted Shamir outputs, short-lived bootstrap credentials, and explicit initial-root-token retirement |
+| Compromised online intermediate | Offline root separation, bounded intermediate and leaf lifetimes, revocation endpoints, and a documented replacement ceremony |
+| Lost seal quorum | Encrypted shares in independently recoverable external locations and a tested quorum ceremony; no share or decrypted key enters Git or evidence |
+| Audit loss or bypass | Declarative file audit enabled before routine use, protected local storage, rotation checks, and validation that requests fail when every audit device is unavailable |
 
 ## Identity separation
 
@@ -39,6 +43,24 @@ and WebAuthn credentials remain inside Keycloak and never enter Jenkins or
 OpenBao. A shared service account, machine-readable TOTP, or reusable SSH key
 must not substitute for an attributable human approval. See
 [ADR-0008](adr/0008-separate-human-approval-from-machine-credentials.md).
+
+## Phase 2 secrets bootstrap boundary
+
+The signed repository and verified OpenBao package may create an empty, sealed
+service, but they cannot produce their own external trust. A human operator
+supplies a bootstrap listener certificate from the offline-root procedure,
+initializes OpenBao with encrypted Shamir outputs, and presents the threshold
+shares only through interactive unseal input. The initial root token exists only
+long enough to install scoped policy and a bounded bootstrap administrator.
+
+OpenBao generates the online intermediate private key internally and exports
+only a CSR. The offline root signs that CSR outside the platform. A compromise
+of the running service can therefore issue within the intermediate's policy and
+lifetime, but cannot recover the offline root. Recovery starts with trusted
+host access and the external Shamir quorum, restores a verified Raft snapshot
+only into an isolated instance, and reconnects DNS or consumers only after
+validation. Detailed custody and redaction rules are in the
+[OpenBao foundation runbook](runbooks/openbao-foundation.md).
 
 ## Deferred analysis
 

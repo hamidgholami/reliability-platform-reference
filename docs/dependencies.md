@@ -11,6 +11,7 @@ third-party source or binary is redistributed by this repository.
 | [certifi](https://github.com/certifi/python-certifi) | 2026.7.22 | Pinned CA bundle for Python and Galaxy TLS validation | MPL-2.0 | Use a correctly configured operating-system CA bundle |
 | [Molecule](https://github.com/ansible/molecule) | 26.8.0 | Role integration-test harness for later work items | MIT | Direct disposable-host test scripts |
 | [Mitogen](https://github.com/mitogen-hq/mitogen) | 0.3.53 | Accelerated Ansible transport for Python-backed target plays | BSD-3-Clause | Use Ansible's built-in linear strategy with higher per-task overhead |
+| [OpenBao](https://github.com/openbao/openbao) | 2.6.3 | Phase 2 PKI, encrypted secrets, dynamic credentials, and machine identity | MPL-2.0 | Vault requires a deliberate migration; separate PKI and secret services increase operational scope |
 | [devsec.hardening](https://github.com/dev-sec/ansible-collection-hardening) | 10.6.0 | Maintained OS and SSH hardening roles | Apache-2.0 | Local implementation creates a larger security maintenance burden |
 | [OpenTofu](https://github.com/opentofu/opentofu) | 1.12.6 | Infrastructure plan and apply interface | MPL-2.0 | Terraform compatibility may be checked, but apply remains OpenTofu-owned |
 | [AWS provider](https://github.com/hashicorp/terraform-provider-aws) | 6.63.0 | Minimal EC2 bootstrap root | MPL-2.0 | A pre-existing Debian VM removes the AWS root |
@@ -50,3 +51,14 @@ P2-01 installs `bind9` and `bind9-dnsutils` from the Debian 13 stable/security
 repositories. Automation accepts only the BIND 9.20 package line so Debian
 security revisions remain installable without silently crossing a feature
 series. Deployment acceptance records the exact installed revision.
+
+P2-02 installs the official OpenBao 2.6.3 native Debian package for the detected
+`amd64` or `arm64` architecture. Dependency setup verifies the upstream
+`checksums.txt.gpgsig` against primary release-key fingerprint
+`66D15FDD87287219C8E15478D200CD702853E6D0`, then verifies the selected package
+against that manifest. The reviewed package SHA-256 values are
+`5fc11b4aa2bd51eccfda8a694131d88410d3f3d60420aadb2d8c31558db03acd`
+for `amd64` and
+`6822f59749cc919b820bad472a70ba55ff4f128072556a97f8d204cc9b9d55ef`
+for `arm64`. The HSM build is not installed because this single-node reference
+uses explicit Shamir unseal and has no HSM requirement.
