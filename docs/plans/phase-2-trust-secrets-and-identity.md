@@ -218,7 +218,7 @@ captures the completed workstation run. Promotion to the real
 - [x] Generate the online intermediate key inside the secrets service, sign only
   its CSR with the offline root, and publish the non-secret trust chain and CRL
   endpoints through private DNS.
-- [ ] Issue and renew one service certificate without exporting the intermediate
+- [x] Issue and renew one service certificate without exporting the intermediate
   private key.
 - [ ] Revoke the initial root token after recovery-capable administrative access
   is proven.

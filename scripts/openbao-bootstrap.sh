@@ -115,8 +115,8 @@ validate_pki_dns_publication()
 }
 
 case "$action" in
-  kv|pki) ;;
-  *) fail "usage: $0 {kv|pki}" ;;
+  kv|pki|leaf) ;;
+  *) fail "usage: $0 {kv|pki|leaf}" ;;
 esac
 case "$profile" in
   workstation-validation|single-node-reference) ;;
@@ -155,6 +155,7 @@ done
 case "$action" in
   kv) expected="bootstrap-openbao-$profile-$remote" ;;
   pki) expected="bootstrap-openbao-pki-$profile-$remote" ;;
+  leaf) expected="rotate-openbao-certificate-$profile-$remote" ;;
 esac
 [ "${CONFIRM:-}" = "$expected" ] || fail "set CONFIRM=$expected"
 [ -r "$inventory" ] || fail "OpenBao inventory is missing; run make apply"
@@ -247,6 +248,12 @@ run_playbook()
 if [ "$action" = "kv" ]; then
   echo "Bootstrapping OpenBao KV and scoped policies: profile=$profile remote=$remote"
   run_playbook ansible/playbooks/bootstrap-openbao.yml
+  exit 0
+fi
+
+if [ "$action" = "leaf" ]; then
+  echo "Rotating the OpenBao listener certificate: profile=$profile remote=$remote"
+  run_playbook ansible/playbooks/rotate-openbao-certificate.yml
   exit 0
 fi
 

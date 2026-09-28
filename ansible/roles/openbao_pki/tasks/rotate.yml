@@ -1,0 +1,524 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Read the bounded OpenBao listener issuance role
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/roles/{{ openbao_pki_leaf_role_name }}
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_pki_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    return_content: true
+    status_code:
+      - 200
+      - 404
+  register: openbao_pki_leaf_role_before
+  no_log: true
+  diff: false
+
+- name: Derive the exact OpenBao listener issuance role
+  ansible.builtin.set_fact:
+    openbao_pki_leaf_role:
+      issuer_ref: "{{ openbao_pki_issuer_name }}"
+      ttl: "{{ openbao_pki_leaf_ttl_seconds }}"
+      max_ttl: "{{ openbao_pki_leaf_ttl_seconds }}"
+      allowed_domains:
+        - openbao.dev.apadanalab.de
+        - bao-01.dev.apadanalab.de
+      allow_bare_domains: true
+      allow_subdomains: false
+      allow_glob_domains: false
+      allow_wildcard_certificates: false
+      allow_any_name: false
+      allow_localhost: false
+      enforce_hostnames: true
+      allow_ip_sans: true
+      allowed_ip_sans_cidr:
+        - 10.20.0.20/32
+      server_flag: true
+      client_flag: false
+      code_signing_flag: false
+      email_protection_flag: false
+      key_type: rsa
+      key_bits: "{{ openbao_pki_leaf_key_bits }}"
+      key_usage:
+        - DigitalSignature
+        - KeyEncipherment
+      use_csr_common_name: true
+      use_csr_sans: true
+      organization:
+        - "{{ openbao_pki_organization }}"
+      ou:
+        - "{{ openbao_pki_organizational_unit }}"
+      generate_lease: false
+      no_store: false
+      require_cn: true
+      not_after_bound: ttl-limited
+
+- name: Derive whether the listener issuance role is already exact
+  ansible.builtin.set_fact:
+    openbao_pki_leaf_role_matches: >-
+      {{
+        openbao_pki_leaf_role_before.status == 200 and
+        openbao_pki_leaf_role_before.json.data.issuer_ref == openbao_pki_issuer_name and
+        openbao_pki_leaf_role_before.json.data.ttl == openbao_pki_leaf_ttl_seconds and
+        openbao_pki_leaf_role_before.json.data.max_ttl == openbao_pki_leaf_ttl_seconds and
+        openbao_pki_leaf_role_before.json.data.allowed_domains ==
+          ['openbao.dev.apadanalab.de', 'bao-01.dev.apadanalab.de'] and
+        openbao_pki_leaf_role_before.json.data.allow_bare_domains and
+        not openbao_pki_leaf_role_before.json.data.allow_subdomains and
+        not openbao_pki_leaf_role_before.json.data.allow_glob_domains and
+        not openbao_pki_leaf_role_before.json.data.allow_wildcard_certificates and
+        not openbao_pki_leaf_role_before.json.data.allow_any_name and
+        not openbao_pki_leaf_role_before.json.data.allow_localhost and
+        openbao_pki_leaf_role_before.json.data.enforce_hostnames and
+        openbao_pki_leaf_role_before.json.data.allow_ip_sans and
+        openbao_pki_leaf_role_before.json.data.allowed_ip_sans_cidr == ['10.20.0.20/32'] and
+        openbao_pki_leaf_role_before.json.data.server_flag and
+        not openbao_pki_leaf_role_before.json.data.client_flag and
+        not openbao_pki_leaf_role_before.json.data.code_signing_flag and
+        not openbao_pki_leaf_role_before.json.data.email_protection_flag and
+        openbao_pki_leaf_role_before.json.data.key_type == 'rsa' and
+        openbao_pki_leaf_role_before.json.data.key_bits == openbao_pki_leaf_key_bits and
+        openbao_pki_leaf_role_before.json.data.key_usage ==
+          ['DigitalSignature', 'KeyEncipherment'] and
+        openbao_pki_leaf_role_before.json.data.use_csr_common_name and
+        openbao_pki_leaf_role_before.json.data.use_csr_sans and
+        openbao_pki_leaf_role_before.json.data.organization == [openbao_pki_organization] and
+        openbao_pki_leaf_role_before.json.data.ou == [openbao_pki_organizational_unit] and
+        not openbao_pki_leaf_role_before.json.data.generate_lease and
+        not openbao_pki_leaf_role_before.json.data.no_store and
+        openbao_pki_leaf_role_before.json.data.require_cn and
+        openbao_pki_leaf_role_before.json.data.not_after_bound == 'ttl-limited'
+      }}
+  no_log: true
+  diff: false
+
+- name: Configure the bounded OpenBao listener issuance role
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/roles/{{ openbao_pki_leaf_role_name }}
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_pki_token }}"
+    ca_path: "{{ openbao_pki_ca_path }}"
+    body_format: json
+    body: "{{ openbao_pki_leaf_role }}"
+    return_content: true
+    status_code: 200
+  when: not openbao_pki_leaf_role_matches
+  changed_when: true
+  no_log: true
+  diff: false
+
+- name: Read the current listener certificate serial and issuer
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - x509
+      - -in
+      - "{{ openbao_pki_leaf_tls_path }}/tls.crt"
+      - -noout
+      - -serial
+      - -issuer
+      - -nameopt
+      - RFC2253
+  register: openbao_pki_previous_certificate
+  changed_when: false
+
+- name: Classify this listener certificate rotation
+  ansible.builtin.set_fact:
+    openbao_pki_leaf_rotation_kind: >-
+      {{
+        'renewal'
+        if ('issuer=CN=' ~ openbao_pki_common_name ~
+          ',OU=Platform Trust,O=ApadanaLab') in openbao_pki_previous_certificate.stdout_lines
+        else 'initial online issuance'
+      }}
+    openbao_pki_previous_serial: >-
+      {{ openbao_pki_previous_certificate.stdout_lines[0] | regex_replace('^serial=', '') }}
+
+- name: Rotate the OpenBao listener certificate safely
+  block:
+    - name: Remove an abandoned listener-certificate staging directory
+      ansible.builtin.file:
+        path: "{{ openbao_pki_leaf_tls_path }}/.rotate"
+        state: absent
+      no_log: true
+      diff: false
+
+    - name: Create the protected listener-certificate staging directory
+      ansible.builtin.file:
+        path: "{{ openbao_pki_leaf_tls_path }}/.rotate"
+        state: directory
+        owner: openbao
+        group: openbao
+        mode: "0700"
+      no_log: true
+      diff: false
+
+    - name: Preserve the active listener pair for rollback
+      ansible.builtin.copy:
+        src: "{{ openbao_pki_leaf_tls_path }}/{{ item }}"
+        dest: "{{ openbao_pki_leaf_tls_path }}/.rotate/previous.{{ item }}"
+        remote_src: true
+        owner: openbao
+        group: openbao
+        mode: "0600"
+      loop:
+        - tls.crt
+        - tls.key
+      no_log: true
+      diff: false
+
+    - name: Generate the next listener private key inside bao-01
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - genpkey
+          - -algorithm
+          - RSA
+          - -pkeyopt
+          - "rsa_keygen_bits:{{ openbao_pki_leaf_key_bits }}"
+          - -out
+          - "{{ openbao_pki_leaf_tls_path }}/.rotate/tls.key"
+      changed_when: true
+      no_log: true
+      diff: false
+
+    - name: Protect the next listener private key
+      ansible.builtin.file:
+        path: "{{ openbao_pki_leaf_tls_path }}/.rotate/tls.key"
+        owner: openbao
+        group: openbao
+        mode: "0600"
+      no_log: true
+      diff: false
+
+    - name: Generate the next listener CSR inside bao-01
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - req
+          - -new
+          - -sha256
+          - -key
+          - "{{ openbao_pki_leaf_tls_path }}/.rotate/tls.key"
+          - -out
+          - "{{ openbao_pki_leaf_tls_path }}/.rotate/tls.csr"
+          - -subj
+          - /CN=openbao.dev.apadanalab.de
+          - -addext
+          - subjectAltName=DNS:openbao.dev.apadanalab.de,DNS:bao-01.dev.apadanalab.de,IP:10.20.0.20
+      changed_when: true
+      no_log: true
+      diff: false
+
+    - name: Read the public listener CSR
+      ansible.builtin.slurp:
+        src: "{{ openbao_pki_leaf_tls_path }}/.rotate/tls.csr"
+      register: openbao_pki_leaf_csr
+      no_log: true
+      diff: false
+
+    - name: Sign the listener CSR through the bounded OpenBao role
+      ansible.builtin.uri:
+        url: >-
+          {{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/sign/{{ openbao_pki_leaf_role_name }}
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_pki_token }}"
+        ca_path: "{{ openbao_pki_ca_path }}"
+        body_format: json
+        body:
+          csr: "{{ openbao_pki_leaf_csr.content | b64decode }}"
+          format: pem
+        return_content: true
+        status_code: 200
+      register: openbao_pki_leaf_signed
+      changed_when: true
+      no_log: true
+      diff: false
+
+    - name: Require a public-only listener signing response
+      ansible.builtin.assert:
+        that:
+          - openbao_pki_leaf_signed.json.data.private_key is not defined
+          - openbao_pki_leaf_signed.json.data.certificate is match('^-----BEGIN CERTIFICATE-----')
+          - openbao_pki_leaf_signed.json.data.issuing_ca is match('^-----BEGIN CERTIFICATE-----')
+          - openbao_pki_leaf_signed.json.data.serial_number | length > 0
+          - openbao_pki_leaf_signed.json.data.expiration | int > 0
+        fail_msg: OpenBao returned an invalid listener certificate response.
+      no_log: true
+      diff: false
+
+    - name: Stage the signed listener certificate and intermediate
+      ansible.builtin.copy:
+        content: "{{ item.content | trim }}\n"
+        dest: "{{ openbao_pki_leaf_tls_path }}/.rotate/{{ item.name }}"
+        owner: openbao
+        group: openbao
+        mode: "0600"
+      loop:
+        - name: leaf.crt
+          content: "{{ openbao_pki_leaf_signed.json.data.certificate }}"
+        - name: intermediate.crt
+          content: "{{ openbao_pki_leaf_signed.json.data.issuing_ca }}"
+        - name: tls.crt
+          content: |
+            {{ openbao_pki_leaf_signed.json.data.certificate | trim }}
+            {{ openbao_pki_leaf_signed.json.data.issuing_ca | trim }}
+      loop_control:
+        label: "{{ item.name }}"
+      no_log: true
+      diff: false
+
+    - name: Read the staged listener certificate serial and issuer
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - x509
+          - -in
+          - "{{ openbao_pki_leaf_tls_path }}/.rotate/leaf.crt"
+          - -noout
+          - -serial
+          - -issuer
+          - -subject
+          - -nameopt
+          - RFC2253
+      register: openbao_pki_next_certificate
+      changed_when: false
+
+    - name: Validate the staged listener certificate chain
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - verify
+          - -purpose
+          - sslserver
+          - -CAfile
+          - "{{ openbao_pki_ca_path }}"
+          - -untrusted
+          - "{{ openbao_pki_leaf_tls_path }}/.rotate/intermediate.crt"
+          - "{{ openbao_pki_leaf_tls_path }}/.rotate/leaf.crt"
+      changed_when: false
+
+    - name: Require at least 88 days of listener certificate validity
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - x509
+          - -in
+          - "{{ openbao_pki_leaf_tls_path }}/.rotate/leaf.crt"
+          - -noout
+          - -checkend
+          - "7603200"
+      changed_when: false
+
+    - name: Validate the exact listener certificate names
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - x509
+          - -in
+          - "{{ openbao_pki_leaf_tls_path }}/.rotate/leaf.crt"
+          - -noout
+          - "-{{ item.type }}"
+          - "{{ item.value }}"
+      loop:
+        - type: checkhost
+          value: openbao.dev.apadanalab.de
+        - type: checkhost
+          value: bao-01.dev.apadanalab.de
+        - type: checkip
+          value: 10.20.0.20
+      loop_control:
+        label: "{{ item.value }}"
+      changed_when: false
+
+    - name: Derive the staged listener private-key public key
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - pkey
+          - -in
+          - "{{ openbao_pki_leaf_tls_path }}/.rotate/tls.key"
+          - -pubout
+      register: openbao_pki_leaf_private_public_key
+      changed_when: false
+      diff: false
+
+    - name: Derive the staged listener certificate public key
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - x509
+          - -in
+          - "{{ openbao_pki_leaf_tls_path }}/.rotate/leaf.crt"
+          - -pubkey
+          - -noout
+      register: openbao_pki_leaf_certificate_public_key
+      changed_when: false
+      diff: false
+
+    - name: Require a new intermediate-issued certificate matching the local key
+      ansible.builtin.assert:
+        that:
+          - openbao_pki_next_certificate.stdout_lines[0] != 'serial=' ~ openbao_pki_previous_serial
+          - >-
+            ('issuer=CN=' ~ openbao_pki_common_name ~
+            ',OU=Platform Trust,O=ApadanaLab') in
+            openbao_pki_next_certificate.stdout_lines
+          - >-
+            'subject=CN=openbao.dev.apadanalab.de,OU=Platform Trust,O=ApadanaLab' in
+            openbao_pki_next_certificate.stdout_lines
+          - >-
+            openbao_pki_leaf_private_public_key.stdout ==
+            openbao_pki_leaf_certificate_public_key.stdout
+        fail_msg: The staged listener certificate violates the reviewed identity boundary.
+      diff: false
+
+    - name: Install the next listener private key
+      ansible.builtin.copy:
+        src: "{{ openbao_pki_leaf_tls_path }}/.rotate/tls.key"
+        dest: "{{ openbao_pki_leaf_tls_path }}/tls.key"
+        remote_src: true
+        owner: openbao
+        group: openbao
+        mode: "0600"
+      no_log: true
+      diff: false
+
+    - name: Install the next listener certificate chain
+      ansible.builtin.copy:
+        src: "{{ openbao_pki_leaf_tls_path }}/.rotate/tls.crt"
+        dest: "{{ openbao_pki_leaf_tls_path }}/tls.crt"
+        remote_src: true
+        owner: openbao
+        group: openbao
+        mode: "0600"
+      no_log: true
+      diff: false
+
+    - name: Reload the OpenBao listener certificate without sealing the service
+      ansible.builtin.systemd_service:
+        name: openbao
+        state: reloaded
+
+    - name: Read the certificate chain now served by OpenBao
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - s_client
+          - -connect
+          - "{{ openbao_pki_api_address }}:{{ openbao_pki_api_port }}"
+          - -servername
+          - "{{ openbao_pki_api_dns_name }}"
+          - -verify_hostname
+          - "{{ openbao_pki_api_dns_name }}"
+          - -verify_return_error
+          - -CAfile
+          - "{{ openbao_pki_ca_path }}"
+          - -showcerts
+      register: openbao_pki_served_chain
+      changed_when: false
+      no_log: true
+      diff: false
+
+    - name: Validate OpenBao health through the rotated listener
+      ansible.builtin.uri:
+        url: "{{ openbao_pki_api_url }}/sys/health"
+        ca_path: "{{ openbao_pki_ca_path }}"
+        return_content: true
+        status_code: 200
+      register: openbao_pki_leaf_health
+
+    - name: Assert the live rotated listener and unsealed service
+      ansible.builtin.assert:
+        that:
+          - openbao_pki_leaf_signed.json.data.certificate | trim in openbao_pki_served_chain.stdout
+          - openbao_pki_leaf_health.json.initialized
+          - not openbao_pki_leaf_health.json.sealed
+          - not openbao_pki_leaf_health.json.standby
+      no_log: true
+      diff: false
+
+  rescue:
+    - name: Revoke the failed listener certificate when it was issued
+      ansible.builtin.uri:
+        url: "{{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/revoke"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ openbao_pki_token }}"
+        ca_path: "{{ openbao_pki_ca_path }}"
+        body_format: json
+        body:
+          serial_number: "{{ openbao_pki_leaf_signed.json.data.serial_number }}"
+        status_code: 200
+      when:
+        - openbao_pki_leaf_signed is defined
+        - openbao_pki_leaf_signed.json.data.serial_number is defined
+      failed_when: false
+      no_log: true
+      diff: false
+
+    - name: Inspect the listener rollback pair
+      ansible.builtin.stat:
+        path: "{{ openbao_pki_leaf_tls_path }}/.rotate/previous.{{ item }}"
+      loop:
+        - tls.key
+        - tls.crt
+      register: openbao_pki_leaf_rollback_pair
+      no_log: true
+      diff: false
+
+    - name: Restore the previous listener pair
+      ansible.builtin.copy:
+        src: "{{ openbao_pki_leaf_tls_path }}/.rotate/previous.{{ item }}"
+        dest: "{{ openbao_pki_leaf_tls_path }}/{{ item }}"
+        remote_src: true
+        owner: openbao
+        group: openbao
+        mode: "0600"
+      loop:
+        - tls.key
+        - tls.crt
+      when: >-
+        openbao_pki_leaf_rollback_pair.results |
+        rejectattr('stat.exists', 'equalto', true) | list | length == 0
+      no_log: true
+      diff: false
+
+    - name: Reload the restored OpenBao listener pair
+      ansible.builtin.systemd_service:
+        name: openbao
+        state: reloaded
+      when: >-
+        openbao_pki_leaf_rollback_pair.results |
+        rejectattr('stat.exists', 'equalto', true) | list | length == 0
+
+    - name: Stop after restoring the previous listener pair
+      ansible.builtin.fail:
+        msg: Listener certificate rotation failed; the previous TLS pair was restored.
+
+  always:
+    - name: Remove listener-certificate staging material
+      ansible.builtin.file:
+        path: "{{ openbao_pki_leaf_tls_path }}/.rotate"
+        state: absent
+      no_log: true
+      diff: false
+
+- name: Report redacted OpenBao listener-certificate rotation
+  ansible.builtin.debug:
+    msg:
+      operation: "{{ openbao_pki_leaf_rotation_kind }}"
+      role: "{{ openbao_pki_leaf_role_name }}"
+      issuer: "{{ openbao_pki_issuer_name }}"
+      serial_changed: true
+      private_key_generated_on_service: true
+      private_key_exported: false
+      service_remained_unsealed: true
+      validity: 2160h

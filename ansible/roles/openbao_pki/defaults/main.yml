@@ -15,6 +15,7 @@ openbao_pki_output_dir: >-
   {{ lookup('ansible.builtin.env', 'OPENBAO_PKI_OUTPUT_DIR') }}
 openbao_pki_mount: pki_int
 openbao_pki_policy_name: rpr-pki-bootstrap
+openbao_pki_leaf_policy_name: rpr-pki-listener-rotation
 openbao_pki_token_ttl: 15m
 openbao_pki_max_lease_ttl_seconds: 157680000
 openbao_pki_key_name: rpr-online-intermediate
@@ -22,3 +23,7 @@ openbao_pki_issuer_name: rpr-online-intermediate
 openbao_pki_common_name: ApadanaLab Online Intermediate CA
 openbao_pki_organization: ApadanaLab
 openbao_pki_organizational_unit: Platform Trust
+openbao_pki_leaf_role_name: openbao-listener
+openbao_pki_leaf_ttl_seconds: 7776000
+openbao_pki_leaf_key_bits: 3072
+openbao_pki_leaf_tls_path: /opt/openbao/tls

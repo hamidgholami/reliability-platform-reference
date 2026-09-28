@@ -30,6 +30,7 @@ detailed machine evidence remain outside Git or in ignored local paths.
 | KV and policy bootstrap | The guarded bootstrap configured `rpr-kv/` as KV v2 with ten retained versions and mandatory check-and-set writes. Ephemeral operator and machine tokens proved two successive versions, machine reads within `machines/ci/`, and denial outside that path. The ceremony deleted its synthetic data, revoked every temporary token, and removed the transient plaintext root-token file. |
 | Online intermediate | OpenBao generated and retained the named 3072-bit RSA intermediate key and returned only its CSR. The operator-managed root signed a five-year, path-length-zero CA certificate, and OpenBao imported the signed certificate plus public root chain as its fixed default issuer. No intermediate private key entered the handoff directory. |
 | Private PKI publication | The configured issuing-certificate and CRL URLs use `openbao.dev.apadanalab.de`. The CA, two-certificate chain, and CRL were readable without a token over validated private TLS; both authoritative BIND secondaries returned the reviewed alias and `10.20.0.20` target. The temporary PKI bootstrap tokens were revoked and no plaintext initial root-token file remained. |
+| Listener issuance and renewal | The exact-name `openbao-listener` role issued a 90-day server certificate for the two reviewed DNS names and private address from a CSR generated inside `bao-01`. A second guarded run reported `renewal`, produced a different serial, and served the renewed leaf plus intermediate after a `SIGHUP` reload. Both runs kept the leaf and intermediate private keys inside the service boundary, left OpenBao active and unsealed, revoked their temporary tokens, and removed protected staging and rollback copies. |
 | Plaintext rejection | A plaintext HTTP probe did not reach an OpenBao health endpoint; the accepted service path requires TLS and the supplied CA. |
 | Protected files | Configuration, Raft, TLS, audit directory, and rotation configuration ownership and modes passed validation. Logrotate syntax also passed. |
 | Idempotence | A complete second configuration run reported `changed=0`; the separate validation run also reported `changed=0`. |
@@ -41,8 +42,8 @@ detailed machine evidence remain outside Git or in ignored local paths.
 - The single-operator 1-of-1 seal is intentionally not a production quorum.
   The initial root token remains encrypted and active pending recovery-capable
   administrative access. The KV mount, scoped policies, and online intermediate
-  exist, but no persistent human or machine credential or authentication method
-  exists yet.
+  exist and listener issuance and renewal are proven, but no persistent human
+  or machine credential or authentication method exists yet.
 - Browser access from the Mac remains deferred to the private VPN and split-DNS
   slice. No `/etc/hosts` entry or public route was added.
 

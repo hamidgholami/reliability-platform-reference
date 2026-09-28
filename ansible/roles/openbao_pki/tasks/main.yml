@@ -7,13 +7,14 @@
     that:
       - inventory_hostname == 'bao-01'
       - rpr_deployment_profile in ['workstation-validation', 'single-node-reference']
-      - openbao_pki_action in ['prepare', 'import']
+      - openbao_pki_action in ['prepare', 'import', 'rotate']
       - openbao_pki_api_address == '10.20.0.20'
       - openbao_pki_api_port == 8200
       - openbao_pki_api_dns_name == 'openbao.dev.apadanalab.de'
       - openbao_pki_ca_path == '/opt/openbao/tls/ca.crt'
       - openbao_pki_mount == 'pki_int'
       - openbao_pki_policy_name == 'rpr-pki-bootstrap'
+      - openbao_pki_leaf_policy_name == 'rpr-pki-listener-rotation'
       - openbao_pki_token_ttl == '15m'
       - openbao_pki_max_lease_ttl_seconds == 157680000
       - openbao_pki_key_name == 'rpr-online-intermediate'
@@ -21,7 +22,11 @@
       - openbao_pki_common_name == 'ApadanaLab Online Intermediate CA'
       - openbao_pki_organization == 'ApadanaLab'
       - openbao_pki_organizational_unit == 'Platform Trust'
-      - openbao_pki_output_dir | length > 1
+      - openbao_pki_leaf_role_name == 'openbao-listener'
+      - openbao_pki_leaf_ttl_seconds == 7776000
+      - openbao_pki_leaf_key_bits == 3072
+      - openbao_pki_leaf_tls_path == '/opt/openbao/tls'
+      - openbao_pki_action == 'rotate' or openbao_pki_output_dir | length > 1
       - openbao_pki_root_token | length >= 16
     fail_msg: The OpenBao PKI boundary or protected token input is invalid.
   no_log: true
@@ -32,6 +37,7 @@
     path: "{{ openbao_pki_output_dir }}"
   delegate_to: localhost
   register: openbao_pki_output_directory
+  when: openbao_pki_action != 'rotate'
   no_log: true
   diff: false
 
@@ -43,13 +49,27 @@
     fail_msg: The protected OpenBao intermediate directory must exist with mode 0700.
   no_log: true
   diff: false
+  when: openbao_pki_action != 'rotate'
 
 - name: Derive non-secret OpenBao PKI configuration
   ansible.builtin.set_fact:
     openbao_pki_api_url: >-
       https://{{ openbao_pki_api_address }}:{{ openbao_pki_api_port }}/v1
     openbao_pki_policy_document: >-
-      {{ lookup('ansible.builtin.template', 'bootstrap-policy.hcl.j2') | trim }}
+      {{
+        lookup(
+          'ansible.builtin.template',
+          'leaf-policy.hcl.j2'
+          if openbao_pki_action == 'rotate'
+          else 'bootstrap-policy.hcl.j2'
+        ) | trim
+      }}
+    openbao_pki_effective_policy_name: >-
+      {{
+        openbao_pki_leaf_policy_name
+        if openbao_pki_action == 'rotate'
+        else openbao_pki_policy_name
+      }}
     openbao_pki_issuing_certificate_url: >-
       https://{{ openbao_pki_api_dns_name }}:{{ openbao_pki_api_port }}/v1/{{ openbao_pki_mount }}/ca
     openbao_pki_crl_url: >-
@@ -70,9 +90,9 @@
       - not openbao_pki_health.json.sealed
       - not openbao_pki_health.json.standby
 
-- name: Read the PKI bootstrap policy with the initial root token
+- name: Read the bounded PKI operation policy with the initial root token
   ansible.builtin.uri:
-    url: "{{ openbao_pki_api_url }}/sys/policies/acl/{{ openbao_pki_policy_name }}"
+    url: "{{ openbao_pki_api_url }}/sys/policies/acl/{{ openbao_pki_effective_policy_name }}"
     method: GET
     headers:
       X-Vault-Token: "{{ openbao_pki_root_token }}"
@@ -85,9 +105,9 @@
   no_log: true
   diff: false
 
-- name: Install the PKI bootstrap policy with the initial root token
+- name: Install the bounded PKI operation policy with the initial root token
   ansible.builtin.uri:
-    url: "{{ openbao_pki_api_url }}/sys/policies/acl/{{ openbao_pki_policy_name }}"
+    url: "{{ openbao_pki_api_url }}/sys/policies/acl/{{ openbao_pki_effective_policy_name }}"
     method: POST
     headers:
       X-Vault-Token: "{{ openbao_pki_root_token }}"
@@ -114,14 +134,19 @@
     body_format: json
     body:
       policies:
-        - "{{ openbao_pki_policy_name }}"
+        - "{{ openbao_pki_effective_policy_name }}"
       no_default_policy: true
       renewable: false
       ttl: "{{ openbao_pki_token_ttl }}"
       explicit_max_ttl: "{{ openbao_pki_token_ttl }}"
-      display_name: rpr-pki-bootstrap
+      display_name: "{{ openbao_pki_effective_policy_name }}"
       meta:
-        purpose: p2-02-online-intermediate
+        purpose: >-
+          {{
+            'p2-02-listener-rotation'
+            if openbao_pki_action == 'rotate'
+            else 'p2-02-online-intermediate'
+          }}
     return_content: true
     status_code: 200
   register: openbao_pki_token_response
@@ -144,7 +169,9 @@
           - openbao_pki_token_response.json.auth.orphan
           - not openbao_pki_token_response.json.auth.renewable
           - openbao_pki_token_response.json.auth.lease_duration <= 900
-          - openbao_pki_token_response.json.auth.policies == [openbao_pki_policy_name]
+          - >-
+            openbao_pki_token_response.json.auth.policies ==
+            [openbao_pki_effective_policy_name]
       no_log: true
       diff: false
 

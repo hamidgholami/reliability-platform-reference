@@ -106,6 +106,15 @@ expect_failure \
   ./scripts/openbao-bootstrap.sh pki
 
 expect_failure \
+  "set CONFIRM=rotate-openbao-certificate-workstation-validation-rpr-target" \
+  env PROFILE=workstation-validation \
+  INCUS_CONFIG_DIR="$fixture_dir/incus" \
+  INCUS_REMOTE=rpr-target \
+  RPR_PKI_DIR="$fixture_dir/pki" \
+  CONFIRM= \
+  ./scripts/openbao-bootstrap.sh leaf
+
+expect_failure \
   "OpenBao protected directories must remain outside the repository" \
   env PROFILE=workstation-validation \
   INCUS_CONFIG_DIR="$fixture_dir/incus" \
@@ -114,6 +123,24 @@ expect_failure \
   OPENBAO_RUNTIME_DIR="$PWD/.cache/openbao-runtime" \
   CONFIRM=bootstrap-openbao-workstation-validation-rpr-target \
   ./scripts/openbao-bootstrap.sh kv
+
+grep -F \
+  '{{ openbao_pki_api_url }}/{{ openbao_pki_mount }}/sign/{{ openbao_pki_leaf_role_name }}' \
+  ansible/roles/openbao_pki/tasks/rotate.yml >/dev/null
+grep -F \
+  'openbao_pki_leaf_signed.json.data.private_key is not defined' \
+  ansible/roles/openbao_pki/tasks/rotate.yml >/dev/null
+grep -A15 -F 'name: Configure the bounded OpenBao listener issuance role' \
+  ansible/roles/openbao_pki/tasks/rotate.yml |
+  grep -F 'status_code: 200' >/dev/null
+grep -F 'state: reloaded' ansible/roles/openbao_pki/tasks/rotate.yml >/dev/null
+grep -F 'RFC2253' ansible/roles/openbao_pki/tasks/rotate.yml >/dev/null
+if grep -F \
+  '{{ openbao_pki_mount }}/issue/{{ openbao_pki_leaf_role_name }}' \
+  ansible/roles/openbao_pki/tasks/rotate.yml >/dev/null; then
+  echo "Listener rotation must sign a service-local CSR, not export a generated key." >&2
+  exit 1
+fi
 
 jq -n '{
   all: {

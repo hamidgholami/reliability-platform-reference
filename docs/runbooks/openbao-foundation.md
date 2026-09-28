@@ -112,8 +112,9 @@ Keycloak, DNS-provider, or machine-authentication credentials.
    returns the intermediate certificate and chain.
 9. OpenBao imports the signed intermediate, publishes CA and CRL endpoints, and
    issues the replacement service leaf. Ansible installs that leaf without
-   exporting the intermediate key and removes the bootstrap listener key from
-   the operator runtime directory.
+   exporting either the intermediate key or the service key. After issuance and
+   renewal acceptance, the operator removes the retired bootstrap listener key
+   from ordinary workstation storage.
 10. Validate scoped administration and a root-regeneration ceremony using the
     external unseal share, revoke the generated recovery root token, then
     revoke the initial root token. Routine automation must fail if only that
@@ -310,6 +311,50 @@ command to resume after interruption without silently generating another key.
 If the issuer is already configured, the command validates and converges its
 name, default selection, URLs, and public endpoints without asking for the
 offline-root passphrase.
+
+## Issue and renew the OpenBao listener certificate
+
+Use the same guarded target for the initial replacement and later renewal:
+
+```sh
+RPR_PKI_DIR=/absolute/protected/pki \
+PROFILE=workstation-validation \
+INCUS_CONFIG_DIR=/absolute/path/to/incus-client \
+INCUS_REMOTE=rpr-target \
+CONFIRM=rotate-openbao-certificate-workstation-validation-rpr-target \
+make rotate-openbao-certificate
+```
+
+Run it once to replace the operator-root bootstrap leaf, then run the identical
+command a second time to exercise renewal. The redacted result identifies the
+first operation as `initial online issuance` and the second as `renewal`.
+Every invocation deliberately rotates the key and certificate; this is an
+explicit mutation, not an idempotent configuration target.
+
+The target creates an exact-name `openbao-listener` issuance role with a
+90-day maximum TTL. It permits only `openbao.dev.apadanalab.de`,
+`bao-01.dev.apadanalab.de`, and `10.20.0.20`, rejects wildcard and subdomain
+issuance, and permits server authentication but not client authentication.
+The RSA-3072 leaf key and CSR are generated inside `bao-01`. Only the public CSR
+is submitted to `pki_int/sign/openbao-listener`; the API response must not
+contain a private key.
+
+Before installation, automation verifies the leaf-to-root chain, all three
+subject alternative names, at least 88 days of remaining validity, a changed
+serial, and the match between the certificate and the service-local key. It
+then installs the leaf plus intermediate chain and asks systemd to reload
+OpenBao with `SIGHUP`. This reloads the listener key pair without restarting or
+sealing the service. A new TLS connection must present the new leaf, validate
+to the offline root, and reach an initialized, unsealed, active health endpoint.
+
+The active pair is copied only to a mode-`0700` staging directory inside the
+service before mutation. If signing, installation, reload, or live validation
+fails, the issued candidate is revoked when possible, the previous pair is
+restored, and OpenBao is reloaded again. Staged keys and rollback copies are
+removed on success and ordinary failure. The operator-held bootstrap key is not
+deleted automatically; remove its `tls.key` from ordinary workstation storage
+only after both accepted runs and independently recoverable offline-root state
+have been confirmed.
 
 Recovery uses a fresh isolated instance with no production DNS alias or client
 route. Verify the snapshot checksum, restore it, present the external Shamir
