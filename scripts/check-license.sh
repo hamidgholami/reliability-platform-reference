@@ -58,6 +58,7 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   scripts/lima-host-probe.sh scripts/lima-lifecycle.sh \
   scripts/init-hcl.sh scripts/validate-hcl.sh scripts/not-implemented.sh \
   scripts/ansible-target.sh scripts/openbao-pki.sh scripts/openbao-ceremony.sh \
+  scripts/openbao-audit.sh scripts/openbao-audit-acceptance-remote.sh \
   scripts/validate-openbao-bootstrap-tls.sh \
   tests/ansible-target-safety.sh \
   tests/fixtures/openbao-ceremony/incus \

@@ -217,6 +217,26 @@ rotation with continued writes, and OpenBao's fail-closed response when its only
 audit device is unavailable. The failure exercise must restore permissions and
 health before any later slice proceeds.
 
+Run the guarded acceptance exercise only against an initialized, unsealed
+service:
+
+```sh
+PROFILE=workstation-validation \
+INCUS_CONFIG_DIR=/absolute/path/to/incus-client \
+INCUS_REMOTE=rpr-target \
+CONFIRM=accept-openbao-audit-workstation-validation-rpr-target \
+make accept-openbao-audit
+```
+
+The target sends only denied, unauthenticated requests to a synthetic API path;
+it needs no token and reads no audit records. It proves that request and response
+entries increase the protected log, forces the installed logrotate policy and
+checks continued writes, then temporarily makes the only audit destination
+unwritable. The excluded health endpoint must remain healthy while the audited
+probe fails closed. A trap restores ownership and mode and signals OpenBao to
+reopen the device even if the exercise is interrupted. Final checks require
+service health and resumed audit writes.
+
 Recovery uses a fresh isolated instance with no production DNS alias or client
 route. Verify the snapshot checksum, restore it, present the external Shamir
 share, and confirm one versioned synthetic KV value plus the non-secret PKI
@@ -243,5 +263,6 @@ maintain a compatibility abstraction.
 - [OpenBao 2.6 installation](https://openbao.org/docs/2.6.x/install/)
 - [Integrated Raft storage](https://openbao.org/docs/2.6.x/configuration/storage/raft/)
 - [Declarative audit devices](https://openbao.org/docs/2.6.x/configuration/audit/)
+- [File audit device and rotation](https://openbao.org/docs/audit/file/)
 - [Operator initialization](https://openbao.org/docs/2.6.x/commands/operator/init/)
 - [OpenBao 2.0 mlock removal](https://openbao.org/docs/release-notes/2-0-0/)

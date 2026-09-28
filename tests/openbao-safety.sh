@@ -79,6 +79,14 @@ expect_failure \
   CONFIRM=initialize-openbao-workstation-validation-rpr-target \
   ./scripts/openbao-ceremony.sh initialize
 
+expect_failure \
+  "set CONFIRM=accept-openbao-audit-workstation-validation-rpr-target" \
+  env PROFILE=workstation-validation \
+  INCUS_CONFIG_DIR="$fixture_dir/incus" \
+  INCUS_REMOTE=rpr-target \
+  CONFIRM= \
+  ./scripts/openbao-audit.sh
+
 jq -n '{
   all: {
     children: {
