@@ -15,8 +15,11 @@ the provider-managed substrate lifecycle on the optional Lima environment.
 P1-06 passed the authoritative end-to-end reference-VM lifecycle, including
 clean destroy and recreation. See the
 [redacted acceptance record](docs/evidence/phase-1-acceptance.md). **Phase 2:
-trust, secrets, and identity** is active after P2-01 passed retained local
-acceptance, including clean recreation. Reference-host promotion remains.
+trust, secrets, and identity** is active after P2-01 private DNS and P2-02
+OpenBao foundation passed local acceptance. P2-03 machine identity, dynamic
+secrets, and SSH certificates is next. Reference-host promotion remains before
+Phase 2 closes. See the redacted
+[OpenBao acceptance record](docs/evidence/phase-2-openbao-foundation-local-acceptance.md).
 
 ## Intended outcomes
 
