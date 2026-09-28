@@ -140,9 +140,9 @@
       - "'storage \"raft\"' in openbao_service_config_text"
       - "'node_id = \"bao-01\"' in openbao_service_config_text"
       - >-
-        ('address = "' ~ openbao_service_api_address ~ ':' ~
-        (openbao_service_api_port | string) ~ '"') in
-        openbao_service_config_text
+        openbao_service_config_text is search(
+        'address\\s*=\\s*"' ~ openbao_service_api_address ~ ':' ~
+        (openbao_service_api_port | string) ~ '"')
       - "'tls_disable' not in openbao_service_config_text"
       - "'audit \"file\" \"platform\"' in openbao_service_config_text"
       - openbao_service_health.json.initialized is boolean

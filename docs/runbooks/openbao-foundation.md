@@ -153,7 +153,9 @@ Ansible. Ansible independently verifies the signed checksum manifest and exact
 package checksum, prevents the Debian package from generating its fallback
 self-signed key, installs integrated Raft and declarative file-audit
 configuration, and starts the TLS-only service. These targets do not initialize
-or unseal OpenBao.
+or unseal OpenBao. The redacted
+[local service-foundation acceptance record](../evidence/phase-2-openbao-foundation-local-acceptance.md)
+captures the completed workstation run.
 
 ## Audit and recovery checks
 

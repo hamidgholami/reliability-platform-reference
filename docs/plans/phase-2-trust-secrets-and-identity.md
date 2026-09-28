@@ -206,7 +206,7 @@ captures the completed workstation run. Promotion to the real
 
 - [x] Implement the reviewed operator-managed root workflow without committing
   or transferring custody of the root private key to the platform or CI.
-- [ ] Create one bounded secrets-service instance with TLS, integrated storage,
+- [x] Create one bounded secrets-service instance with TLS, integrated storage,
   swap disabled at the service boundary, a host-enforced Incus network ACL,
   and no public listener. Do not configure obsolete OpenBao `mlock` settings.
 - [ ] Initialize and unseal through an explicit human ceremony. Store recovery
