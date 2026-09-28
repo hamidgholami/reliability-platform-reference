@@ -84,7 +84,9 @@ Keycloak, DNS-provider, or machine-authentication credentials.
 2. In the offline-root environment, create or recover the root CA and its CA
    database. Produce the public root certificate, current CRL, and one
    short-lived bootstrap listener certificate for the reviewed private names
-   and address. Custody of the root key and passphrase is never automated.
+   and address by following the
+   [offline-root ceremony](offline-root-ca.md). Custody of the root key and
+   passphrase is never automated.
 3. OpenTofu creates only the bounded instance, profile, address, network ACL,
    and private DNS data.
 4. Ansible installs and verifies OpenBao, places the supplied TLS material,
@@ -118,12 +120,14 @@ target identity, protected input locations, expected effect, and exact
 confirmation. Status and validation remain read-only.
 
 Prepare a mode-`0700` directory outside the checkout containing `ca.crt`,
-`tls.crt`, and the unencrypted service key `tls.key`, each mode `0600`. The
-listener certificate must chain to `ca.crt`, remain valid for more than 24
-hours, match `tls.key`, and contain `openbao.dev.apadanalab.de`,
+`ca.crl`, `tls.crt`, and the unencrypted service key `tls.key`, each mode
+`0600`. The listener certificate must chain to `ca.crt`, remain valid for more
+than seven days, be absent from the current CRL, match `tls.key`, and contain
+`openbao.dev.apadanalab.de`,
 `bao-01.dev.apadanalab.de`, and `10.20.0.20` as subject alternative names.
-After `make apply` has generated the ignored inventory, configure and inspect
-the still-uninitialized, sealed service with:
+Validate these inputs using `make validate-openbao-bootstrap-tls`. After
+`make apply` has generated the ignored inventory, configure and inspect the
+still-uninitialized, sealed service with:
 
 ```sh
 PROFILE=workstation-validation \

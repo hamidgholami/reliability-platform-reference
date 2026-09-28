@@ -30,6 +30,7 @@ fi
 for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   .markdownlint-cli2.yaml \
   .ansible-lint ansible.cfg requirements.txt ansible/requirements.yml \
+  pki/offline-root/root-ca.cnf \
   ansible/inventories/single-node-reference/hosts.example.yml \
   ansible/inventories/single-node-reference/group_vars/incus_hosts.yml \
   ansible/tasks/target_preflight.yml \
@@ -56,8 +57,9 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   scripts/doctor.sh scripts/check-license.sh scripts/scan-secrets.sh \
   scripts/lima-host-probe.sh scripts/lima-lifecycle.sh \
   scripts/init-hcl.sh scripts/validate-hcl.sh scripts/not-implemented.sh \
-  scripts/ansible-target.sh \
+  scripts/ansible-target.sh scripts/validate-openbao-bootstrap-tls.sh \
   tests/ansible-target-safety.sh \
+  tests/offline-root-policy.sh \
   infrastructure/bootstrap/aws-single-node/versions.tf \
   infrastructure/bootstrap/aws-single-node/variables.tf \
   infrastructure/bootstrap/aws-single-node/main.tf \

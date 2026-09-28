@@ -58,6 +58,12 @@ part of the trust boundary.
   must have a removal date.
 - CA private keys, ACME credentials, and recovery material never enter Git.
 
+The internal root profile, bootstrap listener issuance, CRL, custody, and
+rollback procedure are fixed in the
+[offline-root ceremony](runbooks/offline-root-ca.md). The committed OpenSSL
+configuration is non-secret policy; all CA state and private material remain
+outside the repository and platform.
+
 The internal DNS design is documented in
 [ADR-0003](adr/0003-separate-platform-and-kubernetes-dns-roles.md). Incus
 network zones are the hidden primary and generate records from Incus state. Two

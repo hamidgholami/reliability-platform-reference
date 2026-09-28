@@ -204,7 +204,7 @@ captures the completed workstation run. Promotion to the real
 
 ### P2-02 — Internal PKI and secrets foundation
 
-- [ ] Implement the reviewed offline-root procedure without committing or
+- [x] Implement the reviewed offline-root procedure without committing or
   automating custody of the root private key.
 - [ ] Create one bounded secrets-service instance with TLS, integrated storage,
   swap disabled at the service boundary, a host-enforced Incus network ACL,

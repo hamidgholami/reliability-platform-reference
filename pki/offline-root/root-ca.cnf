@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+[ ca ]
+default_ca = root_ca
+
+[ root_ca ]
+dir               = .
+database          = $dir/index.txt
+new_certs_dir     = $dir/newcerts
+certificate       = $dir/certs/root-ca.crt
+private_key       = $dir/private/root-ca.key
+serial            = $dir/serial
+crlnumber         = $dir/crlnumber
+crl               = $dir/crl/root-ca.crl
+default_md        = sha384
+default_days      = 30
+default_crl_days  = 30
+policy            = policy_openbao
+email_in_dn       = no
+preserve          = no
+unique_subject    = no
+copy_extensions   = none
+name_opt          = ca_default
+cert_opt          = ca_default
+crl_extensions    = crl_extensions
+
+[ policy_openbao ]
+organizationName       = match
+organizationalUnitName = optional
+commonName             = supplied
+
+[ req ]
+default_bits       = 4096
+default_md         = sha384
+distinguished_name = root_distinguished_name
+string_mask        = utf8only
+prompt             = yes
+x509_extensions    = root_ca_extensions
+
+[ root_distinguished_name ]
+organizationName       = Organization
+organizationalUnitName = Organizational unit
+commonName             = Common name
+
+[ root_ca_extensions ]
+basicConstraints       = critical, CA:true, pathlen:1
+keyUsage               = critical, keyCertSign, cRLSign
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid:always
+
+[ openbao_bootstrap_server ]
+basicConstraints       = critical, CA:false
+keyUsage               = critical, digitalSignature, keyEncipherment
+extendedKeyUsage       = critical, serverAuth
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid, issuer
+subjectAltName         = @openbao_bootstrap_names
+
+[ openbao_bootstrap_names ]
+DNS.1 = openbao.dev.apadanalab.de
+DNS.2 = bao-01.dev.apadanalab.de
+IP.1  = 10.20.0.20
+
+[ openbao_intermediate_ca ]
+basicConstraints       = critical, CA:true, pathlen:0
+keyUsage               = critical, keyCertSign, cRLSign
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid, issuer
+
+[ crl_extensions ]
+authorityKeyIdentifier = keyid:always

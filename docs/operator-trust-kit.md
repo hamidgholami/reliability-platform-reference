@@ -32,4 +32,6 @@ locations. Examples in this repository must be synthetic.
 
 The [OpenBao foundation runbook](runbooks/openbao-foundation.md) defines the
 Phase 2 custody, initialization, unseal, root-signing, rotation, and recovery
-contract. Its private inputs and outputs remain outside this repository.
+contract. The [offline-root ceremony](runbooks/offline-root-ca.md) fixes the
+human signing and recovery procedure without automating root-key custody. Its
+private inputs and outputs remain outside this repository.

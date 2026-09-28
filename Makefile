@@ -15,6 +15,7 @@ ANSIBLE_ENV = ANSIBLE_CONFIG=$(CURDIR)/ansible.cfg ANSIBLE_HOME=$(CURDIR)/.cache
 	private-dns-primary-check private-dns-primary validate-private-dns-primary \
 	incus-client-check test-ansible-safety test-lima-safety \
 	test-incus-substrate-safety test-private-dns-safety test-openbao-safety \
+	test-offline-root-policy validate-openbao-bootstrap-tls \
 	private-dns-secrets configure-private-dns validate-private-dns \
 	accept-private-dns configure-openbao openbao-status validate-openbao \
 	bootstrap-incus plan apply validate destroy aws-plan aws-apply \
@@ -91,13 +92,16 @@ test-private-dns-safety: ## Test private DNS confirmation and secret-file guards
 test-openbao-safety: ## Test OpenBao confirmation, TLS-input, and inventory guards offline.
 	@./tests/openbao-safety.sh
 
+test-offline-root-policy: ## Exercise the offline-root policy with throwaway synthetic keys.
+	@./tests/offline-root-policy.sh
+
 test-aws-safety: ## Test AWS profile, exposure, TTL, and confirmation guards offline.
 	@./tests/aws-reference-safety.sh
 
 scan-secrets: ## Scan Git content and the working tree with Gitleaks.
 	@./scripts/scan-secrets.sh
 
-check: lint syntax-ansible validate-hcl test-hcl test-ansible-safety test-lima-safety test-incus-substrate-safety test-private-dns-safety test-openbao-safety test-aws-safety scan-secrets ## Run every non-mutating repository check.
+check: lint syntax-ansible validate-hcl test-hcl test-ansible-safety test-lima-safety test-incus-substrate-safety test-private-dns-safety test-openbao-safety test-offline-root-policy test-aws-safety scan-secrets ## Run every non-mutating repository check.
 
 test-local: check ## Run the complete workstation-only test suite.
 
@@ -163,6 +167,9 @@ validate-private-dns: ## Validate both BIND secondaries.
 
 accept-private-dns: ## Exercise DNS propagation and one-secondary continuity (requires exact CONFIRM).
 	@./scripts/private-dns-acceptance.sh
+
+validate-openbao-bootstrap-tls: ## Validate protected bootstrap certificate inputs and print public metadata.
+	@./scripts/validate-openbao-bootstrap-tls.sh
 
 configure-openbao: ## Install and configure OpenBao (requires protected TLS input and exact CONFIRM).
 	@./scripts/openbao.sh configure
