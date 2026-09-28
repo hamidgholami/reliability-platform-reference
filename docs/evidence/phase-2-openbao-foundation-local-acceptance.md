@@ -24,7 +24,8 @@ detailed machine evidence remain outside Git or in ignored local paths.
 | Package provenance | Ansible required the pinned OpenBao primary-key fingerprint, verified the signed 2.6.3 checksum manifest, and matched the exact arm64 package checksum before installation. |
 | Bootstrap TLS | The operator-managed root, current CRL, listener purpose, one-year validity, reviewed SANs, private-key match, and protected input modes passed validation. The Debian package did not generate its fallback self-signed key. |
 | Service configuration | OpenBao uses the private TLS listener, integrated Raft storage, declarative file-audit configuration, and the package systemd unit with `MemorySwapMax=0`. No obsolete `mlock` setting or capability was added. |
-| Runtime state | The service is active and enabled on OpenBao 2.6.3. Its health response reports `initialized=false` and `sealed=true`, which is the required handoff before the human initialization ceremony. |
+| Runtime state | The service is active and enabled on OpenBao 2.6.3. After the guarded operator ceremony, its health response reports `initialized=true`, `sealed=false`, and `standby=false`. |
+| Initialization and unseal | OpenBao encrypted its 1-of-1 Shamir share and initial root token to a dedicated passphrase-protected operator recovery key before returning them. The protected recovery directory remained outside Git, the share was streamed to the stdin-aware API path, and the final health check confirmed the unsealed state. |
 | Plaintext rejection | A plaintext HTTP probe did not reach an OpenBao health endpoint; the accepted service path requires TLS and the supplied CA. |
 | Protected files | Configuration, Raft, TLS, audit directory, and rotation configuration ownership and modes passed validation. Logrotate syntax also passed. |
 | Idempotence | A complete second configuration run reported `changed=0`; the separate validation run also reported `changed=0`. |
@@ -33,8 +34,10 @@ detailed machine evidence remain outside Git or in ignored local paths.
 
 - This is local integration evidence, not promotion on the
   `single-node-reference` host.
-- OpenBao is intentionally uninitialized and sealed. No Shamir share, root
-  token, bootstrap administrator, KV mount, or online intermediate exists yet.
+- The single-operator 1-of-1 seal is intentionally not a production quorum.
+  The initial root token remains encrypted and active pending creation and
+  validation of scoped administrative access; no bootstrap administrator, KV
+  mount, or online intermediate exists yet.
 - Declarative audit configuration and rotation syntax are installed, but audit
   writes, rotation continuity, and fail-closed behavior require initialization
   and unseal and remain unaccepted.

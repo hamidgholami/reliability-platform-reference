@@ -209,7 +209,7 @@ captures the completed workstation run. Promotion to the real
 - [x] Create one bounded secrets-service instance with TLS, integrated storage,
   swap disabled at the service boundary, a host-enforced Incus network ACL,
   and no public listener. Do not configure obsolete OpenBao `mlock` settings.
-- [ ] Initialize and unseal through an explicit human ceremony. Store recovery
+- [x] Initialize and unseal through an explicit human ceremony. Store recovery
   material outside the repository and outside ordinary command logs.
 - [ ] Enable at least one durable audit device before routine use and validate
   its permissions, rotation, and failure behavior.

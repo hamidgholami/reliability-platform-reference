@@ -326,14 +326,14 @@ gpg --homedir "$gpg_home" --batch --quiet \
   --import "$recovery_dir/recovery-secret.gpg"
 read_recovery_passphrase false
 echo "Presenting the decrypted recovery share through standard input..."
-status_file=$(mktemp)
 jq -er '.unseal_keys_b64[0]' "$recovery_dir/initialization.json" |
   openssl base64 -d -A |
   gpg_with_passphrase --decrypt |
-  bao_cli write -format=json sys/unseal key=- >"$status_file" ||
+  bao_cli write -format=json sys/unseal key=- >/dev/null ||
   fail "OpenBao unseal failed"
 recovery_passphrase=
 
+read_status
 jq -e '.sealed == false' "$status_file" >/dev/null ||
   fail "OpenBao did not report an unsealed state"
 echo "OpenBao is unsealed. No recovery share was written to disk or output."
