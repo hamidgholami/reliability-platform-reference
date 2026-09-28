@@ -1,0 +1,33 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Inspect the OpenBao service
+  ansible.builtin.systemd_service:
+    name: "{{ openbao_service_unit_name }}"
+  register: openbao_service_status
+
+- name: Query the TLS OpenBao health endpoint
+  ansible.builtin.uri:
+    url: >-
+      https://{{ openbao_service_api_address }}:{{ openbao_service_api_port }}/v1/sys/health
+    ca_path: "{{ openbao_service_tls_path }}/ca.crt"
+    return_content: true
+    status_code:
+      - 200
+      - 429
+      - 472
+      - 473
+      - 501
+      - 503
+  register: openbao_service_health
+
+- name: Report redacted OpenBao status
+  ansible.builtin.debug:
+    msg:
+      service: "{{ openbao_service_status.status.ActiveState }}"
+      enabled: "{{ openbao_service_status.status.UnitFileState }}"
+      initialized: "{{ openbao_service_health.json.initialized }}"
+      sealed: "{{ openbao_service_health.json.sealed }}"
+      standby: "{{ openbao_service_health.json.standby }}"
+      version: "{{ openbao_service_health.json.version }}"

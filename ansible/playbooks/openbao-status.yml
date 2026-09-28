@@ -1,0 +1,17 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Read the private OpenBao service status
+  hosts: openbao_service
+  gather_facts: false
+  any_errors_fatal: true
+  become: false
+  tasks:
+    - name: Read redacted OpenBao status
+      ansible.builtin.import_role:
+        name: openbao_service
+        tasks_from: status
+      vars:
+        openbao_service_api_address: "{{ openbao_api_address }}"
+        openbao_service_api_port: "{{ openbao_api_port }}"

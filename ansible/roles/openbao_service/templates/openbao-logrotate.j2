@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+{{ openbao_service_audit_path }} {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0600 openbao openbao
+    sharedscripts
+    postrotate
+        /bin/systemctl kill --kill-who=main --signal=HUP {{ openbao_service_unit_name }}.service >/dev/null 2>&1 || true
+    endscript
+}

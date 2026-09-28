@@ -1,0 +1,58 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+argument_specs:
+  main:
+    short_description: Configure one private OpenBao service
+    options: &openbao_options
+      openbao_service_version:
+        type: str
+      openbao_service_release_base_url:
+        type: str
+      openbao_service_signing_key_url:
+        type: str
+      openbao_service_signing_key_primary_fingerprint:
+        type: str
+      openbao_service_package_architectures:
+        type: dict
+      openbao_service_tls_input_dir:
+        type: path
+      openbao_service_config_path:
+        type: path
+      openbao_service_data_path:
+        type: path
+      openbao_service_tls_path:
+        type: path
+      openbao_service_audit_path:
+        type: path
+      openbao_service_unit_name:
+        type: str
+      openbao_service_platform_cidr:
+        type: str
+        required: true
+      openbao_service_api_address:
+        type: str
+        required: true
+      openbao_service_api_port:
+        type: int
+        required: true
+      openbao_service_api_dns_name:
+        type: str
+        required: true
+  validate:
+    short_description: Validate one private OpenBao service
+    options: *openbao_options
+  status:
+    short_description: Read one private OpenBao service status
+    options:
+      openbao_service_api_address:
+        type: str
+        required: true
+      openbao_service_api_port:
+        type: int
+        required: true
+      openbao_service_tls_path:
+        type: path
+      openbao_service_unit_name:
+        type: str

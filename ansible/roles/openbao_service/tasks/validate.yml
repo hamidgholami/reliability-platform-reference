@@ -1,0 +1,155 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Confirm the installed OpenBao target boundary
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Debian'
+      - ansible_facts['distribution_major_version'] == '13'
+      - ansible_facts['service_mgr'] == 'systemd'
+      - inventory_hostname == 'bao-01'
+      - openbao_service_api_address == '10.20.0.20'
+      - openbao_service_api_port == 8200
+      - openbao_service_api_dns_name == 'openbao.dev.apadanalab.de'
+    fail_msg: Validation is restricted to the reviewed P2-02 OpenBao target.
+
+- name: Read the installed OpenBao package version
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - --show
+      - "--showformat=${Version}"
+      - openbao
+  register: openbao_service_installed_version
+  changed_when: false
+
+- name: Validate the active OpenBao configuration
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/runuser
+      - --user
+      - openbao
+      - --
+      - /usr/bin/bao
+      - operator
+      - validate-config
+      - "-config={{ openbao_service_config_path }}"
+  changed_when: false
+
+- name: Inspect protected OpenBao files and directories
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ openbao_service_config_path }}"
+    - "{{ openbao_service_data_path }}"
+    - "{{ openbao_service_tls_path }}"
+    - "{{ openbao_service_tls_path }}/ca.crt"
+    - "{{ openbao_service_tls_path }}/tls.crt"
+    - "{{ openbao_service_tls_path }}/tls.key"
+    - "{{ openbao_service_audit_path | dirname }}"
+    - /etc/logrotate.d/openbao-audit
+  register: openbao_service_protected_paths
+
+- name: Read the effective OpenBao systemd properties
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - openbao.service
+      - --property=ActiveState
+      - --property=UnitFileState
+      - --property=MemorySwapMax
+      - --property=User
+      - --property=Group
+  register: openbao_service_systemd_properties
+  changed_when: false
+
+- name: Read the installed OpenBao configuration
+  ansible.builtin.slurp:
+    src: "{{ openbao_service_config_path }}"
+  register: openbao_service_installed_configuration
+
+- name: Validate OpenBao audit-log rotation configuration
+  ansible.builtin.command:
+    argv:
+      - logrotate
+      - --debug
+      - /etc/logrotate.d/openbao-audit
+  changed_when: false
+
+- name: Query the TLS OpenBao health endpoint
+  ansible.builtin.uri:
+    url: >-
+      https://{{ openbao_service_api_address }}:{{ openbao_service_api_port }}/v1/sys/health
+    ca_path: "{{ openbao_service_tls_path }}/ca.crt"
+    return_content: true
+    status_code:
+      - 200
+      - 429
+      - 472
+      - 473
+      - 501
+      - 503
+  register: openbao_service_health
+
+- name: Reject a plaintext OpenBao listener
+  ansible.builtin.uri:
+    url: >-
+      http://{{ openbao_service_api_address }}:{{ openbao_service_api_port }}/v1/sys/health
+    return_content: false
+    timeout: 5
+  register: openbao_service_plaintext_probe
+  changed_when: false
+  failed_when: false
+
+- name: Assert the OpenBao service foundation
+  vars:
+    openbao_service_config_text: >-
+      {{ openbao_service_installed_configuration.content | b64decode }}
+    openbao_service_path_stats: >-
+      {{ openbao_service_protected_paths.results | map(attribute='stat') | list }}
+  ansible.builtin.assert:
+    that:
+      - openbao_service_installed_version.stdout == openbao_service_version
+      - "'ActiveState=active' in openbao_service_systemd_properties.stdout"
+      - "'UnitFileState=enabled' in openbao_service_systemd_properties.stdout"
+      - "'MemorySwapMax=0' in openbao_service_systemd_properties.stdout"
+      - "'User=openbao' in openbao_service_systemd_properties.stdout"
+      - "'Group=openbao' in openbao_service_systemd_properties.stdout"
+      - openbao_service_path_stats | length == 8
+      - openbao_service_path_stats | rejectattr('exists', 'equalto', true) | list | length == 0
+      - openbao_service_path_stats[0].mode == '0640'
+      - openbao_service_path_stats[1].mode == '0700'
+      - openbao_service_path_stats[2].mode == '0700'
+      - openbao_service_path_stats[3].mode == '0600'
+      - openbao_service_path_stats[4].mode == '0600'
+      - openbao_service_path_stats[5].mode == '0600'
+      - openbao_service_path_stats[6].mode == '0700'
+      - openbao_service_path_stats[7].mode == '0644'
+      - openbao_service_path_stats[0].pw_name == 'root'
+      - openbao_service_path_stats[0].gr_name == 'openbao'
+      - >-
+        openbao_service_path_stats[1:7] |
+        rejectattr('pw_name', 'equalto', 'openbao') | list | length == 0
+      - >-
+        openbao_service_path_stats[1:7] |
+        rejectattr('gr_name', 'equalto', 'openbao') | list | length == 0
+      - openbao_service_path_stats[7].pw_name == 'root'
+      - openbao_service_path_stats[7].gr_name == 'root'
+      - "'storage \"raft\"' in openbao_service_config_text"
+      - "'node_id = \"bao-01\"' in openbao_service_config_text"
+      - >-
+        ('address = "' ~ openbao_service_api_address ~ ':' ~
+        (openbao_service_api_port | string) ~ '"') in
+        openbao_service_config_text
+      - "'tls_disable' not in openbao_service_config_text"
+      - "'audit \"file\" \"platform\"' in openbao_service_config_text"
+      - openbao_service_health.json.initialized is boolean
+      - openbao_service_health.json.sealed is boolean
+      - openbao_service_health.json.standby is boolean
+      - openbao_service_health.json.version == openbao_service_version
+      - openbao_service_plaintext_probe.status in [-1, 400]
+    fail_msg: >-
+      OpenBao must use the exact verified package, TLS-only private listener,
+      integrated Raft storage, declarative file audit, and protected files.

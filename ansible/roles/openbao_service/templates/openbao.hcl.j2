@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+ui = true
+
+api_addr     = "https://{{ openbao_service_api_dns_name }}:{{ openbao_service_api_port }}"
+cluster_addr = "https://{{ openbao_service_api_address }}:8201"
+
+storage "raft" {
+  path    = "{{ openbao_service_data_path }}"
+  node_id = "{{ inventory_hostname }}"
+}
+
+listener "tcp" {
+  address         = "{{ openbao_service_api_address }}:{{ openbao_service_api_port }}"
+  cluster_address = "{{ openbao_service_api_address }}:8201"
+  tls_cert_file   = "{{ openbao_service_tls_path }}/tls.crt"
+  tls_key_file    = "{{ openbao_service_tls_path }}/tls.key"
+  tls_min_version = "tls12"
+}
+
+audit "file" "platform" {
+  description = "Protected local OpenBao audit log."
+
+  options {
+    file_path = "{{ openbao_service_audit_path }}"
+    log_raw   = "false"
+    mode      = "0600"
+  }
+}

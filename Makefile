@@ -14,9 +14,9 @@ ANSIBLE_ENV = ANSIBLE_CONFIG=$(CURDIR)/ansible.cfg ANSIBLE_HOME=$(CURDIR)/.cache
 	validate-baseline preflight-incus bootstrap-incus validate-incus \
 	private-dns-primary-check private-dns-primary validate-private-dns-primary \
 	incus-client-check test-ansible-safety test-lima-safety \
-	test-incus-substrate-safety test-private-dns-safety \
+	test-incus-substrate-safety test-private-dns-safety test-openbao-safety \
 	private-dns-secrets configure-private-dns validate-private-dns \
-	accept-private-dns \
+	accept-private-dns configure-openbao openbao-status validate-openbao \
 	bootstrap-incus plan apply validate destroy aws-plan aws-apply \
 	aws-destroy aws-orphan-check test-aws-safety
 
@@ -51,6 +51,7 @@ lint-ansible: ## Lint Ansible content with the pinned virtual environment.
 syntax-ansible: ## Syntax-check active Ansible inventories and playbooks offline.
 	@$(ANSIBLE_ENV) .venv/bin/ansible-inventory --inventory ansible/inventories/single-node-reference/hosts.example.yml --list >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-inventory --inventory ansible/inventories/private-dns/hosts.example.yml --list >/dev/null
+	@$(ANSIBLE_ENV) .venv/bin/ansible-inventory --inventory ansible/inventories/openbao/hosts.example.yml --list >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/preflight.yml >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/baseline.yml >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/validate-baseline.yml >/dev/null
@@ -61,6 +62,9 @@ syntax-ansible: ## Syntax-check active Ansible inventories and playbooks offline
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/single-node-reference/hosts.example.yml --syntax-check ansible/playbooks/validate-incus-dns-primary.yml >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/private-dns/hosts.example.yml --syntax-check ansible/playbooks/configure-private-dns.yml >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/private-dns/hosts.example.yml --syntax-check ansible/playbooks/validate-private-dns.yml >/dev/null
+	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/openbao/hosts.example.yml --syntax-check ansible/playbooks/configure-openbao.yml >/dev/null
+	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/openbao/hosts.example.yml --syntax-check ansible/playbooks/openbao-status.yml >/dev/null
+	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/openbao/hosts.example.yml --syntax-check ansible/playbooks/validate-openbao.yml >/dev/null
 
 lint-hcl: ## Check OpenTofu formatting without changing files.
 	@tofu fmt -check -recursive infrastructure
@@ -84,13 +88,16 @@ test-incus-substrate-safety: ## Test Incus provider trust guards offline.
 test-private-dns-safety: ## Test private DNS confirmation and secret-file guards offline.
 	@./tests/private-dns-safety.sh
 
+test-openbao-safety: ## Test OpenBao confirmation, TLS-input, and inventory guards offline.
+	@./tests/openbao-safety.sh
+
 test-aws-safety: ## Test AWS profile, exposure, TTL, and confirmation guards offline.
 	@./tests/aws-reference-safety.sh
 
 scan-secrets: ## Scan Git content and the working tree with Gitleaks.
 	@./scripts/scan-secrets.sh
 
-check: lint syntax-ansible validate-hcl test-hcl test-ansible-safety test-lima-safety test-incus-substrate-safety test-private-dns-safety test-aws-safety scan-secrets ## Run every non-mutating repository check.
+check: lint syntax-ansible validate-hcl test-hcl test-ansible-safety test-lima-safety test-incus-substrate-safety test-private-dns-safety test-openbao-safety test-aws-safety scan-secrets ## Run every non-mutating repository check.
 
 test-local: check ## Run the complete workstation-only test suite.
 
@@ -156,6 +163,15 @@ validate-private-dns: ## Validate both BIND secondaries.
 
 accept-private-dns: ## Exercise DNS propagation and one-secondary continuity (requires exact CONFIRM).
 	@./scripts/private-dns-acceptance.sh
+
+configure-openbao: ## Install and configure OpenBao (requires protected TLS input and exact CONFIRM).
+	@./scripts/openbao.sh configure
+
+openbao-status: ## Read redacted OpenBao service and seal status.
+	@./scripts/openbao.sh status
+
+validate-openbao: ## Validate the OpenBao package, service, storage, audit, and TLS boundary.
+	@./scripts/openbao.sh validate
 
 plan: ## Verify Incus trust and save a non-destructive substrate plan.
 	@./scripts/incus-substrate.sh plan

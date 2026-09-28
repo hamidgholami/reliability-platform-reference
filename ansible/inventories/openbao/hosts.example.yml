@@ -1,0 +1,22 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+# OpenTofu generates the real ignored inventory after creating the P2-02
+# substrate. Bootstrap TLS material is supplied separately at runtime.
+all:
+  children:
+    openbao_service:
+      vars:
+        ansible_connection: community.general.incus
+        ansible_incus_remote: replace-with-reviewed-remote
+        ansible_incus_project: rpr-dev
+        ansible_user: root
+        rpr_deployment_profile: workstation-validation
+        openbao_platform_cidr: 10.20.0.0/24
+        openbao_api_address: 10.20.0.20
+        openbao_api_port: 8200
+        openbao_api_dns_name: openbao.dev.apadanalab.de
+      hosts:
+        bao-01:
+          ansible_host: bao-01

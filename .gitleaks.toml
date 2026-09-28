@@ -11,3 +11,9 @@ paths = [
   '''(^|/)\.terraform/''',
   '''(^|/)\.venv/''',
 ]
+
+[[allowlists]]
+description = "Published OpenBao release-signing primary-key fingerprint"
+regexes = [
+  '''66D15FDD87287219C8E15478D200CD702853E6D0''',
+]

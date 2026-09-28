@@ -1,0 +1,229 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Run non-mutating OpenBao preflight
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Install release verification and rotation packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - gnupg
+      - logrotate
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create protected release-verification directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  loop:
+    - "{{ openbao_service_download_path }}"
+    - "{{ openbao_service_verification_home }}"
+
+- name: Download the pinned OpenBao release inputs
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "{{ openbao_service_download_path }}/{{ item.name }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - name: openbao-release-key.asc
+      url: "{{ openbao_service_signing_key_url }}"
+    - name: checksums.txt
+      url: "{{ openbao_service_release_base_url }}/checksums.txt"
+    - name: checksums.txt.gpgsig
+      url: "{{ openbao_service_release_base_url }}/checksums.txt.gpgsig"
+
+- name: Inspect the OpenBao release key
+  ansible.builtin.command:
+    argv:
+      - gpg
+      - --batch
+      - --show-keys
+      - --with-colons
+      - "{{ openbao_service_download_path }}/openbao-release-key.asc"
+  register: openbao_service_release_key_listing
+  changed_when: false
+
+- name: Require the pinned OpenBao primary signing-key fingerprint
+  ansible.builtin.assert:
+    that:
+      - >-
+        ((openbao_service_release_key_listing.stdout_lines |
+        select('match', '^fpr:') | list | first).split(':')[9]) ==
+        openbao_service_signing_key_primary_fingerprint
+    fail_msg: The downloaded OpenBao release key has an unexpected fingerprint.
+
+- name: Import the pinned OpenBao release key
+  ansible.builtin.command:
+    argv:
+      - gpg
+      - --batch
+      - --homedir
+      - "{{ openbao_service_verification_home }}"
+      - --import
+      - "{{ openbao_service_download_path }}/openbao-release-key.asc"
+  register: openbao_service_key_import
+  changed_when: "'imported: 1' in openbao_service_key_import.stderr"
+
+- name: Verify the signed OpenBao checksum manifest
+  ansible.builtin.command:
+    argv:
+      - gpg
+      - --batch
+      - --homedir
+      - "{{ openbao_service_verification_home }}"
+      - --status-fd
+      - "1"
+      - --verify
+      - "{{ openbao_service_download_path }}/checksums.txt.gpgsig"
+      - "{{ openbao_service_download_path }}/checksums.txt"
+  register: openbao_service_manifest_signature
+  changed_when: false
+
+- name: Require a valid signature rooted in the pinned primary key
+  ansible.builtin.assert:
+    that:
+      - "'[GNUPG:] GOODSIG ' in openbao_service_manifest_signature.stdout"
+      - "'[GNUPG:] VALIDSIG ' in openbao_service_manifest_signature.stdout"
+      - >-
+        openbao_service_signing_key_primary_fingerprint in
+        openbao_service_manifest_signature.stdout
+    fail_msg: The OpenBao checksum manifest signature is not trusted.
+
+- name: Read the signed OpenBao checksum manifest
+  ansible.builtin.slurp:
+    src: "{{ openbao_service_download_path }}/checksums.txt"
+  register: openbao_service_checksum_manifest
+
+- name: Require the exact package checksum in the signed manifest
+  ansible.builtin.assert:
+    that:
+      - >-
+        (openbao_service_package_sha256 ~ '  ' ~
+        openbao_service_package_filename) in
+        (openbao_service_checksum_manifest.content | b64decode).splitlines()
+    fail_msg: The signed OpenBao manifest does not contain the pinned package.
+
+- name: Download the checksum-pinned OpenBao package
+  ansible.builtin.get_url:
+    url: >-
+      {{ openbao_service_release_base_url }}/{{ openbao_service_package_filename }}
+    dest: >-
+      {{ openbao_service_download_path }}/{{ openbao_service_package_filename }}
+    checksum: "sha256:{{ openbao_service_package_sha256 }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Create the package-compatible OpenBao service group
+  ansible.builtin.group:
+    name: openbao
+    system: true
+
+- name: Create the package-compatible OpenBao service user
+  ansible.builtin.user:
+    name: openbao
+    group: openbao
+    system: true
+    shell: /bin/false
+    create_home: false
+
+- name: Create protected OpenBao runtime directories before package installation
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: openbao
+    mode: "{{ item.mode }}"
+  loop:
+    - path: /etc/openbao
+      owner: root
+      mode: "0750"
+    - path: "{{ openbao_service_data_path }}"
+      owner: openbao
+      mode: "0700"
+    - path: "{{ openbao_service_tls_path }}"
+      owner: openbao
+      mode: "0700"
+    - path: "{{ openbao_service_audit_path | dirname }}"
+      owner: openbao
+      mode: "0700"
+
+- name: Install the protected bootstrap TLS material
+  ansible.builtin.copy:
+    src: "{{ openbao_service_tls_input_dir }}/{{ item }}"
+    dest: "{{ openbao_service_tls_path }}/{{ item }}"
+    owner: openbao
+    group: openbao
+    mode: "0600"
+  loop:
+    - ca.crt
+    - tls.crt
+    - tls.key
+  no_log: true
+  diff: false
+  notify: Restart OpenBao
+
+- name: Install the verified OpenBao package
+  ansible.builtin.apt:
+    deb: >-
+      {{ openbao_service_download_path }}/{{ openbao_service_package_filename }}
+    state: present
+
+- name: Restore protected OpenBao directory ownership after package installation
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: openbao
+    mode: "{{ item.mode }}"
+  loop:
+    - path: /etc/openbao
+      owner: root
+      mode: "0750"
+    - path: "{{ openbao_service_data_path }}"
+      owner: openbao
+      mode: "0700"
+    - path: "{{ openbao_service_tls_path }}"
+      owner: openbao
+      mode: "0700"
+    - path: "{{ openbao_service_audit_path | dirname }}"
+      owner: openbao
+      mode: "0700"
+
+- name: Install the single-node OpenBao configuration
+  ansible.builtin.template:
+    src: openbao.hcl.j2
+    dest: "{{ openbao_service_config_path }}"
+    owner: root
+    group: openbao
+    mode: "0640"
+  notify: Restart OpenBao
+
+- name: Install OpenBao audit-log rotation
+  ansible.builtin.template:
+    src: openbao-logrotate.j2
+    dest: /etc/logrotate.d/openbao-audit
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Apply validated OpenBao configuration changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start OpenBao
+  ansible.builtin.systemd_service:
+    name: "{{ openbao_service_unit_name }}"
+    enabled: true
+    state: started
+
+- name: Run OpenBao foundation validation
+  ansible.builtin.import_tasks: validate.yml

@@ -1,0 +1,41 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Confirm the OpenBao service boundary
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Debian'
+      - ansible_facts['distribution_major_version'] == '13'
+      - ansible_facts['service_mgr'] == 'systemd'
+      - inventory_hostname == 'bao-01'
+      - rpr_deployment_profile in ['workstation-validation', 'single-node-reference']
+      - openbao_service_version == '2.6.3'
+      - ansible_facts['architecture'] in openbao_service_package_architectures
+      - openbao_service_signing_key_primary_fingerprint == '66D15FDD87287219C8E15478D200CD702853E6D0'
+      - openbao_service_platform_cidr == '10.20.0.0/24'
+      - openbao_service_api_address == '10.20.0.20'
+      - openbao_service_api_port == 8200
+      - openbao_service_api_dns_name == 'openbao.dev.apadanalab.de'
+      - openbao_service_tls_input_dir is match('^/')
+      - openbao_service_config_path == '/etc/openbao/openbao.hcl'
+      - openbao_service_data_path == '/opt/openbao/data'
+      - openbao_service_tls_path == '/opt/openbao/tls'
+      - openbao_service_audit_path == '/var/log/openbao/audit.log'
+      - openbao_service_unit_name == 'openbao'
+    fail_msg: >-
+      P2-02 supports only the reviewed Debian 13 single-node OpenBao boundary.
+
+- name: Select the pinned package for the target architecture
+  ansible.builtin.set_fact:
+    openbao_service_package_architecture: >-
+      {{ openbao_service_package_architectures[ansible_facts['architecture']].name }}
+    openbao_service_package_sha256: >-
+      {{ openbao_service_package_architectures[ansible_facts['architecture']].sha256 }}
+
+- name: Derive exact OpenBao artifact names
+  ansible.builtin.set_fact:
+    openbao_service_package_filename: >-
+      openbao_{{ openbao_service_version }}_linux_{{ openbao_service_package_architecture }}.deb
+    openbao_service_download_path: /var/cache/rpr-openbao
+    openbao_service_verification_home: /var/lib/rpr-openbao-verify

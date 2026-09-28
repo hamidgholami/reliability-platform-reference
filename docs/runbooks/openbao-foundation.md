@@ -110,11 +110,46 @@ Keycloak, DNS-provider, or machine-authentication credentials.
     ceremony, revoke the generated recovery root token, then revoke the initial
     root token. Routine automation must fail if only that retired token exists.
 
-The implementation adds only these public targets: `configure-openbao`,
-`openbao-status`, `initialize-openbao`, `unseal-openbao`,
-`bootstrap-openbao`, and `validate-openbao`. Mutation targets require the
-selected profile, target identity, protected input locations, expected effect,
-and exact confirmation. Status and validation remain read-only.
+The service-foundation slice exposes `configure-openbao`, `openbao-status`, and
+`validate-openbao`. Later ceremony and API-object slices add
+`initialize-openbao`, `unseal-openbao`, and `bootstrap-openbao` only when their
+implementations are complete. Mutation targets require the selected profile,
+target identity, protected input locations, expected effect, and exact
+confirmation. Status and validation remain read-only.
+
+Prepare a mode-`0700` directory outside the checkout containing `ca.crt`,
+`tls.crt`, and the unencrypted service key `tls.key`, each mode `0600`. The
+listener certificate must chain to `ca.crt`, remain valid for more than 24
+hours, match `tls.key`, and contain `openbao.dev.apadanalab.de`,
+`bao-01.dev.apadanalab.de`, and `10.20.0.20` as subject alternative names.
+After `make apply` has generated the ignored inventory, configure and inspect
+the still-uninitialized, sealed service with:
+
+```sh
+PROFILE=workstation-validation \
+INCUS_CONFIG_DIR=/absolute/path/to/incus-client \
+INCUS_REMOTE=rpr-target \
+OPENBAO_TLS_INPUT_DIR=/absolute/protected/path \
+CONFIRM=configure-openbao-workstation-validation-rpr-target \
+make configure-openbao
+
+PROFILE=workstation-validation \
+INCUS_CONFIG_DIR=/absolute/path/to/incus-client \
+INCUS_REMOTE=rpr-target \
+make openbao-status
+
+PROFILE=workstation-validation \
+INCUS_CONFIG_DIR=/absolute/path/to/incus-client \
+INCUS_REMOTE=rpr-target \
+make validate-openbao
+```
+
+The configuration wrapper validates the protected input before invoking
+Ansible. Ansible independently verifies the signed checksum manifest and exact
+package checksum, prevents the Debian package from generating its fallback
+self-signed key, installs integrated Raft and declarative file-audit
+configuration, and starts the TLS-only service. These targets do not initialize
+or unseal OpenBao.
 
 ## Audit and recovery checks
 

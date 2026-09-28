@@ -1,0 +1,23 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Validate OpenBao configuration
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/runuser
+      - --user
+      - openbao
+      - --
+      - /usr/bin/bao
+      - operator
+      - validate-config
+      - "-config={{ openbao_service_config_path }}"
+  changed_when: false
+  listen: Restart OpenBao
+
+- name: Restart OpenBao
+  ansible.builtin.systemd_service:
+    name: "{{ openbao_service_unit_name }}"
+    daemon_reload: true
+    state: restarted

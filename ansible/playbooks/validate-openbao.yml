@@ -1,0 +1,19 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Validate the private OpenBao service foundation
+  hosts: openbao_service
+  gather_facts: true
+  any_errors_fatal: true
+  become: false
+  tasks:
+    - name: Run OpenBao foundation validation
+      ansible.builtin.import_role:
+        name: openbao_service
+        tasks_from: validate
+      vars:
+        openbao_service_platform_cidr: "{{ openbao_platform_cidr }}"
+        openbao_service_api_address: "{{ openbao_api_address }}"
+        openbao_service_api_port: "{{ openbao_api_port }}"
+        openbao_service_api_dns_name: "{{ openbao_api_dns_name }}"
