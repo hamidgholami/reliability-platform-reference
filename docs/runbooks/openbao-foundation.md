@@ -65,8 +65,8 @@ architecture. It must:
 | Root private key and passphrase | Guarded operator workflow; root signs only approved leaves, intermediates, and its CRL | Protected workstation storage during bootstrap plus two independently recoverable encrypted backups, with the passphrase held separately; never on the platform | Replace before expiry or after suspected exposure; remove the old root from trust only after migration | Never publish the key, passphrase, filesystem path, or unredacted command output |
 | Root certificate and CRL | Offline ceremony; clients and OpenBao PKI consume public copies | Published trust bundle and recovery kit; safe to back up with configuration | Reissue CRL on intermediate revocation; distribute replacement root deliberately | Certificate, fingerprint, serial, validity, and CRL are publishable |
 | Bootstrap listener private key and certificate | Operator-root workflow; Ansible installs them for first TLS startup | Mode-`0600` runtime input outside Git; no long-term backup | Replace with an online-intermediate leaf after PKI bootstrap, revoke when applicable, then delete the runtime copy | Publish only subject, issuer, serial, validity, and fingerprints |
-| Shamir unseal shares | `bao operator init`; human custodians decrypt and present a threshold | Each encrypted share is stored separately outside Git and ordinary backups | Rotate after custodian change or suspected exposure; invalidate the prior set after validation | Never publish encrypted or decrypted shares, QR codes, paths, or command output |
-| Initial root token | `bao operator init`; used only for first policy and token-role configuration | PGP-encrypted ceremony output; decrypt only for the bounded bootstrap session | Revoke after a scoped bootstrap administrator and root-regeneration recovery are proven; no backup afterward | Record only the revocation result and token accessor when safe |
+| Shamir unseal share | `bao operator init`; the human operator decrypts and presents it | PGP-encrypted to a dedicated passphrase-protected recovery key outside Git; back up the complete recovery directory twice | Rekey after suspected exposure or before adding real independent custodians | Never publish the encrypted or decrypted share, recovery key, passphrase, path, or command output |
+| Initial root token | `bao operator init`; used only for first policy and token-role configuration | PGP-encrypted to the same dedicated recovery key; decrypt only as a stream for the bounded bootstrap session | Revoke after a scoped bootstrap administrator and root-regeneration recovery are proven; no backup afterward | Record only the revocation result and token accessor when safe |
 | Bootstrap administrator token | Created under the initial root token; consumed by protected API automation | Mode-`0600` file outside Git for one bounded work session | Short explicit maximum TTL, no renewal; revoke on completion or exposure | Never publish the value; accessor, policy names, TTL, and revocation result are publishable |
 | Online-intermediate private key | Generated and retained by the OpenBao PKI engine | Encrypted Raft storage and encrypted snapshots; never exported | Rotate before expiry or on compromise; offline root revokes and replaces it | Publish only CSR, certificates, fingerprints, serials, validity, and CRL URLs |
 | Service leaf private keys | Generated for the consuming service or by its approved issuance flow | Only the consuming service's protected runtime; backup is not required for replaceable leaves | Renew before expiry and revoke on exposure or decommission | Never publish keys or full issuance responses |
@@ -92,12 +92,18 @@ Keycloak, DNS-provider, or machine-authentication credentials.
 4. Ansible installs and verifies OpenBao, places the supplied TLS material,
    configures integrated Raft storage, declarative file audit, and rotation,
    then starts the sealed service behind the provider-owned network ACL.
-5. The human operator runs manual Shamir initialization with three PGP
-   recipients and a two-share threshold. The initial root token is also PGP
-   encrypted. Plaintext initialization output must not reach a terminal log.
-6. Two custodians or independently stored identities decrypt and enter shares
-   interactively. Shares are never command arguments, Make variables, Ansible
-   variables, or shell-history entries.
+5. The guarded operator workflow creates a dedicated passphrase-protected
+   OpenPGP recovery key on the workstation. OpenBao initializes with one
+   Shamir share and a threshold of one, encrypting both that share and the
+   initial root token before they leave the service. The encrypted response and
+   encrypted secret-key export remain outside Git under the protected operator
+   directory.
+6. The guarded unseal workflow decrypts the share as a stream and presents it
+   through standard input. The share is never a command argument, Make or
+   Ansible variable, plaintext file, shell-history entry, or terminal output.
+   A 1-of-1 seal truthfully matches this single-operator reference lab; it is a
+   single point of custody, not production quorum. Rekey to independently held
+   threshold shares before claiming multi-operator or production operation.
 7. The initial root token creates the smallest bootstrap-administrator policy
    and one short-expiry orphan token. Protected API automation enables KV v2,
    configures `pki_int`, policies, URLs, and bounded issuance roles.
@@ -108,16 +114,18 @@ Keycloak, DNS-provider, or machine-authentication credentials.
    issues the replacement service leaf. Ansible installs that leaf without
    exporting the intermediate key and removes the bootstrap listener key from
    the operator runtime directory.
-10. Validate scoped administration and a quorum-based root-regeneration
-    ceremony, revoke the generated recovery root token, then revoke the initial
-    root token. Routine automation must fail if only that retired token exists.
+10. Validate scoped administration and a root-regeneration ceremony using the
+    external unseal share, revoke the generated recovery root token, then
+    revoke the initial root token. Routine automation must fail if only that
+    retired token exists.
 
-The service-foundation slice exposes `configure-openbao`, `openbao-status`, and
-`validate-openbao`. Later ceremony and API-object slices add
-`initialize-openbao`, `unseal-openbao`, and `bootstrap-openbao` only when their
-implementations are complete. Mutation targets require the selected profile,
-target identity, protected input locations, expected effect, and exact
-confirmation. Status and validation remain read-only.
+The service-foundation and operator-ceremony slices expose
+`configure-openbao`, `openbao-status`, `validate-openbao`,
+`initialize-openbao`, and `unseal-openbao`. The later API-object slice adds
+`bootstrap-openbao` only when its implementation is complete. Mutation targets
+require the selected profile, target identity, protected input locations,
+expected effect, and exact confirmation. Status and validation remain
+read-only.
 
 Prepare a mode-`0700` directory outside the checkout containing `ca.crt`,
 `ca.crl`, `tls.crt`, and the unencrypted service key `tls.key`, each mode
@@ -157,6 +165,50 @@ or unseal OpenBao. The redacted
 [local service-foundation acceptance record](../evidence/phase-2-openbao-foundation-local-acceptance.md)
 captures the completed workstation run.
 
+## Initialize and unseal
+
+Initialization is irreversible for the existing Raft data. Run it once against
+the verified uninitialized service:
+
+```sh
+RPR_PKI_DIR=/absolute/protected/pki \
+PROFILE=workstation-validation \
+INCUS_CONFIG_DIR=/absolute/path/to/incus-client \
+INCUS_REMOTE=rpr-target \
+CONFIRM=initialize-openbao-workstation-validation-rpr-target \
+make initialize-openbao
+```
+
+The target asks twice for a new recovery-key passphrase. It creates
+`RPR_PKI_DIR/openbao-recovery` with mode `0700`, including a
+passphrase-protected GPG secret-key export and OpenBao's PGP-encrypted
+initialization response. It refuses to overwrite that directory. Back up the
+complete directory to two independently recoverable encrypted locations and
+keep its passphrase separately.
+
+If OpenBao completes initialization but a later local validation or install
+step fails, the workflow deliberately retains the staged encrypted recovery
+directory and prints its location. Recover that directory before retrying;
+OpenBao cannot be initialized a second time and cleanup must not discard the
+only encrypted share.
+
+Then unseal the service:
+
+```sh
+RPR_PKI_DIR=/absolute/protected/pki \
+PROFILE=workstation-validation \
+INCUS_CONFIG_DIR=/absolute/path/to/incus-client \
+INCUS_REMOTE=rpr-target \
+CONFIRM=unseal-openbao-workstation-validation-rpr-target \
+make unseal-openbao
+```
+
+The target asks once for the recovery-key passphrase, decrypts the share only
+in a process stream, and supplies it to OpenBao over standard input. It is safe
+to rerun after a restart: an already-unsealed service returns without reading
+the recovery material. The passphrase, share, initial root token, GPG secret-key
+export, and protected paths must not be copied into evidence or command logs.
+
 ## Audit and recovery checks
 
 The declarative file audit device exists in the server configuration before
@@ -167,7 +219,7 @@ health before any later slice proceeds.
 
 Recovery uses a fresh isolated instance with no production DNS alias or client
 route. Verify the snapshot checksum, restore it, present the external Shamir
-quorum, and confirm one versioned synthetic KV value plus the non-secret PKI
+share, and confirm one versioned synthetic KV value plus the non-secret PKI
 metadata. Destroy the isolated copy after evidence is redacted. A snapshot that
 has not passed this exercise is not described as a backup.
 

@@ -57,9 +57,10 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   scripts/doctor.sh scripts/check-license.sh scripts/scan-secrets.sh \
   scripts/lima-host-probe.sh scripts/lima-lifecycle.sh \
   scripts/init-hcl.sh scripts/validate-hcl.sh scripts/not-implemented.sh \
-  scripts/ansible-target.sh scripts/openbao-pki.sh \
+  scripts/ansible-target.sh scripts/openbao-pki.sh scripts/openbao-ceremony.sh \
   scripts/validate-openbao-bootstrap-tls.sh \
   tests/ansible-target-safety.sh \
+  tests/fixtures/openbao-ceremony/incus \
   tests/offline-root-policy.sh \
   infrastructure/bootstrap/aws-single-node/versions.tf \
   infrastructure/bootstrap/aws-single-node/variables.tf \

@@ -19,6 +19,7 @@ ANSIBLE_ENV = ANSIBLE_CONFIG=$(CURDIR)/ansible.cfg ANSIBLE_HOME=$(CURDIR)/.cache
 	validate-openbao-bootstrap-tls \
 	private-dns-secrets configure-private-dns validate-private-dns \
 	accept-private-dns configure-openbao openbao-status validate-openbao \
+	initialize-openbao unseal-openbao \
 	bootstrap-incus plan apply validate destroy aws-plan aws-apply \
 	aws-destroy aws-orphan-check test-aws-safety
 
@@ -186,6 +187,12 @@ openbao-status: ## Read redacted OpenBao service and seal status.
 
 validate-openbao: ## Validate the OpenBao package, service, storage, audit, and TLS boundary.
 	@./scripts/openbao.sh validate
+
+initialize-openbao: ## Initialize OpenBao and create encrypted operator recovery material.
+	@./scripts/openbao-ceremony.sh initialize
+
+unseal-openbao: ## Unseal OpenBao from protected operator recovery material.
+	@./scripts/openbao-ceremony.sh unseal
 
 plan: ## Verify Incus trust and save a non-destructive substrate plan.
 	@./scripts/incus-substrate.sh plan

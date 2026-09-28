@@ -32,7 +32,7 @@ identity/secrets services, backup storage, and each cloud account or tenant.
 | Backup exists but cannot restore | Separate failure domain and scheduled restore validation with evidence |
 | Compromised secrets-service bootstrap | Signed package provenance, trusted-host access, encrypted Shamir outputs, short-lived bootstrap credentials, and explicit initial-root-token retirement |
 | Compromised online intermediate | Offline root separation, bounded intermediate and leaf lifetimes, revocation endpoints, and a documented replacement ceremony |
-| Lost seal quorum | Encrypted shares in independently recoverable external locations and a tested quorum ceremony; no share or decrypted key enters Git or evidence |
+| Lost seal material | One PGP-encrypted share and its passphrase-protected recovery key in independently recoverable encrypted backups; no plaintext share enters Git, disk, logs, or evidence. This single-operator profile does not claim quorum. |
 | Audit loss or bypass | Declarative file audit enabled before routine use, protected local storage, rotation checks, and validation that requests fail when every audit device is unavailable |
 
 ## Identity separation
@@ -49,18 +49,24 @@ must not substitute for an attributable human approval. See
 The signed repository and verified OpenBao package may create an empty, sealed
 service, but they cannot produce their own external trust. A human operator
 supplies a bootstrap listener certificate from the operator-root workflow,
-initializes OpenBao with encrypted Shamir outputs, and presents the threshold
-shares only through interactive unseal input. The initial root token exists only
+initializes OpenBao with a PGP-encrypted Shamir output, and presents the 1-of-1
+share only through the guarded unseal stream. The initial root token exists only
 long enough to install scoped policy and a bounded bootstrap administrator.
 
 OpenBao generates the online intermediate private key internally and exports
 only a CSR. The offline root signs that CSR outside the platform. A compromise
 of the running service can therefore issue within the intermediate's policy and
 lifetime, but cannot recover the offline root. Recovery starts with trusted
-host access and the external Shamir quorum, restores a verified Raft snapshot
+host access and the external Shamir share, restores a verified Raft snapshot
 only into an isolated instance, and reconnects DNS or consumers only after
 validation. Detailed custody and redaction rules are in the
 [OpenBao foundation runbook](runbooks/openbao-foundation.md).
+
+The 1-of-1 seal is a deliberate single-operator reference-lab tradeoff. It
+avoids pretending that multiple files held by the same person are independent
+custodians, but it makes loss or compromise of that custody material decisive.
+Any production or genuinely multi-operator profile must rekey to independently
+held threshold shares and test that separate ceremony first.
 
 ## Deferred analysis
 

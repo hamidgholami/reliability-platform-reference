@@ -1,0 +1,94 @@
+#!/usr/bin/env sh
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+set -eu
+
+state_dir=${MOCK_INCUS_STATE_DIR:?}
+public_key="$state_dir/recovery-public.gpg"
+
+[ "${1:-}" = "exec" ]
+shift
+[ "${1:-}" = "--project" ]
+[ "${2:-}" = "rpr-dev" ]
+shift 2
+[ "${1:-}" = "rpr-target:bao-01" ]
+shift
+[ "${1:-}" = "--" ]
+shift
+
+case "${1:-}" in
+  sh)
+    cat >"$public_key"
+    exit 0
+    ;;
+  rm)
+    rm -f "$public_key"
+    exit 0
+    ;;
+  env)
+    shift
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        *=*) shift ;;
+        *) break ;;
+      esac
+    done
+    ;;
+  *) exit 1 ;;
+esac
+
+[ "${1:-}" = "bao" ]
+shift
+
+if [ "${1:-}" = "status" ]; then
+  if [ ! -f "$state_dir/initialized" ]; then
+    printf '{"initialized":false,"sealed":true}\n'
+    exit 2
+  fi
+  if [ -f "$state_dir/unsealed" ]; then
+    printf '{"initialized":true,"sealed":false}\n'
+    exit 0
+  fi
+  printf '{"initialized":true,"sealed":true}\n'
+  exit 2
+fi
+
+[ "${1:-}" = "operator" ]
+shift
+case "${1:-}" in
+  init)
+    [ -s "$public_key" ]
+    mock_gnupg=$(mktemp -d /tmp/rpr-openbao-mock-gpg.XXXXXX)
+    trap 'rm -rf "$mock_gnupg"' EXIT HUP INT TERM
+    gpg --homedir "$mock_gnupg" --batch --quiet --import "$public_key"
+    fingerprint=$(gpg \
+      --homedir "$mock_gnupg" \
+      --batch --with-colons --list-keys |
+      awk -F: '$1 == "fpr" { print $10; exit }')
+    encrypted_share=$(printf 'synthetic-unseal-share\n' |
+      gpg \
+        --homedir "$mock_gnupg" \
+        --batch --quiet --trust-model always \
+        --recipient "$fingerprint" --encrypt |
+      openssl base64 -A)
+    encrypted_token=$(printf 'synthetic-initial-root-token\n' |
+      gpg \
+        --homedir "$mock_gnupg" \
+        --batch --quiet --trust-model always \
+        --recipient "$fingerprint" --encrypt |
+      openssl base64 -A)
+    jq -n \
+      --arg share "$encrypted_share" \
+      --arg token "$encrypted_token" \
+      '{unseal_keys_b64: [$share], unseal_keys_hex: [], root_token: $token}'
+    : >"$state_dir/initialized"
+    ;;
+  unseal)
+    IFS= read -r share
+    [ "$share" = "synthetic-unseal-share" ]
+    : >"$state_dir/unsealed"
+    printf '{"initialized":true,"sealed":false}\n'
+    ;;
+  *) exit 1 ;;
+esac
