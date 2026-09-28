@@ -49,22 +49,24 @@ make bootstrap-incus
 make validate-incus
 ```
 
-The role installs `incus-base`, grants the existing operator `incus-admin`
-membership, resets the SSH connection so the new supplementary group is active,
-starts the packaged systemd units, and sends a minimal preseed over standard
-input. A versioned Jinja template makes the input reviewable, but it is rendered
-in controller memory rather than copied to the host. The preseed configures only
-`0.0.0.0:8443`; it creates no file and no provider-owned resource.
+The role installs `incus-base`, `nftables`, and the remaining bounded support
+packages, grants the existing operator `incus-admin` membership, resets the SSH
+connection so the new supplementary group is active, starts the packaged
+systemd units, and sends a minimal preseed over standard input. A versioned
+Jinja template makes the input reviewable, but it is rendered in controller
+memory rather than copied to the host. The preseed configures only
+`0.0.0.0:8443`; it creates no file and no provider-owned resource. Incus must
+select its nftables firewall driver because later bridge NIC ACLs depend on it.
 
 Run both commands a second time. The second bootstrap recap must report zero
 changes. Validation checks structured local API data, standalone mode, package
-series, packaged systemd units, non-root SSH operator access, local HTTPS,
-exposed listeners, and—on the reference profile—TCP reachability from the
-controller. It also queries the API to prove that storage pools, managed
-networks, instances, and non-default projects and profiles remain absent. The
-ignored report under `reports/p1-03/` records these bounded results and the
-initial server-certificate fingerprint. Trusting that certificate and creating
-a client identity belong to P1-05.
+series, nftables firewall selection, packaged systemd units, non-root SSH
+operator access, local HTTPS, exposed listeners, and—on the reference
+profile—TCP reachability from the controller. It also queries the API to prove
+that storage pools, managed networks, instances, and non-default projects and
+profiles remain absent. The ignored report under `reports/p1-03/` records these
+bounded results and the initial server-certificate fingerprint. Trusting that
+certificate and creating a client identity belong to P1-05.
 
 ## Recovery boundary
 
@@ -81,3 +83,4 @@ when clean rollback is required.
 - [Initialize Incus with preseed](https://linuxcontainers.org/incus/docs/main/howto/initialize/)
 - [Incus daemon readiness](https://linuxcontainers.org/incus/docs/main/reference/manpages/incus/admin/waitready/)
 - [Expose the Incus API](https://linuxcontainers.org/incus/docs/main/howto/server_expose/)
+- [Incus firewall configuration](https://linuxcontainers.org/incus/docs/main/howto/network_bridge_firewalld/)

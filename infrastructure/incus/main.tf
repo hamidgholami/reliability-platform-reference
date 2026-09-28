@@ -54,17 +54,20 @@ resource "incus_network" "platform" {
   remote      = var.incus_remote
 
   config = {
-    "dns.domain"            = var.platform_dns_domain
-    "dns.mode"              = "managed"
-    "dns.search"            = var.platform_dns_domain
-    "dns.zone.forward"      = incus_network_zone.forward.name
-    "dns.zone.reverse.ipv4" = incus_network_zone.reverse.name
-    "ipv4.address"          = local.bridge_ipv4_address
-    "ipv4.dhcp"             = "true"
-    "ipv4.dhcp.ranges"      = local.dhcp_ipv4_range
-    "ipv4.firewall"         = "true"
-    "ipv4.nat"              = "true"
-    "ipv6.address"          = "none"
+    "dns.domain"                           = var.platform_dns_domain
+    "dns.mode"                             = "managed"
+    "dns.search"                           = var.platform_dns_domain
+    "dns.zone.forward"                     = incus_network_zone.forward.name
+    "dns.zone.reverse.ipv4"                = incus_network_zone.reverse.name
+    "ipv4.address"                         = local.bridge_ipv4_address
+    "ipv4.dhcp"                            = "true"
+    "ipv4.dhcp.ranges"                     = local.dhcp_ipv4_range
+    "ipv4.firewall"                        = "true"
+    "ipv4.nat"                             = "true"
+    "ipv6.address"                         = "none"
+    "security.acls"                        = incus_network_acl.openbao.name
+    "security.acls.default.egress.action"  = "allow"
+    "security.acls.default.ingress.action" = "allow"
   }
 }
 
@@ -365,7 +368,6 @@ resource "incus_instance" "openbao" {
       name                                   = "eth0"
       network                                = incus_network.platform.name
       "ipv4.address"                         = local.openbao_ipv4_address
-      "security.acls"                        = incus_network_acl.openbao.name
       "security.acls.default.egress.action"  = "allow"
       "security.acls.default.ingress.action" = "reject"
     }

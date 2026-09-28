@@ -1,0 +1,8 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Restart Incus daemon
+  ansible.builtin.systemd_service:
+    name: incus.service
+    state: restarted

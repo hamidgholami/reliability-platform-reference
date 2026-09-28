@@ -86,10 +86,12 @@ printf '%s\n' \
   '    printf '\''{"rpr-target":{"Addrs":["https://127.0.0.1:18443"]}}'\''' \
   '    ;;' \
   '  "query rpr-target:/1.0")' \
+  '    firewall=nftables' \
+  '    [ "${MOCK_INCUS_XTABLES:-}" = 1 ] && firewall=xtables' \
   '    if [ "${MOCK_INCUS_ENVELOPE:-}" = 1 ]; then' \
-  '      printf '\''{"metadata":{"auth":"trusted","api_extensions":["projects_restrictions","projects_networks_restricted_access","projects_limits_disk_pool","storage_api_project"],"environment":{"server_clustered":false,"server_version":"6.0.4"}}}'\''' \
+  '      printf '\''{"metadata":{"auth":"trusted","api_extensions":["projects_restrictions","projects_networks_restricted_access","projects_limits_disk_pool","storage_api_project","network_dns","network_dns_records","projects_networks_zones","network_acl","network_bridge_acl","firewall_driver"],"environment":{"server_clustered":false,"server_version":"6.0.4","firewall":"%s"}}}'\'' "$firewall"' \
   '    else' \
-  '      printf '\''{"auth":"trusted","api_extensions":["projects_restrictions","projects_networks_restricted_access","projects_limits_disk_pool","storage_api_project"],"environment":{"server_clustered":false,"server_version":"6.0.4"}}'\''' \
+  '      printf '\''{"auth":"trusted","api_extensions":["projects_restrictions","projects_networks_restricted_access","projects_limits_disk_pool","storage_api_project","network_dns","network_dns_records","projects_networks_zones","network_acl","network_bridge_acl","firewall_driver"],"environment":{"server_clustered":false,"server_version":"6.0.4","firewall":"%s"}}'\'' "$firewall"' \
   '    fi' \
   '    ;;' \
   '  *) exit 1 ;;' \
@@ -170,5 +172,15 @@ for response_shape in direct envelope; do
     INCUS_SERVER_CERTIFICATE_SHA256="$valid_fingerprint" \
     ./scripts/incus-substrate.sh preflight >"$output_file"
 done
+
+expect_failure \
+  "the Incus substrate requires the nftables firewall driver for bridge ACLs" \
+  env PATH="$fixture_dir/bin:$PATH" MOCK_INCUS_XTABLES=1 \
+  PROFILE=workstation-validation \
+  INCUS_CONFIG_DIR="$fixture_dir/config" \
+  INCUS_REMOTE=rpr-target \
+  INCUS_ENDPOINT=https://127.0.0.1:18443 \
+  INCUS_SERVER_CERTIFICATE_SHA256="$valid_fingerprint" \
+  ./scripts/incus-substrate.sh preflight
 
 echo "Incus substrate safety checks passed."

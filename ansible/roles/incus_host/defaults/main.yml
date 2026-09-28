@@ -5,6 +5,7 @@
 incus_host_mode: standalone
 incus_host_package: incus-base
 incus_host_support_packages:
+  - nftables
   - openssl
 incus_host_operator_user: "{{ ansible_user }}"
 incus_host_package_version_pattern: '^6\.0\.'

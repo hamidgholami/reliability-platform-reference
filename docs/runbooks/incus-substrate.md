@@ -44,10 +44,14 @@ The DNS service containers use stable addresses `.10` and `.11`, one CPU,
 
 The OpenBao foundation uses `bao-01` at `.20`, one CPU, 512 MiB memory, and a
 4 GiB disk. The `openbao` alias points to the instance's Incus-generated DNS
-name. A NIC-scoped Incus ACL accepts TCP 8200 only from the platform CIDR,
-rejects unmatched ingress, and explicitly allows egress. This layer does not
-install OpenBao or create TLS, PKI, seal, or application secrets; those remain
-the Ansible and human-owned steps in the
+name. An Incus ACL assigned to the shared bridge accepts TCP 8200 only from the
+platform CIDR. Ordinary NICs retain explicit allow defaults, while `bao-01`
+overrides its ingress default to reject unmatched traffic and explicitly allows
+egress. This network assignment avoids an Incus 6.0 cross-project ACL loading
+bug when a NIC in `rpr-dev` directly names an ACL owned by the shared network's
+`default` project. It preserves host enforcement without upgrading away from
+Debian's supported LTS package. This layer does not install OpenBao or create
+TLS, PKI, seal, or application secrets; those remain the Ansible and human-owned steps in the
 [OpenBao foundation runbook](openbao-foundation.md).
 
 ## Inputs and plan
@@ -71,8 +75,8 @@ make incus-client-check
 make plan
 ```
 
-The wrapper verifies the required Incus API extensions and refuses a
-create/update plan containing any delete action. It
+The wrapper verifies the required Incus API extensions and nftables firewall
+driver, then refuses a create/update plan containing any delete action. It
 writes runtime variables, state, plan, and plan metadata below ignored
 `.cache/incus-substrate` with operator-only permissions. Review the displayed
 fifteen-resource boundary before applying it. The TSIG file and provider state
@@ -90,9 +94,9 @@ make validate
 Use the confirmation printed by `make plan` for another profile or remote.
 Validation checks project restrictions, the pool, bridge NAT and IPv6 policy,
 profiles, running containers, stable and DHCP addresses, zone ownership,
-the OpenBao ACL and alias, internal and external DNS, and outbound IPv4
-connectivity. It writes ignored structured evidence plus substrate,
-private-DNS, and OpenBao inventories.
+the OpenBao ACL and alias through both authoritative secondaries, internal and
+external DNS, and outbound IPv4 connectivity. It writes ignored structured
+evidence plus substrate, private-DNS, and OpenBao inventories.
 
 Prove convergence by planning and applying once more:
 

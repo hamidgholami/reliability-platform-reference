@@ -181,6 +181,7 @@
       - incus_host_api_health.status == 'Success'
       - incus_host_api_health.metadata.auth == 'trusted'
       - not incus_host_api_health.metadata.environment.server_clustered | bool
+      - incus_host_api_health.metadata.environment.firewall == 'nftables'
       - incus_host_operator_api_health.type == 'sync'
       - incus_host_operator_api_health.metadata.auth == 'trusted'
       - incus_host_socket_unit.status.ActiveState == 'active'
@@ -249,6 +250,7 @@
         'api_version': incus_host_api_health.metadata.api_version,
         'server_version': incus_host_api_health.metadata.environment.server_version,
         'server_clustered': incus_host_api_health.metadata.environment.server_clustered,
+        'firewall_driver': incus_host_api_health.metadata.environment.firewall,
         'https_address': incus_host_effective_api_address.stdout | trim,
         'exposed_tcp_ports': incus_host_exposed_tcp_ports,
         'ssh_operator_api_access_verified': true,

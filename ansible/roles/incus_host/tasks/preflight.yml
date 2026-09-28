@@ -11,6 +11,7 @@
       - debian_prepare_stable_target | bool
       - incus_host_mode == 'standalone'
       - incus_host_package == 'incus-base'
+      - "'nftables' in incus_host_support_packages"
       - incus_host_operator_user | length > 0
       - incus_host_operator_user != 'root'
       - incus_host_storage_owner == 'opentofu'
@@ -19,8 +20,9 @@
       - incus_host_api_address == '0.0.0.0'
       - incus_host_api_port == 8443
     fail_msg: >-
-      P1-03 supports only standalone, container-only Incus with an OpenTofu-owned
-      resource layer and the reviewed API boundary. Cluster input is deferred.
+      The Incus host supports only standalone containers with an
+      OpenTofu-owned resource layer, the reviewed API boundary, and the
+      nftables backend required by bridge NIC ACLs. Cluster input is deferred.
 
 - name: Read root filesystem capacity
   ansible.builtin.set_fact:

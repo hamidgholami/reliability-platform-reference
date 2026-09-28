@@ -108,7 +108,8 @@ make plan
 ```
 
 The check requires a matching pinned server certificate, a matching client
-certificate and key, trusted API access, and a standalone server. The provider
+certificate and key, trusted API access, a standalone server, the required API
+extensions, and the nftables firewall driver used by bridge ACLs. The provider
 loads the pre-enrolled remote from the isolated configuration directory with
 automatic certificate generation and server-certificate acceptance explicitly
 disabled. Neither command creates a resource. Review and apply the resulting

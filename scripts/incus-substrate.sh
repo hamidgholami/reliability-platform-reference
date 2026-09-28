@@ -195,6 +195,7 @@ network_dns_records
 projects_networks_zones
 network_acl
 network_bridge_acl
+firewall_driver
 "
 
   for extension in $required_extensions; do
@@ -208,6 +209,15 @@ network_bridge_acl
     jq -er '.environment.server_version')" ||
     fail "the Incus API did not report its server version"
   echo "Incus substrate capabilities verified: server=$server_version"
+}
+
+verify_firewall_backend()
+{
+  firewall_driver="$(printf '%s' "$server_metadata" |
+    jq -er '.environment.firewall')" ||
+    fail "the Incus API did not report its firewall driver"
+  [ "$firewall_driver" = "nftables" ] ||
+    fail "the Incus substrate requires the nftables firewall driver for bridge ACLs"
 }
 
 write_runtime_vars()
@@ -296,6 +306,7 @@ plan()
     fail "run make setup-hcl before planning Incus resources"
   verify_client_trust
   verify_server_capabilities
+  verify_firewall_backend
   validate_private_dns_secrets
   write_runtime_vars
 
@@ -468,6 +479,7 @@ apply_plan()
   verify_create_plan
   verify_client_trust
   verify_server_capabilities
+  verify_firewall_backend
 
   umask 077
   echo "Applying only the reviewed Incus plan to $remote ($endpoint)."
@@ -492,6 +504,7 @@ validate_substrate()
   load_session
   verify_client_trust
   verify_server_capabilities
+  verify_firewall_backend
   [ -r "$state_file" ] || fail "Incus state is missing; run make apply first"
 
   outputs="$(tofu -chdir="$terraform_root" output -state="$state_file" -json)"
@@ -558,6 +571,12 @@ validate_substrate()
     fail "the managed bridge is not attached to the private forward zone"
   [ "$(printf '%s' "$network_json" | jq -r '.config["dns.zone.reverse.ipv4"]')" = "$reverse_zone" ] ||
     fail "the managed bridge is not attached to the private reverse zone"
+  [ "$(printf '%s' "$network_json" | jq -r '.config["security.acls"]')" = "$openbao_acl_name" ] ||
+    fail "the managed bridge is not attached to the OpenBao ACL"
+  [ "$(printf '%s' "$network_json" | jq -r '.config["security.acls.default.ingress.action"]')" = "allow" ] ||
+    fail "the managed bridge does not preserve ingress for ordinary NICs"
+  [ "$(printf '%s' "$network_json" | jq -r '.config["security.acls.default.egress.action"]')" = "allow" ] ||
+    fail "the managed bridge does not preserve egress for ordinary NICs"
 
   pool_json="$(INCUS_CONF="$config_dir" incus query \
     "${remote}:/1.0/storage-pools/${pool_name}?project=default")"
@@ -658,8 +677,6 @@ validate_substrate()
     fail "the OpenBao instance NIC uses the wrong network"
   [ "$(printf '%s' "$openbao_instance_json" | jq -r '.devices.eth0["ipv4.address"]')" = "$openbao_ipv4_address" ] ||
     fail "the OpenBao instance NIC does not use its reviewed static address"
-  [ "$(printf '%s' "$openbao_instance_json" | jq -r '.devices.eth0["security.acls"]')" = "$openbao_acl_name" ] ||
-    fail "the OpenBao instance NIC does not use its reviewed ACL"
   [ "$(printf '%s' "$openbao_instance_json" | jq -r '.devices.eth0["security.acls.default.ingress.action"]')" = "reject" ] ||
     fail "the OpenBao instance NIC does not reject unmatched ingress"
   [ "$(printf '%s' "$openbao_instance_json" | jq -r '.devices.eth0["security.acls.default.egress.action"]')" = "allow" ] ||
@@ -709,8 +726,29 @@ validate_substrate()
     and .entries[0].type == "CNAME"
     and .entries[0].value == $target
   ' >/dev/null || fail "the private OpenBao alias differs from the reviewed target"
-  INCUS_CONF="$config_dir" incus exec --project "$project_name" \
-    "${remote}:${instance_name}" -- getent ahostsv4 "$openbao_alias_name" >/dev/null
+  for dns_name in dns-01 dns-02; do
+    expected_dns_ipv4="$(printf '%s' "$outputs" |
+      jq -er --arg name "$dns_name" '.private_dns.value.secondaries[$name].ipv4_address')"
+    INCUS_CONF="$config_dir" incus exec --project "$project_name" \
+      "${remote}:${dns_name}" -- rndc refresh "$forward_zone" >/dev/null
+    attempt=0
+    while [ "$attempt" -lt 30 ]; do
+      alias_answer="$(INCUS_CONF="$config_dir" incus exec --project "$project_name" \
+        "${remote}:${dns_name}" -- dig "@${expected_dns_ipv4}" \
+        "$openbao_alias_name" CNAME +norecurse +short 2>/dev/null || true)"
+      address_answer="$(INCUS_CONF="$config_dir" incus exec --project "$project_name" \
+        "${remote}:${dns_name}" -- dig "@${expected_dns_ipv4}" \
+        "$openbao_dns_name" A +norecurse +short 2>/dev/null || true)"
+      if [ "$alias_answer" = "${openbao_dns_name}." ] &&
+        [ "$address_answer" = "$openbao_ipv4_address" ]; then
+        break
+      fi
+      attempt=$((attempt + 1))
+      sleep 1
+    done
+    [ "$attempt" -lt 30 ] ||
+      fail "$dns_name did not serve the reviewed OpenBao alias and address"
+  done
 
   umask 077
   jq -n \
@@ -797,7 +835,11 @@ destroy()
 require_profile
 validate_inputs
 case "$action" in
-  preflight) verify_client_trust ;;
+  preflight)
+    verify_client_trust
+    verify_server_capabilities
+    verify_firewall_backend
+    ;;
   plan) plan ;;
   apply) apply_plan ;;
   validate) validate_substrate ;;

@@ -78,7 +78,10 @@ run "trusted_standalone_boundary" {
     condition = (
       incus_network.platform.config["ipv4.address"] == "10.20.0.1/24" &&
       incus_network.platform.config["ipv4.nat"] == "true" &&
-      incus_network.platform.config["ipv6.address"] == "none"
+      incus_network.platform.config["ipv6.address"] == "none" &&
+      incus_network.platform.config["security.acls"] == incus_network_acl.openbao.name &&
+      incus_network.platform.config["security.acls.default.ingress.action"] == "allow" &&
+      incus_network.platform.config["security.acls.default.egress.action"] == "allow"
     )
     error_message = "The managed bridge must use explicit IPv4 NAT and disabled IPv6."
   }
@@ -133,7 +136,6 @@ run "trusted_standalone_boundary" {
       length(incus_instance.openbao.profiles) == 1 &&
       incus_instance.openbao.profiles[0] == incus_profile.openbao.name &&
       one(incus_instance.openbao.device).properties["ipv4.address"] == "10.20.0.20" &&
-      one(incus_instance.openbao.device).properties["security.acls"] == incus_network_acl.openbao.name &&
       one(incus_instance.openbao.device).properties["security.acls.default.ingress.action"] == "reject" &&
       one(incus_instance.openbao.device).properties["security.acls.default.egress.action"] == "allow"
     )

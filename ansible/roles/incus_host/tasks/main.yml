@@ -9,6 +9,7 @@
   ansible.builtin.apt:
     name: "{{ [incus_host_package] + incus_host_support_packages }}"
     state: present
+  notify: Restart Incus daemon
 
 - name: Add the operator to the Incus administrator group
   ansible.builtin.user:
@@ -30,6 +31,9 @@
   ansible.builtin.systemd_service:
     name: incus.service
     state: started
+
+- name: Apply package-triggered Incus restart before validation
+  ansible.builtin.meta: flush_handlers
 
 - name: Wait for the local Incus daemon
   ansible.builtin.command: incus admin waitready --timeout=60
