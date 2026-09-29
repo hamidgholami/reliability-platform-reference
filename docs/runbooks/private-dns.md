@@ -56,12 +56,15 @@ service containers and generates ignored Ansible inventory:
 ```sh
 make plan
 CONFIRM=apply-incus-workstation-validation-rpr-target make apply
-make validate
 
 CONFIRM=configure-private-dns-workstation-validation-rpr-target \
   make configure-private-dns
 make validate-private-dns
+make validate
 ```
+
+The full substrate validation queries BIND inside both DNS containers, so run
+it after configuring the secondaries on a fresh environment.
 
 Run `make plan` again after configuration. A converged provider plan contains no
 resource changes. Run `make configure-private-dns` a second time to require

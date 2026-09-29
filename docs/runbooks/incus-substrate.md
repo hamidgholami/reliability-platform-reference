@@ -98,26 +98,24 @@ For the optional workstation profile, apply the exact saved plan with:
 
 ```sh
 CONFIRM=apply-incus-workstation-validation-rpr-target make apply
-make validate
 ```
 
 Use the confirmation printed by `make plan` for another profile or remote.
+The apply generates the guest inventories. Configure both BIND secondaries as
+described in the [private-DNS runbook](private-dns.md), then run `make validate`.
 Validation checks project restrictions, the pool, bridge NAT and IPv6 policy,
 profiles, running containers, stable and DHCP addresses, zone ownership,
 the service ACLs and names through both authoritative secondaries, internal and
 external DNS, and outbound IPv4 connectivity. It writes ignored structured
 evidence plus substrate, private-DNS, and OpenBao inventories.
 
-Prove convergence by planning and applying once more:
+Prove convergence with a fresh plan:
 
 ```sh
 make plan
-CONFIRM=apply-incus-workstation-validation-rpr-target make apply
-make validate
 ```
 
-The second plan must contain no managed-resource changes. Continue with the
-[private-DNS runbook](private-dns.md) to configure and test the BIND guests.
+The second plan must contain no managed-resource changes.
 Runtime acceptance on Lima is useful evidence but does not replace the final
 `single-node-reference` execution on a real remote VM.
 

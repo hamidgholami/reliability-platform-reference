@@ -45,7 +45,11 @@ esac
 extra_vars="debian_prepare_operator_public_key_file=$public_key_file rpr_deployment_profile=$profile"
 
 run_playbook() {
-  ansible_strategy=${ANSIBLE_STRATEGY:-mitogen_linear}
+  case "$action" in
+    bootstrap-incus|validate-incus) default_strategy=linear ;;
+    *) default_strategy=mitogen_linear ;;
+  esac
+  ansible_strategy=${ANSIBLE_STRATEGY:-$default_strategy}
   mitogen_strategy_plugins=""
   case "$ansible_strategy" in
     linear) ;;

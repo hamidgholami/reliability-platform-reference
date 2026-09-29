@@ -38,6 +38,12 @@ ssh_listen_to:
 ssh_server_password_login: false
 ssh_permit_root_login: "no"
 ssh_pubkey_authentication: true
+ssh_host_key_files:
+  - /etc/ssh/ssh_host_ed25519_key
+ssh_host_key_algorithms:
+  - ssh-ed25519
+sshd_custom_options:
+  - PubkeyAcceptedAlgorithms ssh-ed25519
 sshd_authenticationmethods: publickey
 ssh_allow_tcp_forwarding: local
 ssh_gateway_ports: false

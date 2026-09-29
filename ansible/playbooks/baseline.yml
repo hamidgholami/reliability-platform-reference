@@ -48,6 +48,26 @@
     - role: devsec.hardening.os_hardening
     - role: devsec.hardening.ssh_hardening
   tasks:
+    - name: Remove unused non-Ed25519 SSH host private keys
+      ansible.builtin.file:
+        path: "/etc/ssh/ssh_host_{{ item }}_key"
+        state: absent
+      loop:
+        - rsa
+        - ecdsa
+        - dsa
+      notify: Restart sshd
+
+    - name: Remove unused non-Ed25519 SSH host public keys
+      ansible.builtin.file:
+        path: "/etc/ssh/ssh_host_{{ item }}_key.pub"
+        state: absent
+      loop:
+        - rsa
+        - ecdsa
+        - dsa
+      notify: Restart sshd
+
     - name: Validate generated SSH server configuration before restart
       ansible.builtin.command: /usr/sbin/sshd -t
       changed_when: false

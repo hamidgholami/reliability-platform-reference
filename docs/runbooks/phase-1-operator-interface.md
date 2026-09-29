@@ -115,7 +115,10 @@ playbook uses diff mode, and the final output lists the twenty slowest tasks and
 total runtime. Compare first-run work with second-run convergence before
 changing SSH transport settings. An initial retained-Lima measurement justified
 Mitogen for the SSH-target wrapper; the built-in linear strategy remains an
-explicit diagnostic fallback.
+explicit diagnostic fallback. Incus bootstrap and validation use the built-in
+strategy because Mitogen retains the operator's old group context after adding
+the `incus-admin` membership. The baseline keeps only an Ed25519 SSH host key
+and accepts Ed25519 operator keys.
 
 Delete the VM with `make lima-delete`; there is no repository-owned data
 recovery after deletion. Removing the VM also removes its Lima-generated SSH
