@@ -1,6 +1,6 @@
 # Phase 2 Plan: Trust, Secrets, and Identity
 
-- Status: active; P2-01 and P2-02 accepted, with P2-03 next
+- Status: active; P2-01 and P2-02 accepted, P2-03 local integration accepted
 - Started: 2026-09-23
 - Owner: Hamid Gholami
 - Default deployment profile: `single-node-reference`
@@ -300,7 +300,7 @@ The signing role fixes that account as its sole principal, limits TTL to five
 minutes, and allows no forwarding or user-selected extensions. OpenBao keeps
 the SSH CA private key in encrypted Raft storage and snapshots; rotate it and
 replace the target's trusted public key if exposed. Remove the target and test
-key pair after acceptance; retain only redacted evidence.
+key pair after clean recreation acceptance; retain only redacted evidence.
 
 The Incus project limit is now six containers, six CPU shares, 2304 MiB,
 and 18 GiB for the PostgreSQL container and temporary SSH target.
@@ -316,13 +316,17 @@ custom credential service is needed.
   minimum administrative bootstrap outside application credentials.
 - [x] Configure the database secrets engine and prove creation, use, expiry, and
   revocation of one dynamic PostgreSQL credential.
-- [ ] Configure an SSH client CA and one constrained signing role with fixed
+- [x] Configure an SSH client CA and one constrained signing role with fixed
   principals, short TTL, and restrictive extensions.
-- [ ] Distribute `TrustedUserCAKeys` and an explicitly restricted test account
+- [x] Distribute `TrustedUserCAKeys` and an explicitly restricted test account
   to one disposable target through Ansible.
-- [ ] Prove that an allowed certificate works and that an expired certificate,
+- [x] Prove that an allowed certificate works and that an expired certificate,
   wrong principal, excessive TTL, or forbidden extension is rejected.
-- [ ] Remove ephemeral private keys and certificates after each test.
+- [x] Remove ephemeral private keys and certificates after each test.
+
+The [local SSH acceptance record](../evidence/phase-2-ssh-certificates-local-acceptance.md)
+covers the retained Lima environment. Clean local recreation and promotion to
+the `single-node-reference` environment remain open.
 
 Acceptance: a machine can obtain only the dynamic database credential and SSH
 certificate allowed by its policy, and expiry or revocation removes access
