@@ -317,6 +317,12 @@ If the issuer is already configured, the command validates and converges its
 name, default selection, URLs, and public endpoints without asking for the
 offline-root passphrase.
 
+When rebuilding OpenBao against a retained offline root, archive the previous
+`root-ca/requests/openbao-online-intermediate.csr` before signing the new
+instance's CSR. The ceremony rejects a recorded CSR that differs from its
+current OpenBao request. Preserve the root CA database and prior certificate;
+the reviewed CA policy permits a new certificate with the same subject.
+
 ## Issue and renew the OpenBao listener certificate
 
 Use the same guarded target for the initial replacement and later renewal:

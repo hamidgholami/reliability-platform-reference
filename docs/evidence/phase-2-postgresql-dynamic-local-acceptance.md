@@ -18,5 +18,6 @@ group had `SELECT` on the probe table and lacked `INSERT`, `UPDATE`, and
 `DELETE`. Protected bootstrap password and certificate transfer files were
 absent from both guests after the ceremony.
 
-This is retained-Lima evidence. Clean local recreation and promotion to the
-`single-node-reference` environment remain part of Phase 2 acceptance.
+This is retained-Lima evidence. The
+[clean local recreation](phase-2-p203-clean-recreation-local-acceptance.md)
+also passed; promotion to `single-node-reference` remains open.

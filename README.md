@@ -17,9 +17,9 @@ clean destroy and recreation. See the
 [redacted acceptance record](docs/evidence/phase-1-acceptance.md). **Phase 2:
 trust, secrets, and identity** is active after P2-01 private DNS and P2-02
 OpenBao foundation passed local acceptance. P2-03 machine identity, dynamic
-secrets, and SSH certificates is next. Reference-host promotion remains before
-Phase 2 closes. See the redacted
-[OpenBao acceptance record](docs/evidence/phase-2-openbao-foundation-local-acceptance.md).
+secrets, and SSH certificates passed clean local recreation. Reference-host
+promotion remains before Phase 2 closes. See the redacted
+[P2-03 acceptance record](docs/evidence/phase-2-p203-clean-recreation-local-acceptance.md).
 
 ## Intended outcomes
 

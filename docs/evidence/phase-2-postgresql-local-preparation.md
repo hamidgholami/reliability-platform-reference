@@ -14,5 +14,6 @@ unreachable hosts. Most elapsed time was the initial Debian package download.
 The immediate rerun completed in about five seconds with zero changes.
 
 This is local preparation evidence. The signed listener certificate,
-restricted `pg_hba.conf`, dynamic OpenBao credential lifecycle, and the
-clean-recreation acceptance remain to be completed.
+restricted `pg_hba.conf`, dynamic OpenBao credential lifecycle, and clean
+recreation later passed; see the
+[P2-03 record](phase-2-p203-clean-recreation-local-acceptance.md).

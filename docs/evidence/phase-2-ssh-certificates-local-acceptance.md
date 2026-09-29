@@ -22,10 +22,11 @@ authentication disabled. The daemon was active after the target playbook
 rerun. That rerun also restored `/run/sshd` after stopping the service, so
 configuration validation and restart complete on repeated application.
 
-This is retained-Lima integration evidence. Clean local recreation and
-promotion to `single-node-reference` remain open. The disposable target is
-retained until clean recreation acceptance, then removed with a reviewed
-OpenTofu plan.
+This is retained-Lima integration evidence. The
+[clean local recreation](phase-2-p203-clean-recreation-local-acceptance.md)
+also passed; promotion to `single-node-reference` remains open. The
+disposable target remains in the local provider state pending a separately
+reviewed removal.
 
 At this local snapshot, the 4-GiB Lima host reported 791 MiB used memory,
 3,130 MiB available memory, and 6.0 GiB of its 30-GiB root filesystem used

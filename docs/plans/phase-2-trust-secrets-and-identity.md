@@ -1,6 +1,6 @@
 # Phase 2 Plan: Trust, Secrets, and Identity
 
-- Status: active; P2-01 and P2-02 accepted, P2-03 local integration accepted
+- Status: active; P2-01 and P2-02 accepted, P2-03 clean local acceptance passed
 - Started: 2026-09-23
 - Owner: Hamid Gholami
 - Default deployment profile: `single-node-reference`
@@ -323,10 +323,14 @@ custom credential service is needed.
 - [x] Prove that an allowed certificate works and that an expired certificate,
   wrong principal, excessive TTL, or forbidden extension is rejected.
 - [x] Remove ephemeral private keys and certificates after each test.
+- [ ] Remove the disposable SSH target with a reviewed provider plan after
+  preserving clean-recreation evidence.
 
 The [local SSH acceptance record](../evidence/phase-2-ssh-certificates-local-acceptance.md)
-covers the retained Lima environment. Clean local recreation and promotion to
-the `single-node-reference` environment remain open.
+covers the retained Lima environment. The
+[clean recreation record](../evidence/phase-2-p203-clean-recreation-local-acceptance.md)
+covers the new Lima environment. Promotion to `single-node-reference` remains
+open.
 
 Acceptance: a machine can obtain only the dynamic database credential and SSH
 certificate allowed by its policy, and expiry or revocation removes access
