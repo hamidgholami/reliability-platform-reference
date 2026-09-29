@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import re
 import ssl
 import sys
 from pathlib import Path
@@ -36,6 +37,8 @@ path "auth/token/revoke-self" {
 POSTGRESQL_SIGN_ROLE = "rpr-p203-postgresql-server"
 POSTGRESQL_DATABASE = "rpr-p203"
 POSTGRESQL_DYNAMIC_ROLE = "rpr-p203-read"
+SSH_MOUNT = "ssh-client-signer"
+SSH_ROLE = "rpr-p203-probe"
 
 
 class CeremonyError(RuntimeError):
@@ -72,7 +75,7 @@ def request(
 
     if response.status not in expected:
         raise CeremonyError(
-            f"OpenBao API returned unexpected status {response.status} for {path}"
+            f"OpenBao API returned unexpected status {response.status} for {method} {path}"
         )
     if not raw:
         return response.status, {}
@@ -91,19 +94,34 @@ def require_text(value: Any, label: str) -> str:
     return value
 
 
+def duration_seconds(value: Any) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        parts = re.findall(r"(\d+)([hms])", value)
+        if parts and "".join(amount + unit for amount, unit in parts) == value:
+            return sum(int(amount) * {"h": 3600, "m": 60, "s": 1}[unit]
+                       for amount, unit in parts)
+    raise CeremonyError("OpenBao returned an invalid SSH role TTL")
+
+
 def main() -> int:
     machine_auth = len(sys.argv) == 5 and sys.argv[3] == "--machine-auth"
     postgresql = len(sys.argv) == 6 and sys.argv[3] == "--postgresql"
+    ssh_certificates = len(sys.argv) == 4 and sys.argv[3] == "--ssh-certificates"
     if not (len(sys.argv) == 4 or machine_auth or postgresql):
         raise CeremonyError(
             "usage: remote-helper CLIENT_CERT CLIENT_KEY INITIAL_TOKEN|"
-            "--machine-auth MACHINE_CERT|--postgresql CSR ADMIN_PASSWORD"
+            "--machine-auth MACHINE_CERT|--postgresql CSR ADMIN_PASSWORD|"
+            "--ssh-certificates"
         )
 
     client_certificate = Path(sys.argv[1])
     client_key = Path(sys.argv[2])
     input_file = Path(sys.argv[4] if (machine_auth or postgresql) else sys.argv[3])
-    protected_files = [client_certificate, client_key, input_file]
+    protected_files = [client_certificate, client_key]
+    if not ssh_certificates:
+        protected_files.append(input_file)
     if postgresql:
         protected_files.append(Path(sys.argv[5]))
     for protected_file in protected_files:
@@ -113,7 +131,7 @@ def main() -> int:
     unseal_share = require_text(sys.stdin.readline().strip(), "Shamir share")
     initial_token = (
         ""
-        if (machine_auth or postgresql)
+        if (machine_auth or postgresql or ssh_certificates)
         else require_text(input_file.read_text().strip(), "initial token")
     )
     machine_certificate = input_file.read_text().strip() if machine_auth else ""
@@ -140,7 +158,7 @@ def main() -> int:
     recovery_revoked = False
 
     try:
-        if not (machine_auth or postgresql):
+        if not (machine_auth or postgresql or ssh_certificates):
             _, initial_lookup = request(
                 context,
                 "GET",
@@ -374,6 +392,87 @@ def main() -> int:
                 expected=(200, 204),
             )
             postgresql_password = ""
+        elif ssh_certificates:
+            _, mounts = request(
+                context, "GET", "/v1/sys/mounts", token=generated_root_token
+            )
+            if f"{SSH_MOUNT}/" not in mounts.get("data", {}):
+                request(
+                    context,
+                    "POST",
+                    f"/v1/sys/mounts/{SSH_MOUNT}",
+                    token=generated_root_token,
+                    body={"type": "ssh", "description": "P2-03 Ed25519 client signer"},
+                    expected=(200, 204),
+                )
+            status, ca_response = request(
+                context,
+                "GET",
+                f"/v1/{SSH_MOUNT}/config/ca",
+                token=generated_root_token,
+                expected=(200, 400, 404),
+            )
+            if status in (400, 404):
+                _, ca_response = request(
+                    context,
+                    "POST",
+                    f"/v1/{SSH_MOUNT}/config/ca",
+                    token=generated_root_token,
+                    body={"generate_signing_key": True, "key_type": "ssh-ed25519"},
+                )
+            public_key = ca_response.get("data", {}).get("public_key", "")
+            if not public_key.startswith("ssh-ed25519 "):
+                raise CeremonyError("the SSH CA is not Ed25519")
+            request(
+                context,
+                "POST",
+                f"/v1/{SSH_MOUNT}/roles/{SSH_ROLE}",
+                token=generated_root_token,
+                body={
+                    "key_type": "ca",
+                    "allow_user_certificates": True,
+                    "allow_host_certificates": False,
+                    "allowed_users": "rpr-probe",
+                    "default_user": "rpr-probe",
+                    "allowed_user_key_lengths": {"ed25519": 0},
+                    "allowed_extensions": "",
+                    "default_extensions": {},
+                    "default_critical_options": {},
+                    "allow_user_key_ids": False,
+                    "allow_empty_principals": False,
+                    "ttl": "1m",
+                    "max_ttl": "5m",
+                },
+                expected=(200, 204),
+            )
+            _, role_response = request(
+                context,
+                "GET",
+                f"/v1/{SSH_MOUNT}/roles/{SSH_ROLE}",
+                token=generated_root_token,
+            )
+            role = role_response.get("data", {})
+            key_lengths = role.get("allowed_user_key_lengths")
+            boundaries = {
+                "key_type": role.get("key_type") == "ca",
+                "allow_user_certificates": role.get("allow_user_certificates") is True,
+                "allow_host_certificates": role.get("allow_host_certificates") is False,
+                "allowed_users": role.get("allowed_users") == "rpr-probe",
+                "default_user": role.get("default_user") == "rpr-probe",
+                "allowed_user_key_lengths": key_lengths in (
+                    {"ed25519": 0}, {"ed25519": [0]}
+                ),
+                "allowed_extensions": role.get("allowed_extensions") == "",
+                "default_extensions": role.get("default_extensions") == {},
+                "ttl": duration_seconds(role.get("ttl")) == 60,
+                "max_ttl": duration_seconds(role.get("max_ttl")) == 300,
+            }
+            failed_boundaries = [name for name, valid in boundaries.items() if not valid]
+            if failed_boundaries:
+                raise CeremonyError(
+                    "the SSH signing role exceeds its reviewed boundary: "
+                    + ", ".join(failed_boundaries)
+                )
         else:
             _, admin_response = request(
                 context,
@@ -447,6 +546,9 @@ def main() -> int:
             return 0
         if postgresql:
             print('{"postgresql_configured":true,"temporary_root_revoked":true}')
+            return 0
+        if ssh_certificates:
+            print('{"ssh_certificates_configured":true,"temporary_root_revoked":true}')
             return 0
 
         request(

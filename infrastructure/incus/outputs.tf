@@ -75,3 +75,17 @@ output "postgresql_service" {
     status        = incus_instance.postgresql.status
   }
 }
+
+output "ssh_test_service" {
+  description = "Non-secret disposable SSH certificate target."
+  value = {
+    profile       = incus_profile.ssh_test.name
+    instance      = incus_instance.ssh_test.name
+    instance_type = incus_instance.ssh_test.type
+    ipv4_address  = incus_instance.ssh_test.ipv4_address
+    dns_name      = "${local.ssh_test_instance_name}.${var.platform_dns_domain}"
+    port          = 22
+    network_acl   = incus_network_acl.ssh_test.name
+    status        = incus_instance.ssh_test.status
+  }
+}

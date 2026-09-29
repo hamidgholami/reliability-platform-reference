@@ -45,3 +45,16 @@ all:
       hosts:
         pg-01:
           ansible_host: pg-01
+    ssh_test_target:
+      vars:
+        ansible_connection: community.general.incus
+        ansible_incus_remote: replace-with-reviewed-remote
+        ansible_incus_project: rpr-dev
+        ansible_user: root
+        rpr_deployment_profile: workstation-validation
+        ssh_test_private_address: 10.20.0.221
+        ssh_test_private_dns_name: ssh-test-01.dev.apadanalab.de
+        ssh_test_client_address: replace-with-generated-smoke-ipv4
+      hosts:
+        ssh-test-01:
+          ansible_host: ssh-test-01

@@ -1,0 +1,291 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Prove bounded Ed25519 SSH certificates from smoke-01
+  hosts: machine_auth_client
+  gather_facts: false
+  any_errors_fatal: true
+  become: false
+  vars:
+    ssh_probe_dir: /run/rpr-ssh-accept
+    ssh_probe_host: ssh-test-01.dev.apadanalab.de
+  tasks:
+    - name: Require the reviewed synthetic SSH client
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname == 'smoke-01'
+          - rpr_deployment_profile in ['workstation-validation', 'single-node-reference']
+
+    - name: Install the Debian OpenSSH client
+      ansible.builtin.apt:
+        name: openssh-client
+        state: present
+        update_cache: true
+        cache_valid_time: 86400
+
+    - name: Read the target Ed25519 host public key
+      ansible.builtin.slurp:
+        src: /etc/ssh/ssh_host_ed25519_key.pub
+      delegate_to: ssh-test-01
+      register: ssh_probe_host_public
+
+    - name: Require an Ed25519 target host key
+      ansible.builtin.assert:
+        that:
+          - (ssh_probe_host_public.content | b64decode) is match('^ssh-ed25519 ')
+
+    - name: Run the bounded SSH certificate probes
+      block:
+        - name: Clear any abandoned SSH acceptance material
+          ansible.builtin.file:
+            path: "{{ ssh_probe_dir }}"
+            state: absent
+          no_log: true
+          diff: false
+
+        - name: Create the protected temporary SSH client directory
+          ansible.builtin.file:
+            path: "{{ ssh_probe_dir }}"
+            state: directory
+            owner: root
+            group: root
+            mode: '0700'
+
+        - name: Pin the target Ed25519 host key
+          ansible.builtin.copy:
+            content: "{{ ssh_probe_host }} {{ ssh_probe_host_public.content | b64decode | trim }}\n"
+            dest: "{{ ssh_probe_dir }}/known_hosts"
+            owner: root
+            group: root
+            mode: '0600'
+
+        - name: Generate a temporary Ed25519 SSH client key
+          ansible.builtin.command:
+            argv:
+              - ssh-keygen
+              - -q
+              - -t
+              - ed25519
+              - -N
+              - ''
+              - -f
+              - "{{ ssh_probe_dir }}/id_ed25519"
+          changed_when: true
+          no_log: true
+          diff: false
+
+        - name: Read the temporary SSH client public key
+          ansible.builtin.command:
+            argv:
+              - cat
+              - "{{ ssh_probe_dir }}/id_ed25519.pub"
+          register: ssh_probe_client_public
+          changed_when: false
+
+        - name: Require an Ed25519 SSH client key
+          ansible.builtin.assert:
+            that:
+              - ssh_probe_client_public.stdout is match('^ssh-ed25519 ')
+
+        - name: Login to OpenBao with the exact-pinned machine certificate
+          ansible.builtin.uri:
+            url: https://openbao.dev.apadanalab.de:8200/v1/auth/cert/login
+            method: POST
+            body_format: json
+            body:
+              name: rpr-p203-machine
+            ca_path: /etc/rpr-machine-auth/ca.crt
+            client_cert: /etc/rpr-machine-auth/client.crt
+            client_key: /etc/rpr-machine-auth/client.key
+            return_content: true
+            status_code: 200
+          register: ssh_probe_login
+          no_log: true
+          diff: false
+
+        - name: Request one thirty-second Ed25519 SSH certificate
+          ansible.builtin.uri:
+            url: https://openbao.dev.apadanalab.de:8200/v1/ssh-client-signer/sign/rpr-p203-probe
+            method: POST
+            headers:
+              X-Vault-Token: "{{ ssh_probe_login.json.auth.client_token }}"
+            ca_path: /etc/rpr-machine-auth/ca.crt
+            body_format: json
+            body:
+              public_key: "{{ ssh_probe_client_public.stdout }}"
+              valid_principals: rpr-probe
+              cert_type: user
+              ttl: 30s
+            return_content: true
+            status_code: 200
+          register: ssh_probe_signed
+          no_log: true
+          diff: false
+
+        - name: Require the signed user certificate to be Ed25519
+          ansible.builtin.assert:
+            that:
+              - >-
+                ssh_probe_signed.json.data.signed_key is
+                match('^ssh-ed25519-cert-v01@openssh.com ')
+          no_log: true
+          diff: false
+
+        - name: Install the temporary public SSH certificate
+          ansible.builtin.copy:
+            content: "{{ ssh_probe_signed.json.data.signed_key | trim }}\n"
+            dest: "{{ ssh_probe_dir }}/id_ed25519-cert.pub"
+            owner: root
+            group: root
+            mode: '0600'
+          no_log: true
+          diff: false
+
+        - name: Prove the allowed certificate reaches only the probe account
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -F
+              - /dev/null
+              - -o
+              - BatchMode=yes
+              - -o
+              - StrictHostKeyChecking=yes
+              - -o
+              - "UserKnownHostsFile={{ ssh_probe_dir }}/known_hosts"
+              - -o
+              - IdentitiesOnly=yes
+              - -o
+              - "CertificateFile={{ ssh_probe_dir }}/id_ed25519-cert.pub"
+              - -i
+              - "{{ ssh_probe_dir }}/id_ed25519"
+              - "rpr-probe@{{ ssh_probe_host }}"
+              - id
+          register: ssh_probe_allowed
+          changed_when: false
+          failed_when: ssh_probe_allowed.rc != 0 or ssh_probe_allowed.stdout != 'rpr-probe'
+
+        - name: Reject a certificate for the wrong principal
+          ansible.builtin.uri:
+            url: https://openbao.dev.apadanalab.de:8200/v1/ssh-client-signer/sign/rpr-p203-probe
+            method: POST
+            headers:
+              X-Vault-Token: "{{ ssh_probe_login.json.auth.client_token }}"
+            ca_path: /etc/rpr-machine-auth/ca.crt
+            body_format: json
+            body:
+              public_key: "{{ ssh_probe_client_public.stdout }}"
+              valid_principals: root
+              ttl: 30s
+            status_code:
+              - 400
+              - 403
+          no_log: true
+          diff: false
+
+        - name: Reject a certificate with excessive lifetime
+          ansible.builtin.uri:
+            url: https://openbao.dev.apadanalab.de:8200/v1/ssh-client-signer/sign/rpr-p203-probe
+            method: POST
+            headers:
+              X-Vault-Token: "{{ ssh_probe_login.json.auth.client_token }}"
+            ca_path: /etc/rpr-machine-auth/ca.crt
+            body_format: json
+            body:
+              public_key: "{{ ssh_probe_client_public.stdout }}"
+              valid_principals: rpr-probe
+              ttl: 10m
+            status_code:
+              - 400
+              - 403
+          no_log: true
+          diff: false
+
+        - name: Reject a port-forwarding extension
+          ansible.builtin.uri:
+            url: https://openbao.dev.apadanalab.de:8200/v1/ssh-client-signer/sign/rpr-p203-probe
+            method: POST
+            headers:
+              X-Vault-Token: "{{ ssh_probe_login.json.auth.client_token }}"
+            ca_path: /etc/rpr-machine-auth/ca.crt
+            body_format: json
+            body:
+              public_key: "{{ ssh_probe_client_public.stdout }}"
+              valid_principals: rpr-probe
+              extensions:
+                permit-port-forwarding: ''
+              ttl: 30s
+            status_code:
+              - 400
+              - 403
+          no_log: true
+          diff: false
+
+        - name: Wait for the short-lived SSH certificate to expire
+          ansible.builtin.pause:
+            seconds: 35
+
+        - name: Require the expired SSH certificate to fail authentication
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -F
+              - /dev/null
+              - -o
+              - BatchMode=yes
+              - -o
+              - StrictHostKeyChecking=yes
+              - -o
+              - "UserKnownHostsFile={{ ssh_probe_dir }}/known_hosts"
+              - -o
+              - IdentitiesOnly=yes
+              - -o
+              - "CertificateFile={{ ssh_probe_dir }}/id_ed25519-cert.pub"
+              - -i
+              - "{{ ssh_probe_dir }}/id_ed25519"
+              - "rpr-probe@{{ ssh_probe_host }}"
+              - id
+          register: ssh_probe_expired
+          changed_when: false
+          failed_when: >-
+            ssh_probe_expired.rc == 0 or
+            'Permission denied' not in ssh_probe_expired.stderr
+          no_log: true
+          diff: false
+
+      always:
+        - name: Revoke the SSH probe machine token
+          ansible.builtin.uri:
+            url: https://openbao.dev.apadanalab.de:8200/v1/auth/token/revoke-self
+            method: POST
+            headers:
+              X-Vault-Token: "{{ ssh_probe_login.json.auth.client_token }}"
+            ca_path: /etc/rpr-machine-auth/ca.crt
+            body_format: json
+            body: {}
+            status_code: 204
+          when: ssh_probe_login is defined and ssh_probe_login.json.auth.client_token is defined
+          no_log: true
+          diff: false
+
+        - name: Remove the temporary SSH client key and certificate
+          ansible.builtin.file:
+            path: "{{ ssh_probe_dir }}"
+            state: absent
+          no_log: true
+          diff: false
+
+    - name: Report redacted SSH certificate acceptance
+      ansible.builtin.debug:
+        msg:
+          ca_key_type: Ed25519
+          client_key_type: Ed25519
+          target_host_key_type: Ed25519
+          allowed_principal: rpr-probe
+          allowed_login: true
+          wrong_principal_rejected: true
+          excessive_ttl_rejected: true
+          forwarding_extension_rejected: true
+          expired_certificate_rejected: true
+          temporary_client_material_removed: true

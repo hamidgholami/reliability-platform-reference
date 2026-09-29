@@ -282,8 +282,10 @@ the connection; no static application password is issued or backed up.
 
 Use `smoke-01` as the machine client and `ssh-test-01` as a disposable SSH
 target at `10.20.0.221`. Incus publishes its private A/PTR records under
-`ssh-test-01.dev.apadanalab.de`; a host-enforced ACL allows TCP 22 only from
-the private platform CIDR. No public ingress or DNS record is added.
+`ssh-test-01.dev.apadanalab.de`; the bridge ACL limits routed TCP 22 ingress
+to the private platform CIDR. The daemon's certificate policy controls
+same-bridge peers because Incus 6.0 cannot reliably load a default-project
+ACL directly on this project's NIC. No public ingress or DNS record is added.
 Configure one non-sudo test account and one OpenBao SSH client CA. Ansible
 installs only the public CA key and restrictive `sshd` settings on the target.
 Generate the SSH CA with OpenBao's explicit `ssh-ed25519` key type; its default
@@ -300,9 +302,8 @@ the SSH CA private key in encrypted Raft storage and snapshots; rotate it and
 replace the target's trusted public key if exposed. Remove the target and test
 key pair after acceptance; retain only redacted evidence.
 
-The Incus project limit is now five containers, five CPU shares, 2048 MiB,
-and 16 GiB for the PostgreSQL container. Review and raise these limits only
-when creating the temporary SSH target.
+The Incus project limit is now six containers, six CPU shares, 2304 MiB,
+and 18 GiB for the PostgreSQL container and temporary SSH target.
 Measure host and per-service use in the 4-GiB Lima VM before any AWS promotion;
 the 2-GiB AWS reference host is not assumed to fit this slice. OpenTofu owns
 the new instances, addresses, and network ACLs; Ansible owns guest packages,

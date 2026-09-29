@@ -29,6 +29,8 @@ if [ "$action" = "p203-machine-auth" ]; then
   remote_prefix=/run/rpr-openbao-p203-session
 elif [ "$action" = "p203-postgresql" ]; then
   remote_prefix=/run/rpr-openbao-p203-db
+elif [ "$action" = "p203-ssh-certificates" ]; then
+  remote_prefix=/run/rpr-openbao-p203-ssh
 fi
 
 fail()
@@ -131,8 +133,8 @@ EOF
 }
 
 case "$action" in
-  retire|p203-machine-auth|p203-postgresql) ;;
-  *) fail "usage: $0 {retire|p203-machine-auth|p203-postgresql}" ;;
+  retire|p203-machine-auth|p203-postgresql|p203-ssh-certificates) ;;
+  *) fail "usage: $0 {retire|p203-machine-auth|p203-postgresql|p203-ssh-certificates}" ;;
 esac
 case "$profile" in
   workstation-validation|single-node-reference) ;;
@@ -172,6 +174,7 @@ case "$action" in
   retire) expected="retire-openbao-root-token-$profile-$remote" ;;
   p203-machine-auth) expected="configure-machine-auth-$profile-$remote" ;;
   p203-postgresql) expected="enable-postgresql-dynamic-$profile-$remote" ;;
+  p203-ssh-certificates) expected="configure-ssh-certificates-$profile-$remote" ;;
 esac
 [ "${CONFIRM:-}" = "$expected" ] || fail "set CONFIRM=$expected"
 [ -r "$inventory" ] || fail "OpenBao inventory is missing; run make apply"
@@ -237,6 +240,19 @@ if [ "$action" != "retire" ]; then
   fail "machine-auth inventory is missing or invalid; run make validate"
 fi
 
+if [ "$action" = "p203-ssh-certificates" ]; then
+  jq -e --arg profile "$profile" --arg remote "$remote" '
+    .all.children.ssh_test_target as $target
+    | $target.vars.rpr_deployment_profile == $profile
+    and $target.vars.ansible_incus_remote == $remote
+    and $target.vars.ansible_incus_project == "rpr-dev"
+    and ($target.hosts | keys) == ["ssh-test-01"]
+    and $target.hosts["ssh-test-01"].ansible_host == "ssh-test-01"
+    and $target.vars.ssh_test_private_address == "10.20.0.221"
+  ' "$inventory" >/dev/null ||
+    fail "SSH test inventory is missing or invalid; run make validate"
+fi
+
 if [ "$action" != "retire" ]; then
   incus_exec curl -fsS \
     --cacert /opt/openbao/tls/ca.crt \
@@ -252,7 +268,7 @@ if [ "$action" != "retire" ]; then
     .venv/bin/ansible-playbook \
       --diff --tags prepare --inventory "$inventory" \
       ansible/playbooks/configure-machine-auth.yml
-  else
+  elif [ "$action" = "p203-postgresql" ]; then
     jq -e --arg profile "$profile" --arg remote "$remote" '
       .all.children.postgresql_service as $pg
       | $pg.vars.rpr_deployment_profile == $profile
@@ -408,7 +424,7 @@ else
       incus_exec sh -c \
         "umask 077; cat > '$remote_prefix-machine.crt'" ||
       fail "could not transfer the public machine certificate"
-  else
+  elif [ "$action" = "p203-postgresql" ]; then
     postgresql_exec cat /run/rpr-postgresql-bootstrap/tls.csr |
       incus_exec sh -c \
         "umask 077; cat > '$remote_prefix-pg.csr'" ||
@@ -482,6 +498,33 @@ if [ "$action" = "p203-postgresql" ]; then
   .venv/bin/ansible-playbook \
     --diff --tags activate --inventory "$inventory" \
     ansible/playbooks/enable-postgresql-dynamic.yml
+  exit 0
+fi
+
+if [ "$action" = "p203-ssh-certificates" ]; then
+  helper_result_file=$(mktemp "$runtime_dir/p203-ssh-result.XXXXXX")
+  echo "Configuring the Ed25519 SSH client CA through authenticated recovery..."
+  jq -er '.unseal_keys_b64[0]' "$recovery_dir/initialization.json" |
+    openssl base64 -d -A |
+    gpg_with_passphrase --decrypt |
+    incus_exec python3 \
+      "$remote_prefix.py" \
+      "$remote_prefix-client.crt" \
+      "$remote_prefix-client.key" \
+      --ssh-certificates >"$helper_result_file" ||
+    fail "authenticated SSH CA recovery failed"
+  jq -e '.ssh_certificates_configured and .temporary_root_revoked' \
+    "$helper_result_file" >/dev/null ||
+    fail "SSH CA recovery did not report completed root-token revocation"
+  echo "Configuring the disposable Ed25519 SSH target..."
+  INCUS_CONF="$config_dir" \
+  ANSIBLE_CONFIG="$PWD/ansible.cfg" \
+  ANSIBLE_HOME="$PWD/.cache/ansible" \
+  ANSIBLE_COLLECTIONS_PATH="$PWD/.cache/ansible/collections" \
+  ANSIBLE_LOCAL_TEMP="$PWD/.cache/ansible/tmp" \
+  .venv/bin/ansible-playbook \
+    --diff --inventory "$inventory" \
+    ansible/playbooks/configure-ssh-test.yml
   exit 0
 fi
 

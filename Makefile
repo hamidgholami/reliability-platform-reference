@@ -23,6 +23,7 @@ ANSIBLE_ENV = ANSIBLE_CONFIG=$(CURDIR)/ansible.cfg ANSIBLE_HOME=$(CURDIR)/.cache
 	bootstrap-openbao-pki rotate-openbao-certificate retire-openbao-root-token \
 	configure-machine-auth configure-postgresql enable-postgresql-dynamic \
 	accept-postgresql-dynamic \
+	configure-ssh-certificates accept-ssh-certificates \
 	bootstrap-incus plan apply validate destroy aws-plan aws-apply \
 	aws-destroy aws-orphan-check test-aws-safety
 
@@ -80,6 +81,8 @@ syntax-ansible: ## Syntax-check active Ansible inventories and playbooks offline
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/openbao/hosts.example.yml --syntax-check ansible/playbooks/configure-postgresql.yml >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/openbao/hosts.example.yml --syntax-check ansible/playbooks/enable-postgresql-dynamic.yml >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/openbao/hosts.example.yml --syntax-check ansible/playbooks/accept-postgresql-dynamic.yml >/dev/null
+	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/openbao/hosts.example.yml --syntax-check ansible/playbooks/configure-ssh-test.yml >/dev/null
+	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/openbao/hosts.example.yml --syntax-check ansible/playbooks/accept-ssh-certificates.yml >/dev/null
 
 lint-hcl: ## Check OpenTofu formatting without changing files.
 	@tofu fmt -check -recursive infrastructure
@@ -232,6 +235,12 @@ enable-postgresql-dynamic: ## Sign PostgreSQL TLS and configure one dynamic data
 
 accept-postgresql-dynamic: ## Prove issuance, TLS read, revocation, and expiry from the machine client.
 	@./scripts/postgresql.sh accept
+
+configure-ssh-certificates: ## Configure an Ed25519 SSH CA and target through protected recovery.
+	@./scripts/openbao-root-retirement.sh p203-ssh-certificates
+
+accept-ssh-certificates: ## Prove allowed and rejected SSH certificate behavior and remove the client key.
+	@./scripts/ssh-certificates.sh
 
 plan: ## Verify Incus trust and save a non-destructive substrate plan.
 	@./scripts/incus-substrate.sh plan

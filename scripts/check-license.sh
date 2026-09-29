@@ -64,6 +64,7 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   scripts/openbao-root-retirement.sh \
   scripts/openbao-root-retirement-remote.py \
   scripts/postgresql.sh \
+  scripts/ssh-certificates.sh \
   scripts/validate-openbao-bootstrap-tls.sh \
   tests/ansible-target-safety.sh \
   tests/fixtures/openbao-ceremony/incus \
@@ -77,6 +78,8 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   ansible/playbooks/configure-postgresql.yml \
   ansible/playbooks/enable-postgresql-dynamic.yml \
   ansible/playbooks/accept-postgresql-dynamic.yml \
+  ansible/playbooks/configure-ssh-test.yml \
+  ansible/playbooks/accept-ssh-certificates.yml \
   ansible/roles/openbao_bootstrap/defaults/main.yml \
   ansible/roles/openbao_bootstrap/meta/argument_specs.yml \
   ansible/roles/openbao_bootstrap/tasks/main.yml \

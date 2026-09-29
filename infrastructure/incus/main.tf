@@ -26,6 +26,9 @@ locals {
   postgresql_profile_name  = "database-service"
   postgresql_instance_name = "pg-01"
   postgresql_acl_name      = "postgresql-tls"
+  ssh_test_profile_name    = "ssh-test-service"
+  ssh_test_instance_name   = "ssh-test-01"
+  ssh_test_acl_name        = "ssh-certificate-test"
 
   bridge_ipv4_address      = "${cidrhost(var.platform_ipv4_cidr, 1)}/${split("/", var.platform_ipv4_cidr)[1]}"
   dhcp_ipv4_range          = "${cidrhost(var.platform_ipv4_cidr, 120)}-${cidrhost(var.platform_ipv4_cidr, 219)}"
@@ -40,6 +43,7 @@ locals {
   openbao_dns_name        = "${local.openbao_instance_name}.${var.platform_dns_domain}"
   openbao_alias_name      = "openbao.${var.platform_dns_domain}"
   postgresql_ipv4_address = cidrhost(var.platform_ipv4_cidr, 21)
+  ssh_test_ipv4_address   = cidrhost(var.platform_ipv4_cidr, 221)
 }
 
 resource "incus_storage_pool" "local" {
@@ -69,7 +73,7 @@ resource "incus_network" "platform" {
     "ipv4.firewall"                        = "true"
     "ipv4.nat"                             = "true"
     "ipv6.address"                         = "none"
-    "security.acls"                        = join(",", [incus_network_acl.openbao.name, incus_network_acl.postgresql.name])
+    "security.acls"                        = join(",", [incus_network_acl.openbao.name, incus_network_acl.postgresql.name, incus_network_acl.ssh_test.name])
     "security.acls.default.egress.action"  = "allow"
     "security.acls.default.ingress.action" = "allow"
   }
@@ -88,12 +92,12 @@ resource "incus_project" "development" {
     "features.profiles"                                 = "true"
     "features.storage.buckets"                          = "false"
     "features.storage.volumes"                          = "true"
-    "limits.containers"                                 = "5"
-    "limits.cpu"                                        = "5"
-    "limits.disk"                                       = "16GiB"
-    "limits.disk.pool.${incus_storage_pool.local.name}" = "16GiB"
-    "limits.instances"                                  = "5"
-    "limits.memory"                                     = "2048MiB"
+    "limits.containers"                                 = "6"
+    "limits.cpu"                                        = "6"
+    "limits.disk"                                       = "18GiB"
+    "limits.disk.pool.${incus_storage_pool.local.name}" = "18GiB"
+    "limits.instances"                                  = "6"
+    "limits.memory"                                     = "2304MiB"
     "limits.virtual-machines"                           = "0"
     "restricted"                                        = "true"
     "restricted.devices.disk"                           = "managed"
@@ -225,6 +229,25 @@ resource "incus_network_acl" "postgresql" {
   ]
 }
 
+resource "incus_network_acl" "ssh_test" {
+  name        = local.ssh_test_acl_name
+  description = "Allow only private routed ingress to the disposable SSH target"
+  project     = "default"
+  remote      = var.incus_remote
+
+  ingress = [
+    {
+      action           = "allow"
+      source           = var.platform_ipv4_cidr
+      destination      = local.ssh_test_ipv4_address
+      destination_port = "22"
+      protocol         = "tcp"
+      description      = "SSH certificate test from the private platform network"
+      state            = "enabled"
+    }
+  ]
+}
+
 resource "incus_profile" "system" {
   name        = local.profile_name
   description = "Bounded unprivileged Phase 1 system container"
@@ -335,6 +358,32 @@ resource "incus_profile" "postgresql" {
       path = "/"
       pool = incus_storage_pool.local.name
       size = "4GiB"
+    }
+  }
+}
+
+resource "incus_profile" "ssh_test" {
+  name        = local.ssh_test_profile_name
+  description = "Bounded unprivileged disposable SSH certificate target"
+  project     = incus_project.development.name
+  remote      = var.incus_remote
+
+  config = {
+    "boot.autostart"      = "true"
+    "limits.cpu"          = "1"
+    "limits.memory"       = "256MiB"
+    "security.nesting"    = "false"
+    "security.privileged" = "false"
+  }
+
+  device {
+    name = "root"
+    type = "disk"
+
+    properties = {
+      path = "/"
+      pool = incus_storage_pool.local.name
+      size = "2GiB"
     }
   }
 }
@@ -451,6 +500,40 @@ resource "incus_instance" "postgresql" {
       name                                   = "eth0"
       network                                = incus_network.platform.name
       "ipv4.address"                         = local.postgresql_ipv4_address
+      "security.acls.default.ingress.action" = "reject"
+      "security.acls.default.egress.action"  = "allow"
+    }
+  }
+
+  wait_for {
+    type = "ipv4"
+    nic  = "eth0"
+  }
+}
+
+resource "incus_instance" "ssh_test" {
+  name        = local.ssh_test_instance_name
+  description = "Disposable Ed25519 SSH certificate target"
+  image       = var.instance_image
+  type        = "container"
+  ephemeral   = false
+  running     = true
+  profiles    = [incus_profile.ssh_test.name]
+  project     = incus_project.development.name
+  remote      = var.incus_remote
+
+  config = {
+    "user.access_interface" = "eth0"
+  }
+
+  device {
+    name = "eth0"
+    type = "nic"
+
+    properties = {
+      name                                   = "eth0"
+      network                                = incus_network.platform.name
+      "ipv4.address"                         = local.ssh_test_ipv4_address
       "security.acls.default.ingress.action" = "reject"
       "security.acls.default.egress.action"  = "allow"
     }

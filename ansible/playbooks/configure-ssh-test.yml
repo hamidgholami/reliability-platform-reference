@@ -1,0 +1,166 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Configure the disposable Ed25519 SSH certificate target
+  hosts: ssh_test_target
+  gather_facts: false
+  any_errors_fatal: true
+  become: false
+  tasks:
+    - name: Require the reviewed SSH test target
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname == 'ssh-test-01'
+          - ssh_test_private_address == '10.20.0.221'
+          - ssh_test_private_dns_name == 'ssh-test-01.dev.apadanalab.de'
+          - ssh_test_client_address is match('^10\\.20\\.0\\.[0-9]+$')
+
+    - name: Check Python and its APT binding
+      ansible.builtin.raw: /usr/bin/python3 -c 'import apt'
+      register: ssh_test_python_probe
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Install Python when absent
+      ansible.builtin.raw: >-
+        apt-get update && DEBIAN_FRONTEND=noninteractive
+        apt-get install -y python3 python3-apt
+      when: ssh_test_python_probe.rc != 0
+      changed_when: true
+
+    - name: Install OpenSSH without starting an unconfigured daemon
+      ansible.builtin.apt:
+        name: openssh-server
+        state: present
+        update_cache: true
+        cache_valid_time: 86400
+        policy_rc_d: 101
+
+    - name: Keep SSH stopped until the Ed25519 certificate policy is installed
+      ansible.builtin.systemd_service:
+        name: ssh
+        state: stopped
+
+    - name: Remove package-generated non-Ed25519 SSH host keys
+      ansible.builtin.file:
+        path: "/etc/ssh/ssh_host_{{ item }}_key"
+        state: absent
+      loop:
+        - rsa
+        - ecdsa
+        - dsa
+
+    - name: Remove package-generated non-Ed25519 SSH host public keys
+      ansible.builtin.file:
+        path: "/etc/ssh/ssh_host_{{ item }}_key.pub"
+        state: absent
+      loop:
+        - rsa
+        - ecdsa
+        - dsa
+
+    - name: Generate the sole Ed25519 SSH host key
+      ansible.builtin.command:
+        argv:
+          - ssh-keygen
+          - -q
+          - -t
+          - ed25519
+          - -N
+          - ''
+          - -f
+          - /etc/ssh/ssh_host_ed25519_key
+        creates: /etc/ssh/ssh_host_ed25519_key
+      no_log: true
+      diff: false
+
+    - name: Create the non-sudo SSH probe account
+      ansible.builtin.user:
+        name: rpr-probe
+        comment: Disposable SSH certificate probe
+        shell: /bin/sh
+        create_home: false
+        password_lock: true
+        state: present
+
+    - name: Read the public Ed25519 CA key from OpenBao
+      ansible.builtin.uri:
+        url: https://10.20.0.20:8200/v1/ssh-client-signer/public_key
+        method: GET
+        ca_path: /opt/openbao/tls/ca.crt
+        return_content: true
+        status_code: 200
+      delegate_to: bao-01
+      register: ssh_test_ca_response
+
+    - name: Require the OpenBao CA to be Ed25519
+      ansible.builtin.assert:
+        that:
+          - ssh_test_ca_response.content is match('^ssh-ed25519 ')
+
+    - name: Install only the public SSH user CA
+      ansible.builtin.copy:
+        content: "{{ ssh_test_ca_response.content | trim }}\n"
+        dest: /etc/ssh/rpr-user-ca.pub
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart the SSH daemon
+
+    - name: Install the certificate-only SSH test policy
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/50-rpr-test.conf
+        content: |
+          ListenAddress {{ ssh_test_private_address }}
+          HostKey /etc/ssh/ssh_host_ed25519_key
+          HostKeyAlgorithms ssh-ed25519
+          PubkeyAcceptedAlgorithms ssh-ed25519-cert-v01@openssh.com
+          CASignatureAlgorithms ssh-ed25519
+          TrustedUserCAKeys /etc/ssh/rpr-user-ca.pub
+          AuthorizedKeysFile none
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          AuthenticationMethods publickey
+          PermitRootLogin no
+          AllowUsers rpr-probe
+          AllowTcpForwarding no
+          AllowAgentForwarding no
+          X11Forwarding no
+          PermitTunnel no
+          PermitTTY no
+          ForceCommand /usr/bin/id -un
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart the SSH daemon
+
+    - name: Validate the OpenSSH daemon configuration
+      ansible.builtin.command: /usr/sbin/sshd -t
+      changed_when: false
+
+    - name: Apply the SSH certificate policy
+      ansible.builtin.meta: flush_handlers
+
+    - name: Start only the configured SSH daemon
+      ansible.builtin.systemd_service:
+        name: ssh
+        state: started
+        enabled: true
+
+    - name: Read the sole SSH host public key
+      ansible.builtin.command: cat /etc/ssh/ssh_host_ed25519_key.pub
+      register: ssh_test_host_public_key
+      changed_when: false
+
+    - name: Require an Ed25519 SSH host key
+      ansible.builtin.assert:
+        that:
+          - ssh_test_host_public_key.stdout is match('^ssh-ed25519 ')
+
+  handlers:
+    - name: Restart the SSH daemon
+      ansible.builtin.systemd_service:
+        name: ssh
+        state: restarted
