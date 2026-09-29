@@ -108,7 +108,7 @@ scope.
 | Decision | Gate | Status |
 | --- | --- | --- |
 | BIND version and source | P2-01 | Use the Debian 13 stable/security `bind9` and `bind9-dnsutils` 9.20 package line; accept patched Debian revisions and record the installed version in acceptance evidence. |
-| PostgreSQL version and source | P2-03 | Open; prefer the Debian 13 package when it satisfies the dynamic-credential contract. |
+| PostgreSQL version and source | P2-03 | Use Debian 13 stable/security `postgresql-17` and `postgresql-client-17`; accept patched Debian revisions and record the installed version in acceptance evidence. The Debian package was 17.11-0+deb13u1 when this decision was checked. |
 | Keycloak version, installation, realm export, database ownership, and WebAuthn ceremony | P2-04 | Open; resolve before storing identity data. |
 | OpenBao installation and bootstrap | P2-02 | Closed: use the signed OpenBao 2.6.3 native Debian package for the target architecture, integrated Raft storage, manual Shamir initialization, and no auto-unseal dependency. |
 | Netcup API generation and maintained DNS-01 client | P2-05 | Open; it is not needed for private DNS and no custom ACME client is authorized. |
@@ -228,6 +228,80 @@ records audited API use, issues a bounded leaf certificate from the online
 intermediate, and no longer depends on the initial root token.
 
 ### P2-03 — Machine identity, dynamic secrets, and SSH certificates
+
+#### Readiness decision — selected 2026-09-29
+
+Use the existing OpenBao certificate auth mount for one synthetic machine
+identity on `smoke-01`. Generate its private key inside that instance and
+exact-pin its 90-day self-signed client certificate to a dedicated role. Issue
+tokens with a five-minute explicit maximum TTL and no default policy. The role
+permits only the named PostgreSQL credential and SSH-signing paths introduced
+below. It does not inherit the P2-02 `rpr-machine-read` KV policy. Replace the
+pin before certificate expiry, and disable the role and revoke its tokens on
+suspected key exposure. A recreated `smoke-01` needs a new key and pin. Do not
+use the root-generation certificate for routine configuration or machine login.
+
+After retirement of the initial root token, configuration requires the
+protected Shamir root-generation ceremony. Use its temporary root only to mint
+a 15-minute, narrowly scoped P2-03 configuration token; revoke the temporary
+root and recovery login immediately, and revoke the configuration token when
+the work finishes. No persistent operator certificate is introduced for this
+one slice. A rerun before Keycloak OIDC exists repeats the guarded ceremony;
+that operator cost is preferable to maintaining a second standing client key.
+Keep the operator and machine policies distinct. P2-04 will provide the
+ordinary human authentication path.
+
+Install PostgreSQL 17 from Debian 13 stable/security on `pg-01`, its own
+unprivileged Incus container at `10.20.0.21` with generated private DNS name
+`pg-01.dev.apadanalab.de`. Bind PostgreSQL only to that private address. Use
+PostgreSQL TLS and `pg_hba.conf` to restrict database, role, and source. The
+host-enforced ACL permits TCP 5432 only from the private platform CIDR;
+PostgreSQL separately accepts the OpenBao administrator from `bao-01` and the
+dynamic test role from `smoke-01`, using its current Incus-reported address
+rather than a copied lease. No cloud ingress or public DNS record is added.
+Generate the PostgreSQL listener key inside `pg-01` and sign only its
+public CSR with the existing online intermediate. Renew the leaf before
+expiry and keep its private key on the instance. Local peer access by the
+`postgres` operating-system account is the recovery route. The first dynamic
+role reads one synthetic table in an `rpr_p203` database; later Keycloak
+credentials require a separate role.
+Create a non-superuser OpenBao database administrator with `CREATEROLE` and
+administration of a test read-only group role. PostgreSQL's `CREATEROLE` is
+broader than one database, so isolate this demonstration in its own instance
+and give the OpenBao connection only one allowed dynamic role. Generate its
+password outside Git and OpenTofu state, install it into OpenBao through a
+protected API task, then remove the transfer copy. If OpenBao's encrypted state
+is lost, reset that password through local peer administration and reconfigure
+the connection; no static application password is issued or backed up.
+
+Use `smoke-01` as the machine client and `ssh-test-01` as a disposable SSH
+target at `10.20.0.221`. Incus publishes its private A/PTR records under
+`ssh-test-01.dev.apadanalab.de`; a host-enforced ACL allows TCP 22 only from
+the private platform CIDR. No public ingress or DNS record is added.
+Configure one non-sudo test account and one OpenBao SSH client CA. Ansible
+installs only the public CA key and restrictive `sshd` settings on the target.
+Generate the SSH CA with OpenBao's explicit `ssh-ed25519` key type; its default
+CA key type is RSA. Generate the client's temporary signing key and the test
+target's host key with `ssh-keygen -t ed25519`. Configure `sshd` to offer only
+the Ed25519 host key and accept only Ed25519 user certificates. Set the signing
+role's `allowed_user_key_lengths` to `{"ed25519": 0}` so OpenBao cannot sign
+an RSA client key. Assert the CA public key, client public key, and host public
+key are all `ssh-ed25519` before acceptance.
+
+The signing role fixes that account as its sole principal, limits TTL to five
+minutes, and allows no forwarding or user-selected extensions. OpenBao keeps
+the SSH CA private key in encrypted Raft storage and snapshots; rotate it and
+replace the target's trusted public key if exposed. Remove the target and test
+key pair after acceptance; retain only redacted evidence.
+
+The current Incus project limit is four containers, four CPU shares, 1536 MiB,
+and 12 GiB, all allocated by the existing four containers. Review and raise
+these limits only for the PostgreSQL container and the temporary SSH target.
+Measure host and per-service use in the 4-GiB Lima VM before any AWS promotion;
+the 2-GiB AWS reference host is not assumed to fit this slice. OpenTofu owns
+the new instances, addresses, and network ACLs; Ansible owns guest packages,
+configuration, protected files, and OpenBao API objects. No new runtime or
+custom credential service is needed.
 
 - [ ] Implement one machine-authentication path appropriate to the standalone
   reference profile, with short token TTLs and no shared human identity.
@@ -438,3 +512,8 @@ Phase 2 is complete only when:
 - [Keycloak Server Administration Guide](https://www.keycloak.org/docs/latest/server_admin/)
 - [Vault documentation](https://developer.hashicorp.com/vault/docs)
 - [OpenBao documentation](https://openbao.org/docs/)
+- [Debian 13 PostgreSQL 17 package](https://packages.debian.org/trixie/database/postgresql-17)
+- [PostgreSQL 17 role attributes](https://www.postgresql.org/docs/17/role-attributes.html)
+- [OpenBao 2.6 certificate authentication API](https://openbao.org/docs/2.6.x/api/auth/cert/)
+- [OpenBao 2.6 PostgreSQL database plugin](https://openbao.org/docs/2.6.x/secrets/databases/postgresql/)
+- [OpenBao 2.6 SSH signing API](https://openbao.org/docs/2.6.x/api/secret/ssh/)

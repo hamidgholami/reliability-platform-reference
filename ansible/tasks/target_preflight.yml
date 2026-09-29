@@ -82,6 +82,6 @@
     that:
       - >-
         debian_prepare_operator_public_key is
-        match('^(ssh-ed25519|sk-ssh-ed25519@openssh.com|ecdsa-sha2-nistp(256|384|521)|sk-ecdsa-sha2-nistp256@openssh.com|ssh-rsa) [A-Za-z0-9+/]+={0,3}( .*)?$')
-    fail_msg: OPERATOR_PUBLIC_KEY_FILE is not a supported OpenSSH public key.
+        match('^ssh-ed25519 [A-Za-z0-9+/]+={0,3}( .*)?$')
+    fail_msg: OPERATOR_PUBLIC_KEY_FILE must contain an Ed25519 OpenSSH public key.
   no_log: true
