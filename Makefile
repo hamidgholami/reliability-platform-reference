@@ -21,7 +21,7 @@ ANSIBLE_ENV = ANSIBLE_CONFIG=$(CURDIR)/ansible.cfg ANSIBLE_HOME=$(CURDIR)/.cache
 	accept-private-dns configure-openbao openbao-status validate-openbao \
 	initialize-openbao unseal-openbao accept-openbao-audit bootstrap-openbao \
 	bootstrap-openbao-pki rotate-openbao-certificate retire-openbao-root-token \
-	configure-machine-auth \
+	configure-machine-auth configure-postgresql \
 	bootstrap-incus plan apply validate destroy aws-plan aws-apply \
 	aws-destroy aws-orphan-check test-aws-safety
 
@@ -76,6 +76,7 @@ syntax-ansible: ## Syntax-check active Ansible inventories and playbooks offline
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/openbao/hosts.example.yml --syntax-check ansible/playbooks/rotate-openbao-certificate.yml >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/openbao/hosts.example.yml --syntax-check ansible/playbooks/configure-openbao-root-recovery.yml >/dev/null
 	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/openbao/hosts.example.yml --syntax-check ansible/playbooks/configure-machine-auth.yml >/dev/null
+	@$(ANSIBLE_ENV) .venv/bin/ansible-playbook --inventory ansible/inventories/openbao/hosts.example.yml --syntax-check ansible/playbooks/configure-postgresql.yml >/dev/null
 
 lint-hcl: ## Check OpenTofu formatting without changing files.
 	@tofu fmt -check -recursive infrastructure
@@ -219,6 +220,9 @@ retire-openbao-root-token: ## Prove authenticated recovery and retire the initia
 
 configure-machine-auth: ## Pin and prove the synthetic machine certificate (requires protected recovery kit and exact CONFIRM).
 	@./scripts/openbao-root-retirement.sh p203-machine-auth
+
+configure-postgresql: ## Install local-only PostgreSQL 17 and synthetic probe data (requires exact CONFIRM).
+	@./scripts/postgresql.sh
 
 plan: ## Verify Incus trust and save a non-destructive substrate plan.
 	@./scripts/incus-substrate.sh plan

@@ -394,6 +394,13 @@ write_inventory()
         ipv4_address: .openbao_foundation.value.ipv4_address,
         dns_name: .openbao_foundation.value.dns_name,
         status: .openbao_foundation.value.status
+      },
+      {
+        name: .postgresql_service.value.instance,
+        type: .postgresql_service.value.instance_type,
+        ipv4_address: .postgresql_service.value.ipv4_address,
+        dns_name: .postgresql_service.value.dns_name,
+        status: .postgresql_service.value.status
       }
     ]
   }' >"$inventory_file"
@@ -474,6 +481,25 @@ write_inventory()
                 ansible_host: .substrate.value.instance
               }
             }
+          },
+          postgresql_service: {
+            vars: {
+              ansible_connection: "community.general.incus",
+              ansible_incus_remote: $remote,
+              ansible_incus_project: $project,
+              ansible_user: "root",
+              rpr_deployment_profile: $profile,
+              postgresql_private_address: .postgresql_service.value.ipv4_address,
+              postgresql_private_dns_name: .postgresql_service.value.dns_name,
+              postgresql_listen_port: .postgresql_service.value.port,
+              postgresql_client_address: .substrate.value.instance_ipv4,
+              postgresql_openbao_address: .openbao_foundation.value.ipv4_address
+            },
+            hosts: {
+              (.postgresql_service.value.instance): {
+                ansible_host: .postgresql_service.value.instance
+              }
+            }
           }
         }
       }
@@ -539,6 +565,12 @@ validate_substrate()
   openbao_alias_name="$(printf '%s' "$outputs" | jq -er '.openbao_foundation.value.alias_name')"
   openbao_api_port="$(printf '%s' "$outputs" | jq -er '.openbao_foundation.value.api_port')"
   openbao_acl_name="$(printf '%s' "$outputs" | jq -er '.openbao_foundation.value.network_acl')"
+  postgresql_profile_name="$(printf '%s' "$outputs" | jq -er '.postgresql_service.value.profile')"
+  postgresql_instance_name="$(printf '%s' "$outputs" | jq -er '.postgresql_service.value.instance')"
+  postgresql_ipv4_address="$(printf '%s' "$outputs" | jq -er '.postgresql_service.value.ipv4_address')"
+  postgresql_dns_name="$(printf '%s' "$outputs" | jq -er '.postgresql_service.value.dns_name')"
+  postgresql_port="$(printf '%s' "$outputs" | jq -er '.postgresql_service.value.port')"
+  postgresql_acl_name="$(printf '%s' "$outputs" | jq -er '.postgresql_service.value.network_acl')"
   planned_image="$(printf '%s' "$outputs" | jq -er '.substrate.value.instance_image')"
   [ "$planned_image" = "$session_image" ] ||
     fail "the state image differs from the reviewed Incus session"
@@ -547,13 +579,13 @@ validate_substrate()
     "${remote}:/1.0/projects/${project_name}")"
   [ "$(printf '%s' "$project_json" | jq -r '.config.restricted')" = "true" ] ||
     fail "the Incus project is not restricted"
-  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.containers"]')" = "4" ] ||
-    fail "the Incus project does not enforce the four-container limit"
-  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.instances"]')" = "4" ] ||
-    fail "the Incus project does not enforce the four-instance limit"
-  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.cpu"]')" = "4" ] ||
+  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.containers"]')" = "5" ] ||
+    fail "the Incus project does not enforce the five-container limit"
+  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.instances"]')" = "5" ] ||
+    fail "the Incus project does not enforce the five-instance limit"
+  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.cpu"]')" = "5" ] ||
     fail "the Incus project aggregate CPU limit differs from the active boundary"
-  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.memory"]')" = "1536MiB" ] ||
+  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.memory"]')" = "2048MiB" ] ||
     fail "the Incus project aggregate memory limit differs from the active boundary"
   [ "$(printf '%s' "$project_json" | jq -r '.config["limits.virtual-machines"]')" = "0" ] ||
     fail "the Incus project permits virtual machines"
@@ -563,10 +595,10 @@ validate_substrate()
     fail "the Incus project does not isolate its network zones"
   [ "$(printf '%s' "$project_json" | jq -r '.config["restricted.networks.zones"]')" = "${session_dns_domain},${reverse_zone}" ] ||
     fail "the Incus project permits unexpected network zones"
-  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.disk"]')" = "12GiB" ] ||
+  [ "$(printf '%s' "$project_json" | jq -r '.config["limits.disk"]')" = "16GiB" ] ||
     fail "the Incus project aggregate disk limit differs from the active boundary"
   [ "$(printf '%s' "$project_json" |
-    jq -r --arg key "limits.disk.pool.${pool_name}" '.config[$key]')" = "12GiB" ] ||
+    jq -r --arg key "limits.disk.pool.${pool_name}" '.config[$key]')" = "16GiB" ] ||
     fail "the Incus project per-pool disk limit differs from the active boundary"
 
   network_json="$(INCUS_CONF="$config_dir" incus query \
@@ -585,8 +617,8 @@ validate_substrate()
     fail "the managed bridge is not attached to the private forward zone"
   [ "$(printf '%s' "$network_json" | jq -r '.config["dns.zone.reverse.ipv4"]')" = "$reverse_zone" ] ||
     fail "the managed bridge is not attached to the private reverse zone"
-  [ "$(printf '%s' "$network_json" | jq -r '.config["security.acls"]')" = "$openbao_acl_name" ] ||
-    fail "the managed bridge is not attached to the OpenBao ACL"
+  [ "$(printf '%s' "$network_json" | jq -r '.config["security.acls"]')" = "${openbao_acl_name},${postgresql_acl_name}" ] ||
+    fail "the managed bridge is not attached to both service ACLs"
   [ "$(printf '%s' "$network_json" | jq -r '.config["security.acls.default.ingress.action"]')" = "allow" ] ||
     fail "the managed bridge does not preserve ingress for ordinary NICs"
   [ "$(printf '%s' "$network_json" | jq -r '.config["security.acls.default.egress.action"]')" = "allow" ] ||
@@ -708,6 +740,56 @@ validate_substrate()
   [ "$actual_openbao_ipv4" = "$openbao_ipv4_address" ] ||
     fail "the OpenBao container does not use its reviewed static address"
 
+  postgresql_profile_json="$(INCUS_CONF="$config_dir" incus query \
+    "${remote}:/1.0/profiles/${postgresql_profile_name}?project=${project_name}")"
+  printf '%s' "$postgresql_profile_json" | jq -e --arg pool "$pool_name" '
+    .config["limits.cpu"] == "1"
+    and .config["limits.memory"] == "512MiB"
+    and .config["security.nesting"] == "false"
+    and .config["security.privileged"] == "false"
+    and .devices.root.pool == $pool
+    and .devices.root.size == "4GiB"
+  ' >/dev/null || fail "the PostgreSQL profile differs from the reviewed boundary"
+
+  postgresql_acl_json="$(INCUS_CONF="$config_dir" incus query \
+    "${remote}:/1.0/network-acls/${postgresql_acl_name}?project=default")"
+  printf '%s' "$postgresql_acl_json" | jq -e \
+    --arg source "$session_ipv4_cidr" \
+    --arg destination "$postgresql_ipv4_address" \
+    --arg port "$postgresql_port" '
+      (.ingress | length) == 1
+      and (.egress | length) == 0
+      and .ingress[0].action == "allow"
+      and .ingress[0].source == $source
+      and .ingress[0].destination == $destination
+      and .ingress[0].destination_port == $port
+      and .ingress[0].protocol == "tcp"
+      and .ingress[0].state == "enabled"
+    ' >/dev/null || fail "the PostgreSQL NIC ACL differs from the reviewed boundary"
+
+  postgresql_instance_json="$(INCUS_CONF="$config_dir" incus query \
+    "${remote}:/1.0/instances/${postgresql_instance_name}?project=${project_name}")"
+  printf '%s' "$postgresql_instance_json" | jq -e \
+    --arg network "$network_name" \
+    --arg address "$postgresql_ipv4_address" '
+      .type == "container"
+      and .devices.eth0.network == $network
+      and .devices.eth0["ipv4.address"] == $address
+      and .devices.eth0["security.acls.default.ingress.action"] == "reject"
+      and .devices.eth0["security.acls.default.egress.action"] == "allow"
+    ' >/dev/null || fail "the PostgreSQL instance NIC differs from the reviewed boundary"
+  postgresql_state_json="$(INCUS_CONF="$config_dir" incus query \
+    "${remote}:/1.0/instances/${postgresql_instance_name}/state?project=${project_name}")"
+  [ "$(printf '%s' "$postgresql_state_json" | jq -r '.status')" = "Running" ] ||
+    fail "the PostgreSQL container is not running"
+  actual_postgresql_ipv4="$(printf '%s' "$postgresql_state_json" | jq -er '
+    [.network.eth0.addresses[]
+      | select(.family == "inet" and .scope == "global")
+      | .address][0]
+  ')" || fail "the PostgreSQL container has no global IPv4 address on eth0"
+  [ "$actual_postgresql_ipv4" = "$postgresql_ipv4_address" ] ||
+    fail "the PostgreSQL container does not use its reviewed static address"
+
   forward_zone_json="$(INCUS_CONF="$config_dir" incus query \
     "${remote}:/1.0/network-zones/${forward_zone}?project=${project_name}")"
   reverse_zone_json="$(INCUS_CONF="$config_dir" incus query \
@@ -753,15 +835,19 @@ validate_substrate()
       address_answer="$(INCUS_CONF="$config_dir" incus exec --project "$project_name" \
         "${remote}:${dns_name}" -- dig "@${expected_dns_ipv4}" \
         "$openbao_dns_name" A +norecurse +short 2>/dev/null || true)"
+      postgresql_answer="$(INCUS_CONF="$config_dir" incus exec --project "$project_name" \
+        "${remote}:${dns_name}" -- dig "@${expected_dns_ipv4}" \
+        "$postgresql_dns_name" A +norecurse +short 2>/dev/null || true)"
       if [ "$alias_answer" = "${openbao_dns_name}." ] &&
-        [ "$address_answer" = "$openbao_ipv4_address" ]; then
+        [ "$address_answer" = "$openbao_ipv4_address" ] &&
+        [ "$postgresql_answer" = "$postgresql_ipv4_address" ]; then
         break
       fi
       attempt=$((attempt + 1))
       sleep 1
     done
     [ "$attempt" -lt 30 ] ||
-      fail "$dns_name did not serve the reviewed OpenBao alias and address"
+      fail "$dns_name did not serve the reviewed OpenBao and PostgreSQL names"
   done
 
   umask 077
@@ -778,6 +864,7 @@ validate_substrate()
     --arg reverse_zone "$reverse_zone" \
     --argjson secondaries "$(printf '%s' "$outputs" | jq '.private_dns.value.secondaries')" \
     --argjson openbao "$(printf '%s' "$outputs" | jq '.openbao_foundation.value')" \
+    --argjson postgresql "$(printf '%s' "$outputs" | jq '.postgresql_service.value')" \
     --arg dns_name "$instance_dns_name" '{
       schema_version: 1,
       deployment_profile: $profile,
@@ -799,11 +886,13 @@ validate_substrate()
       private_dns_secondaries: $secondaries,
       openbao_foundation_ready: true,
       openbao: $openbao,
+      postgresql_substrate_ready: true,
+      postgresql: $postgresql,
       ipv6_policy: "disabled"
     }' >"$evidence_file"
   write_inventory
 
-  echo "Incus substrate validation passed: $instance_name ($instance_ipv4), $openbao_instance_name ($actual_openbao_ipv4)"
+  echo "Incus substrate validation passed: $instance_name ($instance_ipv4), $openbao_instance_name ($actual_openbao_ipv4), $postgresql_instance_name ($actual_postgresql_ipv4)"
   echo "Generated ignored validation evidence: $evidence_file"
 }
 

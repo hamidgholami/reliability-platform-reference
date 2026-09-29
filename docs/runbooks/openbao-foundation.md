@@ -11,11 +11,12 @@ enabled; it does not contain real keys, tokens, shares, or deployment evidence.
 - The initial limit is one vCPU, 512 MiB of memory, and a 4 GiB root disk.
 - OpenBao 2.6.3 uses integrated Raft storage on the single instance. This is not
   an HA topology.
-- The API listens with TLS only on the private service address. A host-enforced
-  Incus network ACL assigned to the shared bridge accepts TCP 8200 only from
-  the platform CIDR, and the guest NIC overrides its default to reject other
-  new inbound traffic. No public listener, public DNS address, port forwarding,
-  or public cloud ingress is added.
+- The API listens with TLS only on the private service address. An Incus ACL
+  assigned to the shared bridge restricts routed ingress to TCP 8200 from the
+  platform CIDR, and the guest NIC rejects unmatched routed ingress. Bridge
+  ACLs do not filter traffic between containers on the same bridge; TLS and
+  OpenBao authentication enforce that service boundary. No public listener,
+  public DNS address, port forwarding, or public cloud ingress is added.
 - The package-provided systemd unit sets `MemorySwapMax=0`. OpenBao removed
   `mlock` in 2.0.0, so P2-02 does not add `CAP_IPC_LOCK` or the obsolete
   `disable_mlock` setting.

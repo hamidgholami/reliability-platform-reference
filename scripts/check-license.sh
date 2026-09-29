@@ -63,6 +63,7 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   scripts/openbao-bootstrap.sh \
   scripts/openbao-root-retirement.sh \
   scripts/openbao-root-retirement-remote.py \
+  scripts/postgresql.sh \
   scripts/validate-openbao-bootstrap-tls.sh \
   tests/ansible-target-safety.sh \
   tests/fixtures/openbao-ceremony/incus \
@@ -73,6 +74,7 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   ansible/playbooks/rotate-openbao-certificate.yml \
   ansible/playbooks/configure-openbao-root-recovery.yml \
   ansible/playbooks/configure-machine-auth.yml \
+  ansible/playbooks/configure-postgresql.yml \
   ansible/roles/openbao_bootstrap/defaults/main.yml \
   ansible/roles/openbao_bootstrap/meta/argument_specs.yml \
   ansible/roles/openbao_bootstrap/tasks/main.yml \

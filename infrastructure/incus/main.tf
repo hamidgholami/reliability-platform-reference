@@ -14,15 +14,18 @@ check "standalone_target" {
 }
 
 locals {
-  project_name          = "rpr-dev"
-  storage_pool_name     = "rpr-local"
-  network_name          = "platform0"
-  profile_name          = "system-container"
-  instance_name         = "smoke-01"
-  dns_profile_name      = "dns-secondary"
-  openbao_profile_name  = "secrets-service"
-  openbao_instance_name = "bao-01"
-  openbao_acl_name      = "openbao-api"
+  project_name             = "rpr-dev"
+  storage_pool_name        = "rpr-local"
+  network_name             = "platform0"
+  profile_name             = "system-container"
+  instance_name            = "smoke-01"
+  dns_profile_name         = "dns-secondary"
+  openbao_profile_name     = "secrets-service"
+  openbao_instance_name    = "bao-01"
+  openbao_acl_name         = "openbao-api"
+  postgresql_profile_name  = "database-service"
+  postgresql_instance_name = "pg-01"
+  postgresql_acl_name      = "postgresql-tls"
 
   bridge_ipv4_address      = "${cidrhost(var.platform_ipv4_cidr, 1)}/${split("/", var.platform_ipv4_cidr)[1]}"
   dhcp_ipv4_range          = "${cidrhost(var.platform_ipv4_cidr, 120)}-${cidrhost(var.platform_ipv4_cidr, 219)}"
@@ -33,9 +36,10 @@ locals {
     dns-01 = cidrhost(var.platform_ipv4_cidr, 10)
     dns-02 = cidrhost(var.platform_ipv4_cidr, 11)
   }
-  openbao_ipv4_address = cidrhost(var.platform_ipv4_cidr, 20)
-  openbao_dns_name     = "${local.openbao_instance_name}.${var.platform_dns_domain}"
-  openbao_alias_name   = "openbao.${var.platform_dns_domain}"
+  openbao_ipv4_address    = cidrhost(var.platform_ipv4_cidr, 20)
+  openbao_dns_name        = "${local.openbao_instance_name}.${var.platform_dns_domain}"
+  openbao_alias_name      = "openbao.${var.platform_dns_domain}"
+  postgresql_ipv4_address = cidrhost(var.platform_ipv4_cidr, 21)
 }
 
 resource "incus_storage_pool" "local" {
@@ -65,7 +69,7 @@ resource "incus_network" "platform" {
     "ipv4.firewall"                        = "true"
     "ipv4.nat"                             = "true"
     "ipv6.address"                         = "none"
-    "security.acls"                        = incus_network_acl.openbao.name
+    "security.acls"                        = join(",", [incus_network_acl.openbao.name, incus_network_acl.postgresql.name])
     "security.acls.default.egress.action"  = "allow"
     "security.acls.default.ingress.action" = "allow"
   }
@@ -84,12 +88,12 @@ resource "incus_project" "development" {
     "features.profiles"                                 = "true"
     "features.storage.buckets"                          = "false"
     "features.storage.volumes"                          = "true"
-    "limits.containers"                                 = "4"
-    "limits.cpu"                                        = "4"
-    "limits.disk"                                       = "12GiB"
-    "limits.disk.pool.${incus_storage_pool.local.name}" = "12GiB"
-    "limits.instances"                                  = "4"
-    "limits.memory"                                     = "1536MiB"
+    "limits.containers"                                 = "5"
+    "limits.cpu"                                        = "5"
+    "limits.disk"                                       = "16GiB"
+    "limits.disk.pool.${incus_storage_pool.local.name}" = "16GiB"
+    "limits.instances"                                  = "5"
+    "limits.memory"                                     = "2048MiB"
     "limits.virtual-machines"                           = "0"
     "restricted"                                        = "true"
     "restricted.devices.disk"                           = "managed"
@@ -202,6 +206,25 @@ resource "incus_network_acl" "openbao" {
   ]
 }
 
+resource "incus_network_acl" "postgresql" {
+  name        = local.postgresql_acl_name
+  description = "Allow the private platform CIDR to reach only PostgreSQL TLS"
+  project     = "default"
+  remote      = var.incus_remote
+
+  ingress = [
+    {
+      action           = "allow"
+      source           = var.platform_ipv4_cidr
+      destination      = local.postgresql_ipv4_address
+      destination_port = "5432"
+      protocol         = "tcp"
+      description      = "PostgreSQL TLS from the private platform network"
+      state            = "enabled"
+    }
+  ]
+}
+
 resource "incus_profile" "system" {
   name        = local.profile_name
   description = "Bounded unprivileged Phase 1 system container"
@@ -267,6 +290,32 @@ resource "incus_profile" "dns" {
 resource "incus_profile" "openbao" {
   name        = local.openbao_profile_name
   description = "Bounded unprivileged OpenBao service container"
+  project     = incus_project.development.name
+  remote      = var.incus_remote
+
+  config = {
+    "boot.autostart"      = "true"
+    "limits.cpu"          = "1"
+    "limits.memory"       = "512MiB"
+    "security.nesting"    = "false"
+    "security.privileged" = "false"
+  }
+
+  device {
+    name = "root"
+    type = "disk"
+
+    properties = {
+      path = "/"
+      pool = incus_storage_pool.local.name
+      size = "4GiB"
+    }
+  }
+}
+
+resource "incus_profile" "postgresql" {
+  name        = local.postgresql_profile_name
+  description = "Bounded unprivileged PostgreSQL service container"
   project     = incus_project.development.name
   remote      = var.incus_remote
 
@@ -370,6 +419,40 @@ resource "incus_instance" "openbao" {
       "ipv4.address"                         = local.openbao_ipv4_address
       "security.acls.default.egress.action"  = "allow"
       "security.acls.default.ingress.action" = "reject"
+    }
+  }
+
+  wait_for {
+    type = "ipv4"
+    nic  = "eth0"
+  }
+}
+
+resource "incus_instance" "postgresql" {
+  name        = local.postgresql_instance_name
+  description = "Private PostgreSQL 17 dynamic-credential test service"
+  image       = var.instance_image
+  type        = "container"
+  ephemeral   = false
+  running     = true
+  profiles    = [incus_profile.postgresql.name]
+  project     = incus_project.development.name
+  remote      = var.incus_remote
+
+  config = {
+    "user.access_interface" = "eth0"
+  }
+
+  device {
+    name = "eth0"
+    type = "nic"
+
+    properties = {
+      name                                   = "eth0"
+      network                                = incus_network.platform.name
+      "ipv4.address"                         = local.postgresql_ipv4_address
+      "security.acls.default.ingress.action" = "reject"
+      "security.acls.default.egress.action"  = "allow"
     }
   }
 

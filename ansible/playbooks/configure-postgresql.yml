@@ -1,0 +1,186 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Prepare the private PostgreSQL 17 service
+  hosts: postgresql_service
+  gather_facts: false
+  any_errors_fatal: true
+  become: false
+  tasks:
+    - name: Require the reviewed database target
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname == 'pg-01'
+          - rpr_deployment_profile in ['workstation-validation', 'single-node-reference']
+          - postgresql_private_address == '10.20.0.21'
+          - postgresql_private_dns_name == 'pg-01.dev.apadanalab.de'
+          - postgresql_listen_port == 5432
+          - postgresql_openbao_address == '10.20.0.20'
+          - postgresql_client_address is match('^10\.20\.0\.[0-9]+$')
+
+    - name: Check Python and its APT binding
+      ansible.builtin.raw: /usr/bin/python3 -c 'import apt'
+      register: postgresql_python_probe
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Install Python when absent
+      ansible.builtin.raw: >-
+        apt-get update && DEBIAN_FRONTEND=noninteractive
+        apt-get install -y python3 python3-apt
+      when: postgresql_python_probe.rc != 0
+      changed_when: true
+
+    - name: Install Debian PostgreSQL 17 and its client
+      ansible.builtin.apt:
+        name:
+          - postgresql-17
+          - postgresql-client-17
+          - openssl
+        state: present
+        update_cache: true
+        cache_valid_time: 86400
+
+    - name: Create the PostgreSQL local configuration directory
+      ansible.builtin.file:
+        path: /etc/postgresql/17/main/conf.d
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0755'
+
+    - name: Keep PostgreSQL on local sockets until its signed certificate is installed
+      ansible.builtin.copy:
+        dest: /etc/postgresql/17/main/conf.d/50-rpr-local.conf
+        content: |
+          listen_addresses = '127.0.0.1'
+          port = 5432
+          ssl = off
+        owner: postgres
+        group: postgres
+        mode: '0644'
+      notify: Restart the PostgreSQL cluster
+
+    - name: Apply PostgreSQL configuration before local setup
+      ansible.builtin.meta: flush_handlers
+
+    - name: Start the PostgreSQL cluster
+      ansible.builtin.systemd_service:
+        name: postgresql@17-main
+        state: started
+        enabled: true
+
+    - name: Inspect the installed PostgreSQL version
+      ansible.builtin.command: /usr/lib/postgresql/17/bin/postgres --version
+      register: postgresql_version
+      changed_when: false
+
+    - name: Inspect local PostgreSQL settings
+      ansible.builtin.command:
+        argv:
+          - runuser
+          - -u
+          - postgres
+          - --
+          - psql
+          - -Atc
+          - SELECT current_setting('listen_addresses'), current_setting('ssl');
+      register: postgresql_local_settings
+      changed_when: false
+
+    - name: Require a local-only initial listener
+      ansible.builtin.assert:
+        that:
+          - postgresql_version.stdout is match('^postgres \(PostgreSQL\) 17\.')
+          - postgresql_local_settings.stdout == '127.0.0.1|off'
+
+    - name: Check the synthetic database
+      ansible.builtin.command:
+        argv:
+          - runuser
+          - -u
+          - postgres
+          - --
+          - psql
+          - -Atc
+          - SELECT 1 FROM pg_database WHERE datname = 'rpr_p203';
+      register: postgresql_database_before
+      changed_when: false
+
+    - name: Create the synthetic database
+      ansible.builtin.command:
+        argv:
+          - runuser
+          - -u
+          - postgres
+          - --
+          - createdb
+          - rpr_p203
+      when: postgresql_database_before.stdout != '1'
+      changed_when: true
+
+    - name: Check the synthetic probe table
+      ansible.builtin.command:
+        argv:
+          - runuser
+          - -u
+          - postgres
+          - --
+          - psql
+          - -d
+          - rpr_p203
+          - -Atc
+          - SELECT to_regclass('public.probe') IS NOT NULL;
+      register: postgresql_table_before
+      changed_when: false
+
+    - name: Create the synthetic probe table
+      ansible.builtin.command:
+        argv:
+          - runuser
+          - -u
+          - postgres
+          - --
+          - psql
+          - -v
+          - ON_ERROR_STOP=1
+          - -d
+          - rpr_p203
+          - -c
+          - CREATE TABLE public.probe (id integer PRIMARY KEY, label text NOT NULL);
+      when: postgresql_table_before.stdout != 't'
+      changed_when: true
+
+    - name: Insert one synthetic probe row
+      ansible.builtin.command:
+        argv:
+          - runuser
+          - -u
+          - postgres
+          - --
+          - psql
+          - -v
+          - ON_ERROR_STOP=1
+          - -d
+          - rpr_p203
+          - -Atc
+          - WITH inserted AS (INSERT INTO public.probe VALUES (1, 'synthetic') ON CONFLICT (id) DO NOTHING RETURNING id) SELECT count(*) FROM inserted;
+      register: postgresql_probe_insert
+      changed_when: postgresql_probe_insert.stdout == '1'
+
+    - name: Report the local PostgreSQL service boundary
+      ansible.builtin.debug:
+        msg:
+          version: "{{ postgresql_version.stdout }}"
+          database: rpr_p203
+          listener: localhost-only
+          ssl: disabled-until-signed-certificate
+          bootstrap_login: local-peer-postgres
+
+  handlers:
+    - name: Restart the PostgreSQL cluster
+      ansible.builtin.systemd_service:
+        name: postgresql@17-main
+        state: restarted

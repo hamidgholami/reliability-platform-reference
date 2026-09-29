@@ -63,15 +63,15 @@ run "trusted_standalone_boundary" {
   assert {
     condition = (
       incus_project.development.config["restricted"] == "true" &&
-      incus_project.development.config["limits.containers"] == "4" &&
-      incus_project.development.config["limits.cpu"] == "4" &&
-      incus_project.development.config["limits.disk"] == "12GiB" &&
-      incus_project.development.config["limits.disk.pool.rpr-local"] == "12GiB" &&
-      incus_project.development.config["limits.instances"] == "4" &&
-      incus_project.development.config["limits.memory"] == "1536MiB" &&
+      incus_project.development.config["limits.containers"] == "5" &&
+      incus_project.development.config["limits.cpu"] == "5" &&
+      incus_project.development.config["limits.disk"] == "16GiB" &&
+      incus_project.development.config["limits.disk.pool.rpr-local"] == "16GiB" &&
+      incus_project.development.config["limits.instances"] == "5" &&
+      incus_project.development.config["limits.memory"] == "2048MiB" &&
       incus_project.development.config["limits.virtual-machines"] == "0"
     )
-    error_message = "The development project must fit exactly four bounded containers and no VMs."
+    error_message = "The development project must fit exactly five bounded containers and no VMs."
   }
 
   assert {
@@ -79,7 +79,7 @@ run "trusted_standalone_boundary" {
       incus_network.platform.config["ipv4.address"] == "10.20.0.1/24" &&
       incus_network.platform.config["ipv4.nat"] == "true" &&
       incus_network.platform.config["ipv6.address"] == "none" &&
-      incus_network.platform.config["security.acls"] == incus_network_acl.openbao.name &&
+      incus_network.platform.config["security.acls"] == join(",", [incus_network_acl.openbao.name, incus_network_acl.postgresql.name]) &&
       incus_network.platform.config["security.acls.default.ingress.action"] == "allow" &&
       incus_network.platform.config["security.acls.default.egress.action"] == "allow"
     )
@@ -166,6 +166,7 @@ run "trusted_standalone_boundary" {
     )
     error_message = "The private OpenBao alias must target the Incus-generated service name."
   }
+
 }
 
 run "reject_relative_client_config" {

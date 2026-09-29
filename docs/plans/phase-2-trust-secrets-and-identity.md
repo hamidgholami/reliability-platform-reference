@@ -115,7 +115,7 @@ scope.
 | Capacity | Every slice | Develop in the retained local Lima VM. P2-02 adds one 1-vCPU, 512-MiB, 4-GiB container and keeps AWS `t4g.small` plus 30-GiB `gp3`; measure before promotion and change the paid profile only after evidence of a capacity failure. |
 | DNS bootstrap secrets | P2-01 | Generate one random TSIG value per zone and secondary in a mode-`0600` ignored runtime file. Pass that file independently to OpenTofu and Ansible; never recover a key from state or output. |
 | Remaining bootstrap secrets and rotation | P2-02 onward | Closed for P2-02 by the secret inventory and ceremony in the OpenBao foundation runbook; later services extend that inventory before use. Bootstrap never depends on a healthy OpenBao instance to create OpenBao. |
-| Secrets-service configuration owner | P2-02 | Closed: OpenTofu owns the instance, host-enforced network ACL, and DNS records; Ansible owns the guest and static service configuration; narrowly scoped Ansible HTTP API tasks own OpenBao objects; and humans retain root-key and seal custody. |
+| Secrets-service configuration owner | P2-02 | Closed: OpenTofu owns the instance, bridge-bound network ACL for routed ingress, and DNS records; Ansible owns the guest and static service configuration; narrowly scoped Ansible HTTP API tasks own OpenBao objects; and humans retain root-key and seal custody. |
 | Operator browser access | P2-04 | Required before browser acceptance. Prefer route-limited WireGuard with split DNS; resolve endpoint placement, peer custody, revocation, and profile-specific ingress before implementation. Do not expose private services publicly. |
 
 Any choice that changes a platform or trust boundary requires an ADR. Version
@@ -207,7 +207,7 @@ captures the completed workstation run. Promotion to the real
 - [x] Implement the reviewed operator-managed root workflow without committing
   or transferring custody of the root private key to the platform or CI.
 - [x] Create one bounded secrets-service instance with TLS, integrated storage,
-  swap disabled at the service boundary, a host-enforced Incus network ACL,
+  swap disabled at the service boundary, a bridge-bound Incus network ACL for routed ingress,
   and no public listener. Do not configure obsolete OpenBao `mlock` settings.
 - [x] Initialize and unseal through an explicit human ceremony. Store recovery
   material outside the repository and outside ordinary command logs.
@@ -260,8 +260,9 @@ Install PostgreSQL 17 from Debian 13 stable/security on `pg-01`, its own
 unprivileged Incus container at `10.20.0.21` with generated private DNS name
 `pg-01.dev.apadanalab.de`. Bind PostgreSQL only to that private address. Use
 PostgreSQL TLS and `pg_hba.conf` to restrict database, role, and source. The
-host-enforced ACL permits TCP 5432 only from the private platform CIDR;
-PostgreSQL separately accepts the OpenBao administrator from `bao-01` and the
+Incus bridge ACL restricts routed ingress to TCP 5432 from the private
+platform CIDR; it does not filter peers on the same bridge. PostgreSQL accepts
+the OpenBao administrator only from `bao-01` and the
 dynamic test role from `smoke-01`, using its current Incus-reported address
 rather than a copied lease. No cloud ingress or public DNS record is added.
 Generate the PostgreSQL listener key inside `pg-01` and sign only its
@@ -299,9 +300,9 @@ the SSH CA private key in encrypted Raft storage and snapshots; rotate it and
 replace the target's trusted public key if exposed. Remove the target and test
 key pair after acceptance; retain only redacted evidence.
 
-The current Incus project limit is four containers, four CPU shares, 1536 MiB,
-and 12 GiB, all allocated by the existing four containers. Review and raise
-these limits only for the PostgreSQL container and the temporary SSH target.
+The Incus project limit is now five containers, five CPU shares, 2048 MiB,
+and 16 GiB for the PostgreSQL container. Review and raise these limits only
+when creating the temporary SSH target.
 Measure host and per-service use in the 4-GiB Lima VM before any AWS promotion;
 the 2-GiB AWS reference host is not assumed to fit this slice. OpenTofu owns
 the new instances, addresses, and network ACLs; Ansible owns guest packages,
@@ -310,7 +311,7 @@ custom credential service is needed.
 
 - [x] Implement one machine-authentication path appropriate to the standalone
   reference profile, with short token TTLs and no shared human identity.
-- [ ] Create PostgreSQL on its own bounded service instance and establish the
+- [x] Create PostgreSQL on its own bounded service instance and establish the
   minimum administrative bootstrap outside application credentials.
 - [ ] Configure the database secrets engine and prove creation, use, expiry, and
   revocation of one dynamic PostgreSQL credential.

@@ -61,3 +61,17 @@ output "openbao_foundation" {
     status        = incus_instance.openbao.status
   }
 }
+
+output "postgresql_service" {
+  description = "Non-secret PostgreSQL service placement and private endpoint."
+  value = {
+    profile       = incus_profile.postgresql.name
+    instance      = incus_instance.postgresql.name
+    instance_type = incus_instance.postgresql.type
+    ipv4_address  = incus_instance.postgresql.ipv4_address
+    dns_name      = "${local.postgresql_instance_name}.${var.platform_dns_domain}"
+    port          = 5432
+    network_acl   = incus_network_acl.postgresql.name
+    status        = incus_instance.postgresql.status
+  }
+}

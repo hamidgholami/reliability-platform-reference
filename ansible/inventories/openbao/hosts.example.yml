@@ -30,3 +30,18 @@ all:
       hosts:
         smoke-01:
           ansible_host: smoke-01
+    postgresql_service:
+      vars:
+        ansible_connection: community.general.incus
+        ansible_incus_remote: replace-with-reviewed-remote
+        ansible_incus_project: rpr-dev
+        ansible_user: root
+        rpr_deployment_profile: workstation-validation
+        postgresql_private_address: 10.20.0.21
+        postgresql_private_dns_name: pg-01.dev.apadanalab.de
+        postgresql_listen_port: 5432
+        postgresql_client_address: replace-with-generated-smoke-ipv4
+        postgresql_openbao_address: 10.20.0.20
+      hosts:
+        pg-01:
+          ansible_host: pg-01
