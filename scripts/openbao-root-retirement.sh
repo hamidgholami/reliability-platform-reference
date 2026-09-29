@@ -5,6 +5,7 @@
 set -eu
 umask 077
 
+action=${1:-retire}
 profile=${PROFILE:-}
 config_dir=${INCUS_CONFIG_DIR:-}
 remote=${INCUS_REMOTE:-}
@@ -24,6 +25,9 @@ entered_input=
 echo_disabled=0
 remote_material_installed=0
 remote_prefix=/run/rpr-openbao-root-retirement
+if [ "$action" = "p203-machine-auth" ]; then
+  remote_prefix=/run/rpr-openbao-p203-session
+fi
 
 fail()
 {
@@ -56,6 +60,7 @@ cleanup()
       "$remote_prefix.py" \
       "$remote_prefix-client.crt" \
       "$remote_prefix-client.key" \
+      "$remote_prefix-machine.crt" \
       "$remote_prefix-initial-token" >/dev/null 2>&1 || true
   fi
   for temporary_file in \
@@ -108,6 +113,10 @@ $recovery_passphrase
 EOF
 }
 
+case "$action" in
+  retire|p203-machine-auth) ;;
+  *) fail "usage: $0 {retire|p203-machine-auth}" ;;
+esac
 case "$profile" in
   workstation-validation|single-node-reference) ;;
   *) fail "set PROFILE to workstation-validation or single-node-reference" ;;
@@ -142,7 +151,11 @@ for protected_dir in "$recovery_dir" "$runtime_dir" "$client_dir"; do
   esac
 done
 
-expected="retire-openbao-root-token-$profile-$remote"
+if [ "$action" = "retire" ]; then
+  expected="retire-openbao-root-token-$profile-$remote"
+else
+  expected="configure-machine-auth-$profile-$remote"
+fi
 [ "${CONFIRM:-}" = "$expected" ] || fail "set CONFIRM=$expected"
 [ -r "$inventory" ] || fail "OpenBao inventory is missing; run make apply"
 [ -r "$recovery_dir/recovery-secret.gpg" ] ||
@@ -156,14 +169,24 @@ for protected_file in recovery-secret.gpg initialization.json; do
   [ "$(find "$protected_path" -prune -type f -perm 0600 -print)" = "$protected_path" ] ||
     fail "$protected_file must use mode 0600"
 done
-jq -e '
-  (.unseal_keys_b64 | length) == 1
-  and (.unseal_keys_b64[0] | type) == "string"
-  and (.unseal_keys_b64[0] | length) > 0
-  and (.root_token | type) == "string"
-  and (.root_token | length) > 0
-' "$recovery_dir/initialization.json" >/dev/null ||
-  fail "the initial root token is absent or already retired"
+if [ "$action" = "retire" ]; then
+  jq -e '
+    (.unseal_keys_b64 | length) == 1
+    and (.unseal_keys_b64[0] | type) == "string"
+    and (.unseal_keys_b64[0] | length) > 0
+    and (.root_token | type) == "string"
+    and (.root_token | length) > 0
+  ' "$recovery_dir/initialization.json" >/dev/null ||
+    fail "the initial root token is absent or already retired"
+else
+  jq -e '
+    (.unseal_keys_b64 | length) == 1
+    and (.unseal_keys_b64[0] | type) == "string"
+    and (.unseal_keys_b64[0] | length) > 0
+    and (has("root_token") | not)
+  ' "$recovery_dir/initialization.json" >/dev/null ||
+    fail "the protected recovery bundle is not in the retired-root state"
+fi
 
 for tool in gpg gpgconf incus jq openssl python3; do
   command -v "$tool" >/dev/null 2>&1 || fail "$tool is required"
@@ -185,6 +208,34 @@ jq -e \
     and $bao.hosts["bao-01"].ansible_host == "bao-01"
   ' "$inventory" >/dev/null || fail "OpenBao inventory violates the reviewed boundary"
 
+if [ "$action" = "p203-machine-auth" ]; then
+  jq -e --arg profile "$profile" --arg remote "$remote" '
+    .all.children.machine_auth_client as $machine
+    | $machine.vars.rpr_deployment_profile == $profile
+    and $machine.vars.ansible_incus_remote == $remote
+    and $machine.vars.ansible_incus_project == "rpr-dev"
+    and ($machine.hosts | keys) == ["smoke-01"]
+    and $machine.hosts["smoke-01"].ansible_host == "smoke-01"
+  ' "$inventory" >/dev/null ||
+  fail "machine-auth inventory is missing or invalid; run make validate"
+fi
+
+if [ "$action" = "p203-machine-auth" ]; then
+  incus_exec curl -fsS \
+    --cacert /opt/openbao/tls/ca.crt \
+    https://10.20.0.20:8200/v1/sys/health >/dev/null 2>&1 ||
+    fail "OpenBao is not ready or is sealed; run make openbao-status and make unseal-openbao"
+  echo "Preparing the Ed25519 machine credential inside smoke-01..."
+  INCUS_CONF="$config_dir" \
+  ANSIBLE_CONFIG="$PWD/ansible.cfg" \
+  ANSIBLE_HOME="$PWD/.cache/ansible" \
+  ANSIBLE_COLLECTIONS_PATH="$PWD/.cache/ansible/collections" \
+  ANSIBLE_LOCAL_TEMP="$PWD/.cache/ansible/tmp" \
+  .venv/bin/ansible-playbook \
+    --diff --tags prepare --inventory "$inventory" \
+    ansible/playbooks/configure-machine-auth.yml
+fi
+
 install -d -m 0700 "$runtime_dir"
 if [ -e "$client_dir" ] && [ ! -d "$client_dir" ]; then
   fail "the root-generation client path exists but is not a directory"
@@ -204,16 +255,19 @@ recovery_fingerprint=$(gpg \
 [ -n "$recovery_fingerprint" ] || fail "could not identify the recovery key"
 read_secret
 
-root_token_file=$(mktemp "$runtime_dir/initial-root-token.XXXXXX")
-jq -er '.root_token' "$recovery_dir/initialization.json" |
-  openssl base64 -d -A |
-  gpg_with_passphrase --decrypt >"$root_token_file" ||
-  fail "the encrypted initial root token could not be recovered"
-chmod 0600 "$root_token_file"
-[ -s "$root_token_file" ] || fail "the recovered initial root token is empty"
+if [ "$action" = "retire" ]; then
+  root_token_file=$(mktemp "$runtime_dir/initial-root-token.XXXXXX")
+  jq -er '.root_token' "$recovery_dir/initialization.json" |
+    openssl base64 -d -A |
+    gpg_with_passphrase --decrypt >"$root_token_file" ||
+    fail "the encrypted initial root token could not be recovered"
+  chmod 0600 "$root_token_file"
+  [ -s "$root_token_file" ] || fail "the recovered initial root token is empty"
+fi
 
 client_key_file=$(mktemp "$runtime_dir/root-generation-client-key.XXXXXX")
-if [ ! -e "$client_dir/client.crt" ] && [ ! -e "$client_dir/client.key.gpg" ]; then
+if [ "$action" = "retire" ] &&
+  [ ! -e "$client_dir/client.crt" ] && [ ! -e "$client_dir/client.key.gpg" ]; then
   echo "Creating the exact-pinned root-generation client credential..."
   openssl genpkey \
     -algorithm RSA \
@@ -277,18 +331,20 @@ rm -f "$private_public_file" "$certificate_public_file"
 private_public_file=
 certificate_public_file=
 
-export OPENBAO_ROOT_TOKEN_FILE="$root_token_file"
-export OPENBAO_ROOT_RECOVERY_CLIENT_DIR="$client_dir"
-echo "Configuring authenticated root generation: profile=$profile remote=$remote"
-INCUS_CONF="$config_dir" \
-ANSIBLE_CONFIG="$PWD/ansible.cfg" \
-ANSIBLE_HOME="$PWD/.cache/ansible" \
-ANSIBLE_COLLECTIONS_PATH="$PWD/.cache/ansible/collections" \
-ANSIBLE_LOCAL_TEMP="$PWD/.cache/ansible/tmp" \
-.venv/bin/ansible-playbook \
-  --diff \
-  --inventory "$inventory" \
-  ansible/playbooks/configure-openbao-root-recovery.yml
+if [ "$action" = "retire" ]; then
+  export OPENBAO_ROOT_TOKEN_FILE="$root_token_file"
+  export OPENBAO_ROOT_RECOVERY_CLIENT_DIR="$client_dir"
+  echo "Configuring authenticated root generation: profile=$profile remote=$remote"
+  INCUS_CONF="$config_dir" \
+  ANSIBLE_CONFIG="$PWD/ansible.cfg" \
+  ANSIBLE_HOME="$PWD/.cache/ansible" \
+  ANSIBLE_COLLECTIONS_PATH="$PWD/.cache/ansible/collections" \
+  ANSIBLE_LOCAL_TEMP="$PWD/.cache/ansible/tmp" \
+  .venv/bin/ansible-playbook \
+    --diff \
+    --inventory "$inventory" \
+    ansible/playbooks/configure-openbao-root-recovery.yml
+fi
 
 incus_exec sh -c \
   "umask 077; cat > '$remote_prefix.py'; chmod 0700 '$remote_prefix.py'" \
@@ -300,9 +356,46 @@ incus_exec sh -c \
 incus_exec sh -c \
   "umask 077; cat > '$remote_prefix-client.key'" \
   <"$client_key_file"
-incus_exec sh -c \
-  "umask 077; cat > '$remote_prefix-initial-token'" \
-  <"$root_token_file"
+if [ "$action" = "retire" ]; then
+  incus_exec sh -c \
+    "umask 077; cat > '$remote_prefix-initial-token'" \
+    <"$root_token_file"
+else
+  INCUS_CONF="$config_dir" \
+    incus exec --project rpr-dev "$remote:smoke-01" -- \
+      cat /etc/rpr-machine-auth/client.crt |
+    incus_exec sh -c \
+      "umask 077; cat > '$remote_prefix-machine.crt'" ||
+    fail "could not transfer the public machine certificate"
+fi
+
+if [ "$action" = "p203-machine-auth" ]; then
+  helper_result_file=$(mktemp "$runtime_dir/p203-machine-result.XXXXXX")
+  echo "Configuring the exact-pinned machine identity through authenticated recovery..."
+  jq -er '.unseal_keys_b64[0]' "$recovery_dir/initialization.json" |
+    openssl base64 -d -A |
+    gpg_with_passphrase --decrypt |
+    incus_exec python3 \
+      "$remote_prefix.py" \
+      "$remote_prefix-client.crt" \
+      "$remote_prefix-client.key" \
+      --machine-auth \
+      "$remote_prefix-machine.crt" >"$helper_result_file" ||
+    fail "authenticated P2-03 recovery failed"
+  jq -e '.machine_auth_configured and .temporary_root_revoked' \
+    "$helper_result_file" >/dev/null ||
+    fail "machine-auth recovery did not report a completed root-token revocation"
+  echo "Proving certificate login and exact machine capabilities..."
+  INCUS_CONF="$config_dir" \
+  ANSIBLE_CONFIG="$PWD/ansible.cfg" \
+  ANSIBLE_HOME="$PWD/.cache/ansible" \
+  ANSIBLE_COLLECTIONS_PATH="$PWD/.cache/ansible/collections" \
+  ANSIBLE_LOCAL_TEMP="$PWD/.cache/ansible/tmp" \
+  .venv/bin/ansible-playbook \
+    --diff --tags accept --inventory "$inventory" \
+    ansible/playbooks/configure-machine-auth.yml
+  exit 0
+fi
 
 helper_result_file=$(mktemp "$runtime_dir/root-retirement-result.XXXXXX")
 echo "Generating and revoking a recovery root before retiring the initial token..."

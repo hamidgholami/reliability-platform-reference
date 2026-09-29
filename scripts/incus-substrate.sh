@@ -460,6 +460,20 @@ write_inventory()
                 ansible_host: .openbao_foundation.value.instance
               }
             }
+          },
+          machine_auth_client: {
+            vars: {
+              ansible_connection: "community.general.incus",
+              ansible_incus_remote: $remote,
+              ansible_incus_project: $project,
+              ansible_user: "root",
+              rpr_deployment_profile: $profile
+            },
+            hosts: {
+              (.substrate.value.instance): {
+                ansible_host: .substrate.value.instance
+              }
+            }
           }
         }
       }

@@ -1,0 +1,312 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Prepare the synthetic machine identity on the existing smoke container
+  tags: prepare
+  hosts: machine_auth_client
+  gather_facts: false
+  any_errors_fatal: true
+  become: false
+  tasks:
+    - name: Require the reviewed machine client
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname == 'smoke-01'
+          - rpr_deployment_profile in ['workstation-validation', 'single-node-reference']
+
+    - name: Check Python and the APT binding
+      ansible.builtin.raw: /usr/bin/python3 -c 'import apt'
+      register: machine_python_probe
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Install Python when absent
+      ansible.builtin.raw: >-
+        apt-get update && DEBIAN_FRONTEND=noninteractive
+        apt-get install -y python3 python3-apt
+      when: machine_python_probe.rc != 0
+      changed_when: true
+
+    - name: Install OpenSSL for client identity generation
+      ansible.builtin.apt:
+        name: openssl
+        state: present
+        update_cache: true
+
+    - name: Create the private DNS network configuration directory
+      ansible.builtin.file:
+        path: /etc/systemd/network/eth0.network.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Create the general DNS configuration directory
+      ansible.builtin.file:
+        path: /etc/systemd/resolved.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Route only the private zone to its authoritative secondaries
+      ansible.builtin.copy:
+        dest: /etc/systemd/network/eth0.network.d/50-rpr-private-dns.conf
+        content: |
+          [Network]
+          DNS=10.20.0.10
+          DNS=10.20.0.11
+          Domains=~dev.apadanalab.de
+          DNSDefaultRoute=no
+
+          [DHCPv4]
+          UseDNS=no
+        owner: root
+        group: root
+        mode: '0644'
+      notify:
+        - Reload the network configuration
+        - Apply private DNS routing to the current link
+
+    - name: Preserve the bridge resolver for other names
+      ansible.builtin.copy:
+        dest: /etc/systemd/resolved.conf.d/50-rpr-general-dns.conf
+        content: |
+          [Resolve]
+          DNS=10.20.0.1
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Apply the general resolver configuration
+
+    - name: Apply DNS changes before the private-name preflight
+      ansible.builtin.meta: flush_handlers
+
+    - name: Resolve the private OpenBao alias before recovery
+      ansible.builtin.command: getent ahostsv4 openbao.dev.apadanalab.de
+      register: machine_auth_private_dns_answer
+      changed_when: false
+
+    - name: Require the reviewed OpenBao service address
+      ansible.builtin.assert:
+        that:
+          - machine_auth_private_dns_answer.stdout is search('(^|\n)10\.20\.0\.20\s')
+
+    - name: Create protected machine identity directory
+      ansible.builtin.file:
+        path: /etc/rpr-machine-auth
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Generate an Ed25519 client key inside the machine instance
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - genpkey
+          - -algorithm
+          - ED25519
+          - -out
+          - /etc/rpr-machine-auth/client.key
+        creates: /etc/rpr-machine-auth/client.key
+      no_log: true
+      diff: false
+
+    - name: Restrict the client key
+      ansible.builtin.file:
+        path: /etc/rpr-machine-auth/client.key
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+      diff: false
+
+    - name: Create the bounded self-signed client certificate
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - req
+          - -new
+          - -x509
+          - -days
+          - '90'
+          - -key
+          - /etc/rpr-machine-auth/client.key
+          - -out
+          - /etc/rpr-machine-auth/client.crt
+          - -subj
+          - /O=ApadanaLab/OU=Platform Test/CN=RPR P2-03 Machine Probe
+          - -addext
+          - basicConstraints=critical,CA:FALSE
+          - -addext
+          - keyUsage=critical,digitalSignature
+          - -addext
+          - extendedKeyUsage=clientAuth
+        creates: /etc/rpr-machine-auth/client.crt
+      no_log: true
+      diff: false
+
+    - name: Require at least seven days of client certificate validity
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - x509
+          - -in
+          - /etc/rpr-machine-auth/client.crt
+          - -noout
+          - -checkend
+          - '604800'
+      changed_when: false
+
+    - name: Read the client key public half
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - pkey
+          - -in
+          - /etc/rpr-machine-auth/client.key
+          - -pubout
+      register: machine_auth_key_public
+      changed_when: false
+      no_log: true
+      diff: false
+
+    - name: Read the certificate public key
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - x509
+          - -in
+          - /etc/rpr-machine-auth/client.crt
+          - -pubkey
+          - -noout
+      register: machine_auth_certificate_public
+      changed_when: false
+      no_log: true
+      diff: false
+
+    - name: Require the certificate to match the private key
+      ansible.builtin.assert:
+        that:
+          - machine_auth_key_public.stdout == machine_auth_certificate_public.stdout
+      no_log: true
+      diff: false
+
+  handlers:
+    - name: Reload the network configuration
+      ansible.builtin.command: networkctl reload
+      changed_when: true
+
+    - name: Apply private DNS routing to the current link
+      ansible.builtin.command: networkctl reconfigure eth0
+      changed_when: true
+
+    - name: Apply the general resolver configuration
+      ansible.builtin.systemd_service:
+        name: systemd-resolved
+        state: restarted
+
+- name: Prove certificate login and machine policy from the client
+  tags: accept
+  hosts: machine_auth_client
+  gather_facts: false
+  any_errors_fatal: true
+  become: false
+  tasks:
+    - name: Read the public OpenBao trust root from the service
+      ansible.builtin.slurp:
+        src: /opt/openbao/tls/ca.crt
+      delegate_to: bao-01
+      register: machine_auth_trust_root
+
+    - name: Install the public OpenBao trust root
+      ansible.builtin.copy:
+        content: "{{ machine_auth_trust_root.content | b64decode }}"
+        dest: /etc/rpr-machine-auth/ca.crt
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Login with the exact-pinned client certificate
+      ansible.builtin.uri:
+        url: https://openbao.dev.apadanalab.de:8200/v1/auth/cert/login
+        method: POST
+        body_format: json
+        body:
+          name: rpr-p203-machine
+        ca_path: /etc/rpr-machine-auth/ca.crt
+        client_cert: /etc/rpr-machine-auth/client.crt
+        client_key: /etc/rpr-machine-auth/client.key
+        return_content: true
+        status_code: 200
+      register: machine_auth_login
+      no_log: true
+      diff: false
+
+    - name: Validate and revoke the short-lived machine token
+      block:
+        - name: Assert exact machine policy and token lifetime
+          ansible.builtin.assert:
+            that:
+              - machine_auth_login.json.auth.policies == ['rpr-p203-machine']
+              - machine_auth_login.json.auth.lease_duration > 0
+              - machine_auth_login.json.auth.lease_duration <= 300
+          no_log: true
+          diff: false
+
+        - name: Check allowed and denied machine capabilities
+          ansible.builtin.uri:
+            url: https://openbao.dev.apadanalab.de:8200/v1/sys/capabilities-self
+            method: POST
+            headers:
+              X-Vault-Token: "{{ machine_auth_login.json.auth.client_token }}"
+            body_format: json
+            body:
+              paths:
+                - database/creds/rpr-p203-read
+                - ssh-client-signer/sign/rpr-p203-probe
+                - rpr-kv/data/operator/example
+                - sys/mounts
+            ca_path: /etc/rpr-machine-auth/ca.crt
+            return_content: true
+            status_code: 200
+          register: machine_auth_capabilities
+          no_log: true
+          diff: false
+
+        - name: Assert machine access is limited to two credential paths
+          ansible.builtin.assert:
+            that:
+              - machine_auth_capabilities.json.data['database/creds/rpr-p203-read'] == ['read']
+              - machine_auth_capabilities.json.data['ssh-client-signer/sign/rpr-p203-probe'] == ['update']
+              - machine_auth_capabilities.json.data['rpr-kv/data/operator/example'] == ['deny']
+              - machine_auth_capabilities.json.data['sys/mounts'] == ['deny']
+          no_log: true
+          diff: false
+
+      always:
+        - name: Revoke the acceptance login token
+          ansible.builtin.uri:
+            url: https://openbao.dev.apadanalab.de:8200/v1/auth/token/revoke-self
+            method: POST
+            headers:
+              X-Vault-Token: "{{ machine_auth_login.json.auth.client_token }}"
+            body_format: json
+            body: {}
+            ca_path: /etc/rpr-machine-auth/ca.crt
+            status_code: 204
+          when: machine_auth_login.json.auth.client_token is defined
+          no_log: true
+          diff: false
+
+    - name: Report redacted machine authentication acceptance
+      ansible.builtin.debug:
+        msg:
+          identity: rpr-p203-machine
+          certificate_key_type: Ed25519
+          token_max_seconds: 300
+          allowed_paths: [database/creds/rpr-p203-read, ssh-client-signer/sign/rpr-p203-probe]
+          acceptance_token_revoked: true

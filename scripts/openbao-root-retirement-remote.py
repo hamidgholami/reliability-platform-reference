@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Hamid Gholami
 # SPDX-License-Identifier: Apache-2.0
 
-"""Run the secret-bearing part of the OpenBao root-retirement ceremony."""
+"""Run authenticated root recovery for retirement or machine-auth setup."""
 
 from __future__ import annotations
 
@@ -20,6 +20,19 @@ CA_FILE = "/opt/openbao/tls/ca.crt"
 RECOVERY_ROLE = "rpr-root-generation"
 RECOVERY_POLICY = "rpr-root-generation"
 ADMIN_POLICY = "rpr-bootstrap-admin"
+MACHINE_ROLE = "rpr-p203-machine"
+MACHINE_POLICY_DOCUMENT = '''path "database/creds/rpr-p203-read" {
+  capabilities = ["read"]
+}
+path "ssh-client-signer/sign/rpr-p203-probe" {
+  capabilities = ["update"]
+}
+path "sys/capabilities-self" {
+  capabilities = ["update"]
+}
+path "auth/token/revoke-self" {
+  capabilities = ["update"]
+}'''
 
 
 class CeremonyError(RuntimeError):
@@ -76,18 +89,27 @@ def require_text(value: Any, label: str) -> str:
 
 
 def main() -> int:
-    if len(sys.argv) != 4:
-        raise CeremonyError("usage: remote-helper CLIENT_CERT CLIENT_KEY INITIAL_TOKEN")
+    machine_auth = len(sys.argv) == 5 and sys.argv[3] == "--machine-auth"
+    if not (len(sys.argv) == 4 or machine_auth):
+        raise CeremonyError(
+            "usage: remote-helper CLIENT_CERT CLIENT_KEY INITIAL_TOKEN|--machine-auth MACHINE_CERT"
+        )
 
     client_certificate = Path(sys.argv[1])
     client_key = Path(sys.argv[2])
-    initial_token_file = Path(sys.argv[3])
-    for protected_file in (client_certificate, client_key, initial_token_file):
+    input_file = Path(sys.argv[4] if machine_auth else sys.argv[3])
+    protected_files = [client_certificate, client_key, input_file]
+    for protected_file in protected_files:
         if not protected_file.is_file() or protected_file.stat().st_mode & 0o077:
             raise CeremonyError("a protected ceremony input is missing or unsafe")
 
     unseal_share = require_text(sys.stdin.readline().strip(), "Shamir share")
-    initial_token = require_text(initial_token_file.read_text().strip(), "initial token")
+    initial_token = (
+        "" if machine_auth else require_text(input_file.read_text().strip(), "initial token")
+    )
+    machine_certificate = input_file.read_text().strip() if machine_auth else ""
+    if machine_auth and "-----BEGIN CERTIFICATE-----" not in machine_certificate:
+        raise CeremonyError("the machine certificate is invalid")
 
     context = ssl.create_default_context(cafile=CA_FILE)
     context.load_cert_chain(str(client_certificate), str(client_key))
@@ -101,15 +123,18 @@ def main() -> int:
     recovery_revoked = False
 
     try:
-        _, initial_lookup = request(
-            context,
-            "GET",
-            "/v1/auth/token/lookup-self",
-            token=initial_token,
-        )
-        initial_data = initial_lookup.get("data", {})
-        if initial_data.get("policies") != ["root"] or initial_data.get("ttl") != 0:
-            raise CeremonyError("the initial credential is not a non-expiring root token")
+        if not machine_auth:
+            _, initial_lookup = request(
+                context,
+                "GET",
+                "/v1/auth/token/lookup-self",
+                token=initial_token,
+            )
+            initial_data = initial_lookup.get("data", {})
+            if initial_data.get("policies") != ["root"] or initial_data.get("ttl") != 0:
+                raise CeremonyError(
+                    "the initial credential is not a non-expiring root token"
+                )
 
         _, login = request(
             context,
@@ -185,37 +210,85 @@ def main() -> int:
         if root_data.get("policies") != ["root"] or root_data.get("ttl") != 0:
             raise CeremonyError("recovery did not create a non-expiring root token")
 
-        _, admin_response = request(
-            context,
-            "POST",
-            "/v1/auth/token/create-orphan",
-            token=generated_root_token,
-            body={
-                "policies": [ADMIN_POLICY],
-                "no_default_policy": True,
-                "renewable": False,
-                "ttl": "5m",
-                "explicit_max_ttl": "5m",
-                "display_name": "rpr-recovery-admin-acceptance",
-            },
-        )
-        admin_auth = admin_response.get("auth", {})
-        admin_token = require_text(admin_auth.get("client_token"), "recovery admin token")
-        if admin_auth.get("policies") != [ADMIN_POLICY]:
-            raise CeremonyError("recovery admin token has unexpected policies")
-        if not 0 < int(admin_auth.get("lease_duration", 0)) <= 300:
-            raise CeremonyError("recovery admin token has an unsafe TTL")
-
-        request(context, "GET", "/v1/sys/mounts", token=admin_token)
-        request(
-            context,
-            "POST",
-            "/v1/auth/token/revoke-self",
-            token=admin_token,
-            body={},
-            expected=(204,),
-        )
-        admin_token = None
+        if machine_auth:
+            request(
+                context,
+                "POST",
+                f"/v1/sys/policies/acl/{MACHINE_ROLE}",
+                token=generated_root_token,
+                body={"policy": MACHINE_POLICY_DOCUMENT},
+                expected=(204,),
+            )
+            request(
+                context,
+                "POST",
+                f"/v1/auth/cert/certs/{MACHINE_ROLE}",
+                token=generated_root_token,
+                body={
+                    "certificate": machine_certificate,
+                    "display_name": MACHINE_ROLE,
+                    "allowed_common_names": ["RPR P2-03 Machine Probe"],
+                    "allowed_organizational_units": ["Platform Test"],
+                    "token_policies": [MACHINE_ROLE],
+                    "token_ttl": "5m",
+                    "token_max_ttl": "5m",
+                    "token_explicit_max_ttl": "5m",
+                    "token_no_default_policy": True,
+                    "token_type": "service",
+                },
+                expected=(200, 204),
+            )
+            _, role_response = request(
+                context,
+                "GET",
+                f"/v1/auth/cert/certs/{MACHINE_ROLE}",
+                token=generated_root_token,
+            )
+            role = role_response.get("data", {})
+            if (
+                role.get("certificate", "").strip() != machine_certificate
+                or role.get("display_name") != MACHINE_ROLE
+                or role.get("token_policies") != [MACHINE_ROLE]
+                or role.get("token_ttl") != 300
+                or role.get("token_max_ttl") != 300
+                or role.get("token_explicit_max_ttl") != 300
+                or not role.get("token_no_default_policy")
+                or role.get("token_type") != "service"
+                or role.get("allowed_common_names") != ["RPR P2-03 Machine Probe"]
+                or role.get("allowed_organizational_units") != ["Platform Test"]
+            ):
+                raise CeremonyError("machine certificate role has an unsafe boundary")
+        else:
+            _, admin_response = request(
+                context,
+                "POST",
+                "/v1/auth/token/create-orphan",
+                token=generated_root_token,
+                body={
+                    "policies": [ADMIN_POLICY],
+                    "no_default_policy": True,
+                    "renewable": False,
+                    "ttl": "5m",
+                    "explicit_max_ttl": "5m",
+                    "display_name": "rpr-recovery-admin-acceptance",
+                },
+            )
+            admin_auth = admin_response.get("auth", {})
+            admin_token = require_text(admin_auth.get("client_token"), "recovery admin token")
+            if admin_auth.get("policies") != [ADMIN_POLICY]:
+                raise CeremonyError("recovery admin token has unexpected policies")
+            if not 0 < int(admin_auth.get("lease_duration", 0)) <= 300:
+                raise CeremonyError("recovery admin token has an unsafe TTL")
+            request(context, "GET", "/v1/sys/mounts", token=admin_token)
+            request(
+                context,
+                "POST",
+                "/v1/auth/token/revoke-self",
+                token=admin_token,
+                body={},
+                expected=(204,),
+            )
+            admin_token = None
 
         request(
             context,
@@ -252,6 +325,10 @@ def main() -> int:
             expected=(403,),
         )
         recovery_token = None
+
+        if machine_auth:
+            print('{"machine_auth_configured":true,"temporary_root_revoked":true}')
+            return 0
 
         request(
             context,

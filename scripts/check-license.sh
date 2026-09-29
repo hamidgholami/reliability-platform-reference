@@ -72,6 +72,7 @@ for source_file in Makefile .editorconfig .gitignore .gitleaks.toml \
   ansible/playbooks/import-openbao-pki.yml \
   ansible/playbooks/rotate-openbao-certificate.yml \
   ansible/playbooks/configure-openbao-root-recovery.yml \
+  ansible/playbooks/configure-machine-auth.yml \
   ansible/roles/openbao_bootstrap/defaults/main.yml \
   ansible/roles/openbao_bootstrap/meta/argument_specs.yml \
   ansible/roles/openbao_bootstrap/tasks/main.yml \

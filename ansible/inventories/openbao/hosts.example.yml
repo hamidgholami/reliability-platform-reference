@@ -20,3 +20,13 @@ all:
       hosts:
         bao-01:
           ansible_host: bao-01
+    machine_auth_client:
+      vars:
+        ansible_connection: community.general.incus
+        ansible_incus_remote: replace-with-reviewed-remote
+        ansible_incus_project: rpr-dev
+        ansible_user: root
+        rpr_deployment_profile: workstation-validation
+      hosts:
+        smoke-01:
+          ansible_host: smoke-01

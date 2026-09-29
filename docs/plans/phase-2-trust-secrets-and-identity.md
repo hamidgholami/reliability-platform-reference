@@ -231,6 +231,9 @@ intermediate, and no longer depends on the initial root token.
 
 #### Readiness decision — selected 2026-09-29
 
+The [machine-authentication runbook](../runbooks/machine-auth.md) defines the
+first executable slice and its credential cleanup.
+
 Use the existing OpenBao certificate auth mount for one synthetic machine
 identity on `smoke-01`. Generate its private key inside that instance and
 exact-pin its 90-day self-signed client certificate to a dedicated role. Issue
@@ -240,16 +243,18 @@ below. It does not inherit the P2-02 `rpr-machine-read` KV policy. Replace the
 pin before certificate expiry, and disable the role and revoke its tokens on
 suspected key exposure. A recreated `smoke-01` needs a new key and pin. Do not
 use the root-generation certificate for routine configuration or machine login.
+Route the private DNS zone from `smoke-01` to the existing BIND secondaries,
+while retaining the Incus bridge resolver for other names.
 
 After retirement of the initial root token, configuration requires the
-protected Shamir root-generation ceremony. Use its temporary root only to mint
-a 15-minute, narrowly scoped P2-03 configuration token; revoke the temporary
-root and recovery login immediately, and revoke the configuration token when
-the work finishes. No persistent operator certificate is introduced for this
-one slice. A rerun before Keycloak OIDC exists repeats the guarded ceremony;
-that operator cost is preferable to maintaining a second standing client key.
-Keep the operator and machine policies distinct. P2-04 will provide the
-ordinary human authentication path.
+protected Shamir root-generation ceremony. Use its temporary root to install
+the fixed machine policy and exact-pinned certificate role, then revoke the
+root and recovery login before machine acceptance. A nominally scoped token
+allowed to edit that policy or role could grant its own certificate broader
+rights, so do not mint a configuration token for this operation. No persistent
+operator certificate is introduced for this slice. A rerun before Keycloak
+OIDC exists repeats the guarded ceremony. Keep the operator and machine
+policies distinct. P2-04 will provide the ordinary human authentication path.
 
 Install PostgreSQL 17 from Debian 13 stable/security on `pg-01`, its own
 unprivileged Incus container at `10.20.0.21` with generated private DNS name
@@ -303,7 +308,7 @@ the new instances, addresses, and network ACLs; Ansible owns guest packages,
 configuration, protected files, and OpenBao API objects. No new runtime or
 custom credential service is needed.
 
-- [ ] Implement one machine-authentication path appropriate to the standalone
+- [x] Implement one machine-authentication path appropriate to the standalone
   reference profile, with short token TTLs and no shared human identity.
 - [ ] Create PostgreSQL on its own bounded service instance and establish the
   minimum administrative bootstrap outside application credentials.
