@@ -13,6 +13,8 @@ expected_fingerprint=${INCUS_SERVER_CERTIFICATE_SHA256:-}
 platform_ipv4_cidr=${INCUS_IPV4_CIDR:-10.20.0.0/24}
 platform_dns_domain=${INCUS_DNS_DOMAIN:-dev.apadanalab.de}
 instance_image=${INCUS_IMAGE:-images:debian/13}
+ssh_test_enabled=${SSH_TEST_ENABLED:-false}
+ssh_test_acl_retained=${SSH_TEST_ACL_RETAINED:-false}
 terraform_root="infrastructure/incus"
 cache_dir=${RPR_INCUS_CACHE_DIR:-"$PWD/.cache/incus-substrate"}
 runtime_vars="$cache_dir/runtime.auto.tfvars.json"
@@ -55,6 +57,16 @@ normalize_fingerprint()
 
 validate_inputs()
 {
+  case "$ssh_test_enabled" in
+    true|false) ;;
+    *) fail "SSH_TEST_ENABLED must be true or false" ;;
+  esac
+  case "$ssh_test_acl_retained" in
+    true|false) ;;
+    *) fail "SSH_TEST_ACL_RETAINED must be true or false" ;;
+  esac
+  [ "$ssh_test_enabled" = "false" ] || [ "$ssh_test_acl_retained" = "false" ] ||
+    fail "SSH_TEST_ACL_RETAINED is only for retirement"
   [ -n "$config_dir" ] ||
     fail "set INCUS_CONFIG_DIR to the isolated OpenTofu client configuration"
   case "$config_dir" in
@@ -230,13 +242,17 @@ write_runtime_vars()
     --arg remote "$remote" \
     --arg ipv4_cidr "$platform_ipv4_cidr" \
     --arg dns_domain "$platform_dns_domain" \
-    --arg image "$instance_image" '{
+    --arg image "$instance_image" \
+    --argjson ssh_test_enabled "$ssh_test_enabled" \
+    --argjson ssh_test_acl_retained "$ssh_test_acl_retained" '{
       deployment_profile: $profile,
       incus_config_dir: $config_dir,
       incus_remote: $remote,
       platform_ipv4_cidr: $ipv4_cidr,
       platform_dns_domain: $dns_domain,
-      instance_image: $image
+      instance_image: $image,
+      ssh_test_enabled: $ssh_test_enabled,
+      ssh_test_acl_retained: $ssh_test_acl_retained
     }' >"$runtime_vars"
 }
 
@@ -262,6 +278,10 @@ load_session()
     fail "planned Incus session is invalid"
   session_image="$(jq -er '.instance_image' "$session_file")" ||
     fail "planned Incus session is invalid"
+  session_ssh_test_enabled="$(jq -er '.ssh_test_enabled | if type == "boolean" then tostring else empty end' "$session_file")" ||
+    fail "planned Incus session has no SSH test fixture setting"
+  session_ssh_test_acl_retained="$(jq -er '.ssh_test_acl_retained | if type == "boolean" then tostring else empty end' "$session_file")" ||
+    fail "planned Incus session has no SSH ACL retirement setting"
   session_private_dns_secrets_file="$(jq -er '.private_dns_secrets_file' "$session_file")" ||
     fail "planned Incus session is invalid"
   expected_private_dns_secrets_sha="$(jq -er '.private_dns_secrets_sha256' "$session_file")" ||
@@ -275,6 +295,10 @@ load_session()
     fail "INCUS_REMOTE does not match the reviewed Incus plan"
   [ "$endpoint" = "$session_endpoint" ] ||
     fail "INCUS_ENDPOINT does not match the reviewed Incus plan"
+  [ "$ssh_test_enabled" = "$session_ssh_test_enabled" ] ||
+    fail "SSH_TEST_ENABLED does not match the reviewed Incus plan"
+  [ "$ssh_test_acl_retained" = "$session_ssh_test_acl_retained" ] ||
+    fail "SSH_TEST_ACL_RETAINED does not match the reviewed Incus plan"
   [ "$normalized_expected" = "$session_fingerprint" ] ||
     fail "the server fingerprint does not match the reviewed Incus plan"
   [ "$private_dns_secrets_file" = "$session_private_dns_secrets_file" ] ||
@@ -322,8 +346,29 @@ plan()
     | select(.mode == "managed")
     | select(.change.actions | index("delete"))
   ] | length')"
-  [ "$destructive_count" -eq 0 ] ||
-    fail "the create plan contains destructive actions; use the replacement or destroy workflow"
+  if [ "$destructive_count" -ne 0 ] || [ "${RETIRE_SSH_TEST:-}" = "1" ]; then
+    [ "${RETIRE_SSH_TEST:-}" = "1" ] && [ "$ssh_test_enabled" = "false" ] ||
+      fail "the create plan contains destructive actions; use the replacement or destroy workflow"
+    printf '%s' "$plan_json" | jq -e '
+      [.resource_changes[]? | select(.mode == "managed") |
+        select(.change.actions != ["no-op"]) |
+        {address, actions: .change.actions,
+         before_config: .change.before.config,
+         after_config: .change.after.config}] as $changes
+      | ($changes | length) > 0
+      and (([$changes[] | select(.address == "incus_network_acl.ssh_test[0]")] | length) == 0
+        or ([$changes[] | select(.address == "incus_network.platform")] | length) == 0)
+      and all($changes[];
+        (.address == "incus_network.platform" and .actions == ["update"]
+         and .after_config["security.acls"] == "openbao-api,postgresql-tls"
+         and .before_config["security.acls"] == "openbao-api,postgresql-tls,ssh-certificate-test"
+         and (.before_config | del(."security.acls")) == (.after_config | del(."security.acls")))
+        or (.address == "incus_instance.ssh_test[0]" and .actions == ["delete"])
+        or (.address == "incus_profile.ssh_test[0]" and .actions == ["delete"])
+        or (.address == "incus_network_acl.ssh_test[0]" and .actions == ["delete"])
+      )
+    ' >/dev/null || fail "retirement plan exceeds the disposable SSH target boundary"
+  fi
   action_summary="$(printf '%s' "$plan_json" | jq -c '[
     .resource_changes[]?
     | select(.mode == "managed")
@@ -340,6 +385,8 @@ plan()
     --arg ipv4_cidr "$platform_ipv4_cidr" \
     --arg dns_domain "$platform_dns_domain" \
     --arg image "$instance_image" \
+    --argjson ssh_test_enabled "$ssh_test_enabled" \
+    --argjson ssh_test_acl_retained "$ssh_test_acl_retained" \
     --arg private_dns_secrets_file "$private_dns_secrets_file" \
     --arg private_dns_secrets_sha "$private_dns_secrets_sha" \
     --arg server_version "$server_version" \
@@ -354,6 +401,8 @@ plan()
       platform_ipv4_cidr: $ipv4_cidr,
       platform_dns_domain: $dns_domain,
       instance_image: $image,
+      ssh_test_enabled: $ssh_test_enabled,
+      ssh_test_acl_retained: $ssh_test_acl_retained,
       private_dns_secrets_file: $private_dns_secrets_file,
       private_dns_secrets_sha256: $private_dns_secrets_sha,
       incus_server_version: $server_version,
@@ -401,15 +450,14 @@ write_inventory()
         ipv4_address: .postgresql_service.value.ipv4_address,
         dns_name: .postgresql_service.value.dns_name,
         status: .postgresql_service.value.status
-      },
-      {
-        name: .ssh_test_service.value.instance,
-        type: .ssh_test_service.value.instance_type,
-        ipv4_address: .ssh_test_service.value.ipv4_address,
-        dns_name: .ssh_test_service.value.dns_name,
-        status: .ssh_test_service.value.status
       }
-    ]
+    ] + (if .ssh_test_service.value == null then [] else [{
+      name: .ssh_test_service.value.instance,
+      type: .ssh_test_service.value.instance_type,
+      ipv4_address: .ssh_test_service.value.ipv4_address,
+      dns_name: .ssh_test_service.value.dns_name,
+      status: .ssh_test_service.value.status
+    }] end)
   }' >"$inventory_file"
   printf '%s' "$outputs" | jq \
     --arg remote "$remote" \
@@ -508,7 +556,7 @@ write_inventory()
               }
             }
           },
-          ssh_test_target: {
+          ssh_test_target: (if .ssh_test_service.value == null then null else {
             vars: {
               ansible_connection: "community.general.incus",
               ansible_incus_remote: $remote,
@@ -524,10 +572,11 @@ write_inventory()
                 ansible_host: .ssh_test_service.value.instance
               }
             }
-          }
+          } end)
         }
       }
-    }' >"$openbao_inventory_file"
+    } | if .all.children.ssh_test_target == null
+        then del(.all.children.ssh_test_target) else . end' >"$openbao_inventory_file"
 }
 
 apply_plan()
@@ -595,12 +644,21 @@ validate_substrate()
   postgresql_dns_name="$(printf '%s' "$outputs" | jq -er '.postgresql_service.value.dns_name')"
   postgresql_port="$(printf '%s' "$outputs" | jq -er '.postgresql_service.value.port')"
   postgresql_acl_name="$(printf '%s' "$outputs" | jq -er '.postgresql_service.value.network_acl')"
-  ssh_test_profile_name="$(printf '%s' "$outputs" | jq -er '.ssh_test_service.value.profile')"
-  ssh_test_instance_name="$(printf '%s' "$outputs" | jq -er '.ssh_test_service.value.instance')"
-  ssh_test_ipv4_address="$(printf '%s' "$outputs" | jq -er '.ssh_test_service.value.ipv4_address')"
-  ssh_test_dns_name="$(printf '%s' "$outputs" | jq -er '.ssh_test_service.value.dns_name')"
-  ssh_test_port="$(printf '%s' "$outputs" | jq -er '.ssh_test_service.value.port')"
-  ssh_test_acl_name="$(printf '%s' "$outputs" | jq -er '.ssh_test_service.value.network_acl')"
+  ssh_test_present="$(printf '%s' "$outputs" | jq -r '.ssh_test_service.value != null')"
+  [ "$ssh_test_present" = "$ssh_test_enabled" ] ||
+    fail "SSH test target state differs from the reviewed Incus session"
+  if [ "$ssh_test_present" = "true" ]; then
+    ssh_test_profile_name="$(printf '%s' "$outputs" | jq -er '.ssh_test_service.value.profile')"
+    ssh_test_instance_name="$(printf '%s' "$outputs" | jq -er '.ssh_test_service.value.instance')"
+    ssh_test_ipv4_address="$(printf '%s' "$outputs" | jq -er '.ssh_test_service.value.ipv4_address')"
+    ssh_test_dns_name="$(printf '%s' "$outputs" | jq -er '.ssh_test_service.value.dns_name')"
+    ssh_test_port="$(printf '%s' "$outputs" | jq -er '.ssh_test_service.value.port')"
+    ssh_test_acl_name="$(printf '%s' "$outputs" | jq -er '.ssh_test_service.value.network_acl')"
+    expected_ssh_test_answer="$ssh_test_ipv4_address"
+  else
+    ssh_test_dns_name="ssh-test-01.${session_dns_domain}"
+    expected_ssh_test_answer=""
+  fi
   planned_image="$(printf '%s' "$outputs" | jq -er '.substrate.value.instance_image')"
   [ "$planned_image" = "$session_image" ] ||
     fail "the state image differs from the reviewed Incus session"
@@ -647,7 +705,11 @@ validate_substrate()
     fail "the managed bridge is not attached to the private forward zone"
   [ "$(printf '%s' "$network_json" | jq -r '.config["dns.zone.reverse.ipv4"]')" = "$reverse_zone" ] ||
     fail "the managed bridge is not attached to the private reverse zone"
-  [ "$(printf '%s' "$network_json" | jq -r '.config["security.acls"]')" = "${openbao_acl_name},${postgresql_acl_name},${ssh_test_acl_name}" ] ||
+  expected_acls="${openbao_acl_name},${postgresql_acl_name}"
+  if [ "$ssh_test_present" = "true" ]; then
+    expected_acls="${expected_acls},${ssh_test_acl_name}"
+  fi
+  [ "$(printf '%s' "$network_json" | jq -r '.config["security.acls"]')" = "$expected_acls" ] ||
     fail "the managed bridge is not attached to all service ACLs"
   [ "$(printf '%s' "$network_json" | jq -r '.config["security.acls.default.ingress.action"]')" = "allow" ] ||
     fail "the managed bridge does not preserve ingress for ordinary NICs"
@@ -820,6 +882,7 @@ validate_substrate()
   [ "$actual_postgresql_ipv4" = "$postgresql_ipv4_address" ] ||
     fail "the PostgreSQL container does not use its reviewed static address"
 
+  if [ "$ssh_test_present" = "true" ]; then
   ssh_test_profile_json="$(INCUS_CONF="$config_dir" incus query \
     "${remote}:/1.0/profiles/${ssh_test_profile_name}?project=${project_name}")"
   printf '%s' "$ssh_test_profile_json" | jq -e --arg pool "$pool_name" '
@@ -869,6 +932,7 @@ validate_substrate()
   ')" || fail "the SSH test container has no global IPv4 address on eth0"
   [ "$actual_ssh_test_ipv4" = "$ssh_test_ipv4_address" ] ||
     fail "the SSH test container does not use its reviewed static address"
+  fi
 
   forward_zone_json="$(INCUS_CONF="$config_dir" incus query \
     "${remote}:/1.0/network-zones/${forward_zone}?project=${project_name}")"
@@ -924,14 +988,14 @@ validate_substrate()
       if [ "$alias_answer" = "${openbao_dns_name}." ] &&
         [ "$address_answer" = "$openbao_ipv4_address" ] &&
         [ "$postgresql_answer" = "$postgresql_ipv4_address" ] &&
-        [ "$ssh_test_answer" = "$ssh_test_ipv4_address" ]; then
+        [ "$ssh_test_answer" = "$expected_ssh_test_answer" ]; then
         break
       fi
       attempt=$((attempt + 1))
       sleep 1
     done
     [ "$attempt" -lt 30 ] ||
-      fail "$dns_name did not serve the reviewed OpenBao, PostgreSQL, and SSH names"
+      fail "$dns_name did not serve the reviewed service names"
   done
 
   umask 077
@@ -973,13 +1037,13 @@ validate_substrate()
       openbao: $openbao,
       postgresql_substrate_ready: true,
       postgresql: $postgresql,
-      ssh_test_substrate_ready: true,
+      ssh_test_substrate_ready: ($ssh_test != null),
       ssh_test: $ssh_test,
       ipv6_policy: "disabled"
     }' >"$evidence_file"
   write_inventory
 
-  echo "Incus substrate validation passed: $instance_name ($instance_ipv4), $openbao_instance_name ($actual_openbao_ipv4), $postgresql_instance_name ($actual_postgresql_ipv4), $ssh_test_instance_name ($actual_ssh_test_ipv4)"
+  echo "Incus substrate validation passed: $instance_name ($instance_ipv4), $openbao_instance_name ($actual_openbao_ipv4), $postgresql_instance_name ($actual_postgresql_ipv4), SSH target enabled=$ssh_test_present"
   echo "Generated ignored validation evidence: $evidence_file"
 }
 

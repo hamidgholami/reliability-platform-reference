@@ -73,7 +73,7 @@ resource "incus_network" "platform" {
     "ipv4.firewall"                        = "true"
     "ipv4.nat"                             = "true"
     "ipv6.address"                         = "none"
-    "security.acls"                        = join(",", [incus_network_acl.openbao.name, incus_network_acl.postgresql.name, incus_network_acl.ssh_test.name])
+    "security.acls"                        = join(",", concat([incus_network_acl.openbao.name, incus_network_acl.postgresql.name], var.ssh_test_enabled ? incus_network_acl.ssh_test[*].name : []))
     "security.acls.default.egress.action"  = "allow"
     "security.acls.default.ingress.action" = "allow"
   }
@@ -230,6 +230,7 @@ resource "incus_network_acl" "postgresql" {
 }
 
 resource "incus_network_acl" "ssh_test" {
+  count       = var.ssh_test_enabled || var.ssh_test_acl_retained ? 1 : 0
   name        = local.ssh_test_acl_name
   description = "Allow only private routed ingress to the disposable SSH target"
   project     = "default"
@@ -363,6 +364,7 @@ resource "incus_profile" "postgresql" {
 }
 
 resource "incus_profile" "ssh_test" {
+  count       = var.ssh_test_enabled ? 1 : 0
   name        = local.ssh_test_profile_name
   description = "Bounded unprivileged disposable SSH certificate target"
   project     = incus_project.development.name
@@ -512,13 +514,14 @@ resource "incus_instance" "postgresql" {
 }
 
 resource "incus_instance" "ssh_test" {
+  count       = var.ssh_test_enabled ? 1 : 0
   name        = local.ssh_test_instance_name
   description = "Disposable Ed25519 SSH certificate target"
   image       = var.instance_image
   type        = "container"
   ephemeral   = false
   running     = true
-  profiles    = [incus_profile.ssh_test.name]
+  profiles    = [incus_profile.ssh_test[0].name]
   project     = incus_project.development.name
   remote      = var.incus_remote
 
@@ -543,4 +546,19 @@ resource "incus_instance" "ssh_test" {
     type = "ipv4"
     nic  = "eth0"
   }
+}
+
+moved {
+  from = incus_network_acl.ssh_test
+  to   = incus_network_acl.ssh_test[0]
+}
+
+moved {
+  from = incus_profile.ssh_test
+  to   = incus_profile.ssh_test[0]
+}
+
+moved {
+  from = incus_instance.ssh_test
+  to   = incus_instance.ssh_test[0]
 }

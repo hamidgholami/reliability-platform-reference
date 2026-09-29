@@ -78,6 +78,18 @@ variable "instance_image" {
   }
 }
 
+variable "ssh_test_enabled" {
+  description = "Create the disposable SSH certificate acceptance target."
+  type        = bool
+  default     = false
+}
+
+variable "ssh_test_acl_retained" {
+  description = "Keep the detached SSH ACL during the first retirement plan."
+  type        = bool
+  default     = false
+}
+
 variable "private_dns_tsig_secrets" {
   description = "Per-secondary, per-zone synthetic TSIG values supplied from protected runtime input."
   type = map(object({

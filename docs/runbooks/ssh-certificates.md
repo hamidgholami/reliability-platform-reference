@@ -10,10 +10,12 @@ therefore accept only the configured Ed25519 certificate CA and one test
 principal; password and bare public-key login stay disabled.
 
 The target has one CPU, 256 MiB memory, and a 2 GiB disk cap. It is separate
-from the stateful PostgreSQL and OpenBao services. Review the saved OpenTofu
-plan for only the SSH target, profile, ACL, and bounded project and bridge
-updates before `make apply`; `make validate` regenerates its ignored
-inventory and checks its address through both private DNS secondaries.
+from the stateful PostgreSQL and OpenBao services. The fixture is absent by
+default. Set `SSH_TEST_ENABLED=true` on `make plan`, `make apply`, and
+`make validate` to create it for acceptance. Review the saved OpenTofu plan
+for only the SSH target, profile, ACL, and bridge update before applying it.
+Validation regenerates the ignored inventory and checks its address through
+both private DNS secondaries.
 
 The OpenBao SSH CA private key remains inside encrypted Raft storage. Only
 its `ssh-ed25519` public key goes to the target. The temporary client key
@@ -58,9 +60,23 @@ configuration fails, the OpenBao role may already exist, but the target
 daemon is stopped until its certificate policy is installed. Rerun after
 correcting the cause.
 
-To remove the disposable target, remove its OpenTofu instance, profile, and
-ACL from the configuration, review a saved plan showing exactly those
-deletions and the bounded project and bridge updates, and apply only that
-plan. Do not use the full substrate destroy target while OpenBao or
-PostgreSQL holds data. Retire the OpenBao SSH signing role and CA when this
-test is no longer needed.
+After acceptance, retire the fixture in two provider plans. Incus will not
+delete an ACL still attached to a bridge. First, detach the ACL and remove
+the target and profile while retaining the ACL. Then delete the detached ACL:
+
+```sh
+SSH_TEST_ACL_RETAINED=true RETIRE_SSH_TEST=1 make plan
+SSH_TEST_ACL_RETAINED=true \
+  CONFIRM=apply-incus-workstation-validation-rpr-target make apply
+RETIRE_SSH_TEST=1 make plan
+CONFIRM=apply-incus-workstation-validation-rpr-target make apply
+make validate
+make plan
+```
+
+Review each saved plan before applying it. The retirement guard accepts only
+the SSH instance, profile, and ACL deletions and the exact ACL detachment on
+the bridge. The final plan must have no managed-resource changes. The
+OpenBao SSH CA and signing role remain available for future acceptance; retire
+them through authenticated recovery when SSH certificate issuance is no
+longer a requirement.

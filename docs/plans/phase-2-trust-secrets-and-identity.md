@@ -110,6 +110,7 @@ scope.
 | BIND version and source | P2-01 | Use the Debian 13 stable/security `bind9` and `bind9-dnsutils` 9.20 package line; accept patched Debian revisions and record the installed version in acceptance evidence. |
 | PostgreSQL version and source | P2-03 | Use Debian 13 stable/security `postgresql-17` and `postgresql-client-17`; accept patched Debian revisions and record the installed version in acceptance evidence. The Debian package was 17.11-0+deb13u1 when this decision was checked. |
 | Keycloak version, installation, realm export, database ownership, and WebAuthn ceremony | P2-04 | Open; resolve before storing identity data. |
+| Keycloak installation and configuration method | P2-04 | Use the pinned upstream Keycloak server distribution with Debian 13 OpenJDK 21 in one dedicated Incus system container. A short Ansible playbook owns the Unix account, checksum-verified archive, optimized build, systemd service, TLS and PostgreSQL settings. Use pinned `middleware_automation.keycloak` API modules only for realm and client objects that need declarative management; do not import its broad installation role. The current role defaults target RHEL paths, enable HTTP, and request a 2-GiB JVM heap, which would all need overriding here. The official Keycloak Operator requires Kubernetes and is outside this deployment. See the [upstream distribution](https://www.keycloak.org/downloads), [production configuration](https://www.keycloak.org/server/configuration), [collection role defaults](https://github.com/ansible-middleware/keycloak/blob/main/roles/keycloak_quarkus/README.md), and [Ansible module migration](https://docs.ansible.com/projects/ansible/latest/porting_guides/porting_guide_14.html). |
 | OpenBao installation and bootstrap | P2-02 | Closed: use the signed OpenBao 2.6.3 native Debian package for the target architecture, integrated Raft storage, manual Shamir initialization, and no auto-unseal dependency. |
 | Netcup API generation and maintained DNS-01 client | P2-05 | Open; it is not needed for private DNS and no custom ACME client is authorized. |
 | Capacity | Every slice | Develop in the retained local Lima VM. P2-02 adds one 1-vCPU, 512-MiB, 4-GiB container and keeps AWS `t4g.small` plus 30-GiB `gp3`; measure before promotion and change the paid profile only after evidence of a capacity failure. |
@@ -323,7 +324,7 @@ custom credential service is needed.
 - [x] Prove that an allowed certificate works and that an expired certificate,
   wrong principal, excessive TTL, or forbidden extension is rejected.
 - [x] Remove ephemeral private keys and certificates after each test.
-- [ ] Remove the disposable SSH target with a reviewed provider plan after
+- [x] Remove the disposable SSH target with reviewed provider plans after
   preserving clean-recreation evidence.
 
 The [local SSH acceptance record](../evidence/phase-2-ssh-certificates-local-acceptance.md)

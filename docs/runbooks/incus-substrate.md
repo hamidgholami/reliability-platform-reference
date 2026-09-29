@@ -89,8 +89,9 @@ The wrapper verifies the required Incus API extensions and nftables firewall
 driver, then refuses a create/update plan containing any delete action. It
 writes runtime variables, state, plan, and plan metadata below ignored
 `.cache/incus-substrate` with operator-only permissions. Review the displayed
-twenty-one-resource boundary before applying it. The TSIG file and provider state
-are secret-bearing even though plans and outputs do not display the values.
+resource boundary before applying it. The disposable SSH target, profile, and
+ACL are created only when `SSH_TEST_ENABLED=true`. The TSIG file and provider
+state are secret-bearing even though plans and outputs do not display the values.
 
 ## Apply and validate
 

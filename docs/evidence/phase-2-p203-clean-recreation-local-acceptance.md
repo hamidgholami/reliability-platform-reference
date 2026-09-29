@@ -21,6 +21,13 @@ for `smoke-01`, and 142 MiB for `ssh-test-01`. These are point-in-time
 figures with shared accounting, not measured peaks or proof of a 2-GiB AWS
 host fit.
 
-This completes P2-03 clean local acceptance. Promotion to
-`single-node-reference` remains open. The disposable SSH target remains in
-the local provider state until its removal is reviewed separately.
+After this snapshot, the disposable SSH instance and profile were removed.
+Incus required a separate provider update to detach the SSH ACL from the
+bridge before the ACL itself could be deleted. Both resulting provider plans
+were reviewed and applied; only the SSH fixture and bridge ACL list changed.
+Substrate validation passed with five running containers, and a fresh
+OpenTofu plan reported no changes. The fixture is opt-in for future SSH
+acceptance.
+
+This completes P2-03 clean local acceptance and fixture retirement.
+Promotion to `single-node-reference` remains open.

@@ -31,6 +31,7 @@ variables {
   deployment_profile = "workstation-validation"
   incus_config_dir   = "/tmp/test-incus-client"
   incus_remote       = "rpr-target"
+  ssh_test_enabled   = true
   private_dns_tsig_secrets = {
     dns-01 = {
       forward = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -79,7 +80,7 @@ run "trusted_standalone_boundary" {
       incus_network.platform.config["ipv4.address"] == "10.20.0.1/24" &&
       incus_network.platform.config["ipv4.nat"] == "true" &&
       incus_network.platform.config["ipv6.address"] == "none" &&
-      incus_network.platform.config["security.acls"] == join(",", [incus_network_acl.openbao.name, incus_network_acl.postgresql.name, incus_network_acl.ssh_test.name]) &&
+      incus_network.platform.config["security.acls"] == join(",", [incus_network_acl.openbao.name, incus_network_acl.postgresql.name, incus_network_acl.ssh_test[0].name]) &&
       incus_network.platform.config["security.acls.default.ingress.action"] == "allow" &&
       incus_network.platform.config["security.acls.default.egress.action"] == "allow"
     )
