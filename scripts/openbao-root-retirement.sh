@@ -27,6 +27,8 @@ remote_material_installed=0
 remote_prefix=/run/rpr-openbao-root-retirement
 if [ "$action" = "p203-machine-auth" ]; then
   remote_prefix=/run/rpr-openbao-p203-session
+elif [ "$action" = "p203-postgresql" ]; then
+  remote_prefix=/run/rpr-openbao-p203-db
 fi
 
 fail()
@@ -50,6 +52,12 @@ incus_exec()
     incus exec --project rpr-dev "$remote:bao-01" -- "$@"
 }
 
+postgresql_exec()
+{
+  INCUS_CONF="$config_dir" \
+    incus exec --project rpr-dev "$remote:pg-01" -- "$@"
+}
+
 cleanup()
 {
   restore_terminal
@@ -61,7 +69,16 @@ cleanup()
       "$remote_prefix-client.crt" \
       "$remote_prefix-client.key" \
       "$remote_prefix-machine.crt" \
+      "$remote_prefix-pg.csr" \
+      "$remote_prefix-pg.crt" \
+      "$remote_prefix-pg-password" \
       "$remote_prefix-initial-token" >/dev/null 2>&1 || true
+  fi
+  if [ "$action" = "p203-postgresql" ]; then
+    postgresql_exec rm -f \
+      /run/rpr-postgresql-bootstrap/admin-password \
+      /run/rpr-postgresql-bootstrap/tls.crt \
+      /run/rpr-postgresql-bootstrap/ca.crt >/dev/null 2>&1 || true
   fi
   for temporary_file in \
     "$root_token_file" \
@@ -114,8 +131,8 @@ EOF
 }
 
 case "$action" in
-  retire|p203-machine-auth) ;;
-  *) fail "usage: $0 {retire|p203-machine-auth}" ;;
+  retire|p203-machine-auth|p203-postgresql) ;;
+  *) fail "usage: $0 {retire|p203-machine-auth|p203-postgresql}" ;;
 esac
 case "$profile" in
   workstation-validation|single-node-reference) ;;
@@ -151,11 +168,11 @@ for protected_dir in "$recovery_dir" "$runtime_dir" "$client_dir"; do
   esac
 done
 
-if [ "$action" = "retire" ]; then
-  expected="retire-openbao-root-token-$profile-$remote"
-else
-  expected="configure-machine-auth-$profile-$remote"
-fi
+case "$action" in
+  retire) expected="retire-openbao-root-token-$profile-$remote" ;;
+  p203-machine-auth) expected="configure-machine-auth-$profile-$remote" ;;
+  p203-postgresql) expected="enable-postgresql-dynamic-$profile-$remote" ;;
+esac
 [ "${CONFIRM:-}" = "$expected" ] || fail "set CONFIRM=$expected"
 [ -r "$inventory" ] || fail "OpenBao inventory is missing; run make apply"
 [ -r "$recovery_dir/recovery-secret.gpg" ] ||
@@ -208,7 +225,7 @@ jq -e \
     and $bao.hosts["bao-01"].ansible_host == "bao-01"
   ' "$inventory" >/dev/null || fail "OpenBao inventory violates the reviewed boundary"
 
-if [ "$action" = "p203-machine-auth" ]; then
+if [ "$action" != "retire" ]; then
   jq -e --arg profile "$profile" --arg remote "$remote" '
     .all.children.machine_auth_client as $machine
     | $machine.vars.rpr_deployment_profile == $profile
@@ -220,20 +237,43 @@ if [ "$action" = "p203-machine-auth" ]; then
   fail "machine-auth inventory is missing or invalid; run make validate"
 fi
 
-if [ "$action" = "p203-machine-auth" ]; then
+if [ "$action" != "retire" ]; then
   incus_exec curl -fsS \
     --cacert /opt/openbao/tls/ca.crt \
     https://10.20.0.20:8200/v1/sys/health >/dev/null 2>&1 ||
     fail "OpenBao is not ready or is sealed; run make openbao-status and make unseal-openbao"
-  echo "Preparing the Ed25519 machine credential inside smoke-01..."
-  INCUS_CONF="$config_dir" \
-  ANSIBLE_CONFIG="$PWD/ansible.cfg" \
-  ANSIBLE_HOME="$PWD/.cache/ansible" \
-  ANSIBLE_COLLECTIONS_PATH="$PWD/.cache/ansible/collections" \
-  ANSIBLE_LOCAL_TEMP="$PWD/.cache/ansible/tmp" \
-  .venv/bin/ansible-playbook \
-    --diff --tags prepare --inventory "$inventory" \
-    ansible/playbooks/configure-machine-auth.yml
+  if [ "$action" = "p203-machine-auth" ]; then
+    echo "Preparing the Ed25519 machine credential inside smoke-01..."
+    INCUS_CONF="$config_dir" \
+    ANSIBLE_CONFIG="$PWD/ansible.cfg" \
+    ANSIBLE_HOME="$PWD/.cache/ansible" \
+    ANSIBLE_COLLECTIONS_PATH="$PWD/.cache/ansible/collections" \
+    ANSIBLE_LOCAL_TEMP="$PWD/.cache/ansible/tmp" \
+    .venv/bin/ansible-playbook \
+      --diff --tags prepare --inventory "$inventory" \
+      ansible/playbooks/configure-machine-auth.yml
+  else
+    jq -e --arg profile "$profile" --arg remote "$remote" '
+      .all.children.postgresql_service as $pg
+      | $pg.vars.rpr_deployment_profile == $profile
+      and $pg.vars.ansible_incus_remote == $remote
+      and $pg.vars.ansible_incus_project == "rpr-dev"
+      and ($pg.hosts | keys) == ["pg-01"]
+      and $pg.hosts["pg-01"].ansible_host == "pg-01"
+      and $pg.vars.postgresql_private_address == "10.20.0.21"
+      and $pg.vars.postgresql_openbao_address == "10.20.0.20"
+    ' "$inventory" >/dev/null ||
+      fail "PostgreSQL inventory is missing or invalid; run make validate"
+    echo "Preparing the PostgreSQL key, CSR, and one-use admin password inside pg-01..."
+    INCUS_CONF="$config_dir" \
+    ANSIBLE_CONFIG="$PWD/ansible.cfg" \
+    ANSIBLE_HOME="$PWD/.cache/ansible" \
+    ANSIBLE_COLLECTIONS_PATH="$PWD/.cache/ansible/collections" \
+    ANSIBLE_LOCAL_TEMP="$PWD/.cache/ansible/tmp" \
+    .venv/bin/ansible-playbook \
+      --diff --tags prepare --inventory "$inventory" \
+      ansible/playbooks/enable-postgresql-dynamic.yml
+  fi
 fi
 
 install -d -m 0700 "$runtime_dir"
@@ -361,12 +401,23 @@ if [ "$action" = "retire" ]; then
     "umask 077; cat > '$remote_prefix-initial-token'" \
     <"$root_token_file"
 else
-  INCUS_CONF="$config_dir" \
-    incus exec --project rpr-dev "$remote:smoke-01" -- \
-      cat /etc/rpr-machine-auth/client.crt |
-    incus_exec sh -c \
-      "umask 077; cat > '$remote_prefix-machine.crt'" ||
-    fail "could not transfer the public machine certificate"
+  if [ "$action" = "p203-machine-auth" ]; then
+    INCUS_CONF="$config_dir" \
+      incus exec --project rpr-dev "$remote:smoke-01" -- \
+        cat /etc/rpr-machine-auth/client.crt |
+      incus_exec sh -c \
+        "umask 077; cat > '$remote_prefix-machine.crt'" ||
+      fail "could not transfer the public machine certificate"
+  else
+    postgresql_exec cat /run/rpr-postgresql-bootstrap/tls.csr |
+      incus_exec sh -c \
+        "umask 077; cat > '$remote_prefix-pg.csr'" ||
+      fail "could not transfer the public PostgreSQL CSR"
+    postgresql_exec cat /run/rpr-postgresql-bootstrap/admin-password |
+      incus_exec sh -c \
+        "umask 077; cat > '$remote_prefix-pg-password'" ||
+      fail "could not transfer the protected PostgreSQL admin password"
+  fi
 fi
 
 if [ "$action" = "p203-machine-auth" ]; then
@@ -394,6 +445,43 @@ if [ "$action" = "p203-machine-auth" ]; then
   .venv/bin/ansible-playbook \
     --diff --tags accept --inventory "$inventory" \
     ansible/playbooks/configure-machine-auth.yml
+  exit 0
+fi
+
+if [ "$action" = "p203-postgresql" ]; then
+  helper_result_file=$(mktemp "$runtime_dir/p203-postgresql-result.XXXXXX")
+  echo "Signing PostgreSQL TLS and configuring the bounded database engine through authenticated recovery..."
+  jq -er '.unseal_keys_b64[0]' "$recovery_dir/initialization.json" |
+    openssl base64 -d -A |
+    gpg_with_passphrase --decrypt |
+    incus_exec python3 \
+      "$remote_prefix.py" \
+      "$remote_prefix-client.crt" \
+      "$remote_prefix-client.key" \
+      --postgresql \
+      "$remote_prefix-pg.csr" \
+      "$remote_prefix-pg-password" >"$helper_result_file" ||
+    fail "authenticated PostgreSQL recovery failed"
+  jq -e '.postgresql_configured and .temporary_root_revoked' \
+    "$helper_result_file" >/dev/null ||
+    fail "PostgreSQL recovery did not report completed root-token revocation"
+  incus_exec cat "$remote_prefix-pg.crt" |
+    postgresql_exec sh -c \
+      'umask 077; cat > /run/rpr-postgresql-bootstrap/tls.crt' ||
+    fail "could not transfer the signed PostgreSQL certificate"
+  incus_exec cat /opt/openbao/tls/ca.crt |
+    postgresql_exec sh -c \
+      'umask 077; cat > /run/rpr-postgresql-bootstrap/ca.crt' ||
+    fail "could not transfer the public CA bundle"
+  echo "Activating the private PostgreSQL TLS listener and peer restrictions..."
+  INCUS_CONF="$config_dir" \
+  ANSIBLE_CONFIG="$PWD/ansible.cfg" \
+  ANSIBLE_HOME="$PWD/.cache/ansible" \
+  ANSIBLE_COLLECTIONS_PATH="$PWD/.cache/ansible/collections" \
+  ANSIBLE_LOCAL_TEMP="$PWD/.cache/ansible/tmp" \
+  .venv/bin/ansible-playbook \
+    --diff --tags activate --inventory "$inventory" \
+    ansible/playbooks/enable-postgresql-dynamic.yml
   exit 0
 fi
 

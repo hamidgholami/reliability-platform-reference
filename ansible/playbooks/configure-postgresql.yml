@@ -19,6 +19,16 @@
           - postgresql_openbao_address == '10.20.0.20'
           - postgresql_client_address is match('^10\.20\.0\.[0-9]+$')
 
+    - name: Check whether PostgreSQL TLS has already been activated
+      ansible.builtin.stat:
+        path: /etc/postgresql/17/main/tls/tls.crt
+      register: postgresql_active_certificate
+
+    - name: Refuse to replace an active TLS listener with local-only setup
+      ansible.builtin.assert:
+        that:
+          - not postgresql_active_certificate.stat.exists
+
     - name: Check Python and its APT binding
       ansible.builtin.raw: /usr/bin/python3 -c 'import apt'
       register: postgresql_python_probe

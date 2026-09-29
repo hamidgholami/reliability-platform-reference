@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Hamid Gholami
 # SPDX-License-Identifier: Apache-2.0
 
-"""Run authenticated root recovery for retirement or machine-auth setup."""
+"""Run authenticated root recovery for bounded configuration ceremonies."""
 
 from __future__ import annotations
 
@@ -33,6 +33,9 @@ path "sys/capabilities-self" {
 path "auth/token/revoke-self" {
   capabilities = ["update"]
 }'''
+POSTGRESQL_SIGN_ROLE = "rpr-p203-postgresql-server"
+POSTGRESQL_DATABASE = "rpr-p203"
+POSTGRESQL_DYNAMIC_ROLE = "rpr-p203-read"
 
 
 class CeremonyError(RuntimeError):
@@ -90,26 +93,40 @@ def require_text(value: Any, label: str) -> str:
 
 def main() -> int:
     machine_auth = len(sys.argv) == 5 and sys.argv[3] == "--machine-auth"
-    if not (len(sys.argv) == 4 or machine_auth):
+    postgresql = len(sys.argv) == 6 and sys.argv[3] == "--postgresql"
+    if not (len(sys.argv) == 4 or machine_auth or postgresql):
         raise CeremonyError(
-            "usage: remote-helper CLIENT_CERT CLIENT_KEY INITIAL_TOKEN|--machine-auth MACHINE_CERT"
+            "usage: remote-helper CLIENT_CERT CLIENT_KEY INITIAL_TOKEN|"
+            "--machine-auth MACHINE_CERT|--postgresql CSR ADMIN_PASSWORD"
         )
 
     client_certificate = Path(sys.argv[1])
     client_key = Path(sys.argv[2])
-    input_file = Path(sys.argv[4] if machine_auth else sys.argv[3])
+    input_file = Path(sys.argv[4] if (machine_auth or postgresql) else sys.argv[3])
     protected_files = [client_certificate, client_key, input_file]
+    if postgresql:
+        protected_files.append(Path(sys.argv[5]))
     for protected_file in protected_files:
         if not protected_file.is_file() or protected_file.stat().st_mode & 0o077:
             raise CeremonyError("a protected ceremony input is missing or unsafe")
 
     unseal_share = require_text(sys.stdin.readline().strip(), "Shamir share")
     initial_token = (
-        "" if machine_auth else require_text(input_file.read_text().strip(), "initial token")
+        ""
+        if (machine_auth or postgresql)
+        else require_text(input_file.read_text().strip(), "initial token")
     )
     machine_certificate = input_file.read_text().strip() if machine_auth else ""
     if machine_auth and "-----BEGIN CERTIFICATE-----" not in machine_certificate:
         raise CeremonyError("the machine certificate is invalid")
+    postgresql_csr = input_file.read_text().strip() if postgresql else ""
+    postgresql_password = Path(sys.argv[5]).read_text().strip() if postgresql else ""
+    if postgresql and (
+        "-----BEGIN CERTIFICATE REQUEST-----" not in postgresql_csr
+        or len(postgresql_password) != 64
+        or any(character not in "0123456789abcdef" for character in postgresql_password)
+    ):
+        raise CeremonyError("the PostgreSQL CSR or bootstrap password is invalid")
 
     context = ssl.create_default_context(cafile=CA_FILE)
     context.load_cert_chain(str(client_certificate), str(client_key))
@@ -123,7 +140,7 @@ def main() -> int:
     recovery_revoked = False
 
     try:
-        if not machine_auth:
+        if not (machine_auth or postgresql):
             _, initial_lookup = request(
                 context,
                 "GET",
@@ -258,6 +275,105 @@ def main() -> int:
                 or role.get("allowed_organizational_units") != ["Platform Test"]
             ):
                 raise CeremonyError("machine certificate role has an unsafe boundary")
+        elif postgresql:
+            request(
+                context,
+                "POST",
+                f"/v1/pki_int/roles/{POSTGRESQL_SIGN_ROLE}",
+                token=generated_root_token,
+                body={
+                    "issuer_ref": "rpr-online-intermediate",
+                    "ttl": "2160h",
+                    "max_ttl": "2160h",
+                    "allowed_domains": ["pg-01.dev.apadanalab.de"],
+                    "allow_bare_domains": True,
+                    "allow_subdomains": False,
+                    "allow_any_name": False,
+                    "allow_ip_sans": True,
+                    "allowed_ip_sans_cidr": ["10.20.0.21/32"],
+                    "server_flag": True,
+                    "client_flag": False,
+                    "key_type": "rsa",
+                    "key_bits": 3072,
+                    "use_csr_common_name": True,
+                    "use_csr_sans": True,
+                    "no_store": False,
+                },
+            )
+            _, signed = request(
+                context,
+                "POST",
+                f"/v1/pki_int/sign/{POSTGRESQL_SIGN_ROLE}",
+                token=generated_root_token,
+                body={"csr": postgresql_csr, "format": "pem"},
+            )
+            signed_data = signed.get("data", {})
+            certificate = signed_data.get("certificate", "")
+            issuing_ca = signed_data.get("issuing_ca", "")
+            if (
+                "-----BEGIN CERTIFICATE-----" not in certificate
+                or "-----BEGIN CERTIFICATE-----" not in issuing_ca
+                or signed_data.get("private_key")
+            ):
+                raise CeremonyError("OpenBao returned an invalid PostgreSQL certificate")
+            signed_path = input_file.with_suffix(".crt")
+            signed_path.write_text(certificate.strip() + "\n" + issuing_ca.strip() + "\n")
+            signed_path.chmod(0o600)
+
+            _, mounts = request(
+                context, "GET", "/v1/sys/mounts", token=generated_root_token
+            )
+            if "database/" not in mounts.get("data", {}):
+                request(
+                    context,
+                    "POST",
+                    "/v1/sys/mounts/database",
+                    token=generated_root_token,
+                    body={"type": "database", "description": "P2-03 synthetic database"},
+                    expected=(200, 204),
+                )
+            request(
+                context,
+                "POST",
+                f"/v1/database/config/{POSTGRESQL_DATABASE}",
+                token=generated_root_token,
+                body={
+                    "plugin_name": "postgresql-database-plugin",
+                    "connection_url": (
+                        "postgresql://{{username}}:{{password}}@"
+                        "pg-01.dev.apadanalab.de:5432/rpr_p203"
+                        "?sslmode=verify-full&sslrootcert=/opt/openbao/tls/ca.crt"
+                    ),
+                    "username": "rpr_bao_admin",
+                    "password": postgresql_password,
+                    "allowed_roles": [POSTGRESQL_DYNAMIC_ROLE],
+                    "verify_connection": False,
+                    "password_authentication": "scram-sha-256",
+                },
+                expected=(200, 204),
+            )
+            request(
+                context,
+                "POST",
+                f"/v1/database/roles/{POSTGRESQL_DYNAMIC_ROLE}",
+                token=generated_root_token,
+                body={
+                    "db_name": POSTGRESQL_DATABASE,
+                    "creation_statements": [
+                        'CREATE ROLE "{{name}}" WITH LOGIN PASSWORD '
+                        "'{{password}}' VALID UNTIL '{{expiration}}'; "
+                        'GRANT rpr_p203_read TO "{{name}}";'
+                    ],
+                    "revocation_statements": [
+                        'REVOKE rpr_p203_read FROM "{{name}}"; '
+                        'DROP ROLE IF EXISTS "{{name}}";'
+                    ],
+                    "default_ttl": "30s",
+                    "max_ttl": "5m",
+                },
+                expected=(200, 204),
+            )
+            postgresql_password = ""
         else:
             _, admin_response = request(
                 context,
@@ -329,6 +445,9 @@ def main() -> int:
         if machine_auth:
             print('{"machine_auth_configured":true,"temporary_root_revoked":true}')
             return 0
+        if postgresql:
+            print('{"postgresql_configured":true,"temporary_root_revoked":true}')
+            return 0
 
         request(
             context,
@@ -365,6 +484,7 @@ def main() -> int:
     finally:
         unseal_share = ""
         initial_token = ""
+        postgresql_password = ""
         if admin_token:
             try:
                 request(

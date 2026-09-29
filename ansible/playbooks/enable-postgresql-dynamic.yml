@@ -1,0 +1,243 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Prepare or activate the private PostgreSQL credential boundary
+  hosts: postgresql_service
+  gather_facts: false
+  any_errors_fatal: true
+  become: false
+  vars:
+    postgresql_tls_dir: /etc/postgresql/17/main/tls
+    postgresql_staging_dir: /run/rpr-postgresql-bootstrap
+  tasks:
+    - name: Require the reviewed PostgreSQL identity and peer addresses
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname == 'pg-01'
+          - postgresql_private_address == '10.20.0.21'
+          - postgresql_private_dns_name == 'pg-01.dev.apadanalab.de'
+          - postgresql_openbao_address == '10.20.0.20'
+          - postgresql_client_address is match('^10\\.20\\.0\\.[0-9]+$')
+      tags: always
+
+    - name: Create protected PostgreSQL TLS and bootstrap directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0700'
+      loop:
+        - "{{ postgresql_tls_dir }}"
+        - "{{ postgresql_staging_dir }}"
+      tags: prepare
+
+    - name: Check whether the PostgreSQL private key exists
+      ansible.builtin.stat:
+        path: "{{ postgresql_tls_dir }}/tls.key"
+      register: postgresql_key
+      tags: prepare
+
+    - name: Generate the PostgreSQL TLS key in pg-01
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - genpkey
+          - -algorithm
+          - RSA
+          - -pkeyopt
+          - rsa_keygen_bits:3072
+          - -out
+          - "{{ postgresql_tls_dir }}/tls.key"
+      when: not postgresql_key.stat.exists
+      changed_when: true
+      no_log: true
+      diff: false
+      tags: prepare
+
+    - name: Protect the PostgreSQL TLS key
+      ansible.builtin.file:
+        path: "{{ postgresql_tls_dir }}/tls.key"
+        owner: postgres
+        group: postgres
+        mode: '0600'
+      tags: prepare
+
+    - name: Generate the PostgreSQL server CSR
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - req
+          - -new
+          - -sha256
+          - -key
+          - "{{ postgresql_tls_dir }}/tls.key"
+          - -out
+          - "{{ postgresql_staging_dir }}/tls.csr"
+          - -subj
+          - /CN=pg-01.dev.apadanalab.de
+          - -addext
+          - subjectAltName=DNS:pg-01.dev.apadanalab.de,IP:10.20.0.21
+        creates: "{{ postgresql_staging_dir }}/tls.csr"
+      tags: prepare
+
+    - name: Protect the PostgreSQL CSR
+      ansible.builtin.file:
+        path: "{{ postgresql_staging_dir }}/tls.csr"
+        owner: postgres
+        group: postgres
+        mode: '0600'
+      tags: prepare
+
+    - name: Create a one-use database admin transfer password
+      ansible.builtin.shell: >-
+        openssl rand -hex 32 > {{ postgresql_staging_dir }}/admin-password
+      args:
+        creates: "{{ postgresql_staging_dir }}/admin-password"
+      no_log: true
+      diff: false
+      tags: prepare
+
+    - name: Protect the database admin transfer password
+      ansible.builtin.file:
+        path: "{{ postgresql_staging_dir }}/admin-password"
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+      diff: false
+      tags: prepare
+
+    - name: Ensure the limited database roles and grants
+      ansible.builtin.shell: |
+        set -euo pipefail
+        psql() { runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 "$@"; }
+        if [ "$(psql -Atc "SELECT 1 FROM pg_roles WHERE rolname='rpr_p203_read'")" != 1 ]; then
+          psql -c 'CREATE ROLE rpr_p203_read NOLOGIN'
+        fi
+        if [ "$(psql -Atc "SELECT 1 FROM pg_roles WHERE rolname='rpr_bao_admin'")" != 1 ]; then
+          psql -c 'CREATE ROLE rpr_bao_admin LOGIN CREATEROLE NOINHERIT'
+        fi
+        psql -c 'GRANT rpr_p203_read TO rpr_bao_admin WITH ADMIN OPTION'
+        psql -d rpr_p203 -c 'GRANT CONNECT ON DATABASE rpr_p203 TO rpr_p203_read'
+        psql -d rpr_p203 -c 'GRANT CONNECT ON DATABASE rpr_p203 TO rpr_bao_admin'
+        psql -d rpr_p203 -c 'GRANT USAGE ON SCHEMA public TO rpr_p203_read'
+        psql -d rpr_p203 -c 'GRANT SELECT ON public.probe TO rpr_p203_read'
+        password=$(cat {{ postgresql_staging_dir }}/admin-password)
+        printf "ALTER ROLE rpr_bao_admin PASSWORD '%s';\n" "$password" | psql
+      changed_when: true
+      args:
+        executable: /bin/bash
+      no_log: true
+      diff: false
+      tags: prepare
+
+    - name: Inspect the staged signed certificate and CA bundle
+      ansible.builtin.stat:
+        path: "{{ postgresql_staging_dir }}/{{ item }}"
+      loop:
+        - tls.crt
+        - ca.crt
+      register: postgresql_staged_certs
+      tags: activate
+
+    - name: Require signed public inputs before opening the private listener
+      ansible.builtin.assert:
+        that:
+          - postgresql_staged_certs.results | map(attribute='stat.exists') | list == [true, true]
+      tags: activate
+
+    - name: Verify the signed PostgreSQL certificate against the CA
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - verify
+          - -CAfile
+          - "{{ postgresql_staging_dir }}/ca.crt"
+          - -untrusted
+          - "{{ postgresql_staging_dir }}/tls.crt"
+          - -verify_hostname
+          - "{{ postgresql_private_dns_name }}"
+          - "{{ postgresql_staging_dir }}/tls.crt"
+      changed_when: false
+      tags: activate
+
+    - name: Verify the PostgreSQL certificate key matches its CSR key
+      ansible.builtin.shell: |
+        set -euo pipefail
+        cert_pub=$(openssl x509 -in {{ postgresql_staging_dir }}/tls.crt -pubkey -noout |
+          openssl pkey -pubin -outform DER | openssl dgst -sha256)
+        key_pub=$(openssl pkey -in {{ postgresql_tls_dir }}/tls.key -pubout -outform DER |
+          openssl dgst -sha256)
+        [ "$cert_pub" = "$key_pub" ]
+      args:
+        executable: /bin/bash
+      changed_when: false
+      tags: activate
+
+    - name: Install the signed PostgreSQL certificate and CA
+      ansible.builtin.copy:
+        src: "{{ postgresql_staging_dir }}/{{ item }}"
+        dest: "{{ postgresql_tls_dir }}/{{ item }}"
+        remote_src: true
+        owner: postgres
+        group: postgres
+        mode: '0600'
+      loop:
+        - tls.crt
+        - ca.crt
+      notify: Restart the PostgreSQL cluster
+      tags: activate
+
+    - name: Permit only TLS from the OpenBao and current smoke client addresses
+      ansible.builtin.blockinfile:
+        path: /etc/postgresql/17/main/pg_hba.conf
+        insertbefore: BOF
+        marker: '# {mark} RPR P2-03 managed access'
+        block: |
+          hostssl rpr_p203 rpr_bao_admin {{ postgresql_openbao_address }}/32 scram-sha-256
+          hostssl rpr_p203 +rpr_p203_read {{ postgresql_client_address }}/32 scram-sha-256
+      notify: Restart the PostgreSQL cluster
+      tags: activate
+
+    - name: Enable only the private PostgreSQL TLS listener
+      ansible.builtin.copy:
+        dest: /etc/postgresql/17/main/conf.d/50-rpr-local.conf
+        content: |
+          listen_addresses = '{{ postgresql_private_address }}'
+          port = 5432
+          ssl = on
+          ssl_cert_file = '{{ postgresql_tls_dir }}/tls.crt'
+          ssl_key_file = '{{ postgresql_tls_dir }}/tls.key'
+          password_encryption = 'scram-sha-256'
+        owner: postgres
+        group: postgres
+        mode: '0644'
+      notify: Restart the PostgreSQL cluster
+      tags: activate
+
+    - name: Apply the PostgreSQL private TLS configuration
+      ansible.builtin.meta: flush_handlers
+      tags: activate
+
+    - name: Verify the private PostgreSQL TLS settings
+      ansible.builtin.command:
+        argv:
+          - runuser
+          - -u
+          - postgres
+          - --
+          - psql
+          - -Atc
+          - SELECT current_setting('listen_addresses'), current_setting('ssl');
+      register: postgresql_tls_settings
+      changed_when: false
+      failed_when: postgresql_tls_settings.stdout != '10.20.0.21|on'
+      tags: activate
+
+  handlers:
+    - name: Restart the PostgreSQL cluster
+      ansible.builtin.systemd_service:
+        name: postgresql@17-main
+        state: restarted

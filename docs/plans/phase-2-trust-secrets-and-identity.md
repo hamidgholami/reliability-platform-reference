@@ -313,7 +313,7 @@ custom credential service is needed.
   reference profile, with short token TTLs and no shared human identity.
 - [x] Create PostgreSQL on its own bounded service instance and establish the
   minimum administrative bootstrap outside application credentials.
-- [ ] Configure the database secrets engine and prove creation, use, expiry, and
+- [x] Configure the database secrets engine and prove creation, use, expiry, and
   revocation of one dynamic PostgreSQL credential.
 - [ ] Configure an SSH client CA and one constrained signing role with fixed
   principals, short TTL, and restrictive extensions.

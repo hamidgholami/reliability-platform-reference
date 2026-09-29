@@ -1,0 +1,227 @@
+---
+# SPDX-FileCopyrightText: 2026 Hamid Gholami
+# SPDX-License-Identifier: Apache-2.0
+
+- name: Prove one bounded dynamic PostgreSQL credential from smoke-01
+  hosts: machine_auth_client
+  gather_facts: false
+  any_errors_fatal: true
+  become: false
+  vars:
+    postgresql_probe_query: SELECT label FROM public.probe WHERE id = 1;
+  tasks:
+    - name: Require the reviewed synthetic machine client
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname == 'smoke-01'
+          - rpr_deployment_profile in ['workstation-validation', 'single-node-reference']
+
+    - name: Install the Debian PostgreSQL client
+      ansible.builtin.apt:
+        name: postgresql-client-17
+        state: present
+        update_cache: true
+        cache_valid_time: 86400
+
+    - name: Login with the exact-pinned machine certificate
+      ansible.builtin.uri:
+        url: https://openbao.dev.apadanalab.de:8200/v1/auth/cert/login
+        method: POST
+        body_format: json
+        body:
+          name: rpr-p203-machine
+        ca_path: /etc/rpr-machine-auth/ca.crt
+        client_cert: /etc/rpr-machine-auth/client.crt
+        client_key: /etc/rpr-machine-auth/client.key
+        return_content: true
+        status_code: 200
+      register: postgresql_machine_login
+      no_log: true
+      diff: false
+
+    - name: Issue and use a dynamic database credential
+      block:
+        - name: Require the bounded machine token
+          ansible.builtin.assert:
+            that:
+              - postgresql_machine_login.json.auth.policies == ['rpr-p203-machine']
+              - postgresql_machine_login.json.auth.lease_duration <= 300
+          no_log: true
+          diff: false
+
+        - name: Request a short-lived PostgreSQL credential
+          ansible.builtin.uri:
+            url: https://openbao.dev.apadanalab.de:8200/v1/database/creds/rpr-p203-read
+            method: GET
+            headers:
+              X-Vault-Token: "{{ postgresql_machine_login.json.auth.client_token }}"
+            ca_path: /etc/rpr-machine-auth/ca.crt
+            return_content: true
+            status_code: 200
+          register: postgresql_dynamic_credential
+          no_log: true
+          diff: false
+
+        - name: Require a bounded database lease
+          ansible.builtin.assert:
+            that:
+              - postgresql_dynamic_credential.json.lease_duration > 0
+              - postgresql_dynamic_credential.json.lease_duration <= 30
+              - postgresql_dynamic_credential.json.data.username | length > 0
+              - postgresql_dynamic_credential.json.data.password | length > 0
+          no_log: true
+          diff: false
+
+        - name: Read only the synthetic probe row over verified TLS
+          ansible.builtin.command:
+            argv:
+              - psql
+              - -X
+              - -Atc
+              - "{{ postgresql_probe_query }}"
+          environment:
+            PGHOST: pg-01.dev.apadanalab.de
+            PGPORT: '5432'
+            PGDATABASE: rpr_p203
+            PGUSER: "{{ postgresql_dynamic_credential.json.data.username }}"
+            PGPASSWORD: "{{ postgresql_dynamic_credential.json.data.password }}"
+            PGSSLMODE: verify-full
+            PGSSLROOTCERT: /etc/rpr-machine-auth/ca.crt
+          register: postgresql_first_query
+          changed_when: false
+          no_log: true
+          diff: false
+
+        - name: Require the expected read-only probe result
+          ansible.builtin.assert:
+            that:
+              - postgresql_first_query.stdout == 'synthetic'
+          no_log: true
+          diff: false
+
+      always:
+        - name: Revoke the machine token and its database lease
+          ansible.builtin.uri:
+            url: https://openbao.dev.apadanalab.de:8200/v1/auth/token/revoke-self
+            method: POST
+            headers:
+              X-Vault-Token: "{{ postgresql_machine_login.json.auth.client_token }}"
+            ca_path: /etc/rpr-machine-auth/ca.crt
+            body_format: json
+            body: {}
+            status_code: 204
+          no_log: true
+          diff: false
+
+    - name: Require the revoked PostgreSQL credential to stop authenticating
+      ansible.builtin.command:
+        argv:
+          - psql
+          - -X
+          - -Atc
+          - "{{ postgresql_probe_query }}"
+      environment:
+        PGHOST: pg-01.dev.apadanalab.de
+        PGPORT: '5432'
+        PGDATABASE: rpr_p203
+        PGUSER: "{{ postgresql_dynamic_credential.json.data.username }}"
+        PGPASSWORD: "{{ postgresql_dynamic_credential.json.data.password }}"
+        PGSSLMODE: verify-full
+        PGSSLROOTCERT: /etc/rpr-machine-auth/ca.crt
+      register: postgresql_revoked_query
+      changed_when: false
+      failed_when: >-
+        postgresql_revoked_query.rc == 0 or
+        'FATAL:' not in postgresql_revoked_query.stderr
+      no_log: true
+      diff: false
+
+    - name: Login again for a separate expiry probe
+      ansible.builtin.uri:
+        url: https://openbao.dev.apadanalab.de:8200/v1/auth/cert/login
+        method: POST
+        body_format: json
+        body:
+          name: rpr-p203-machine
+        ca_path: /etc/rpr-machine-auth/ca.crt
+        client_cert: /etc/rpr-machine-auth/client.crt
+        client_key: /etc/rpr-machine-auth/client.key
+        return_content: true
+        status_code: 200
+      register: postgresql_expiry_login
+      no_log: true
+      diff: false
+
+    - name: Prove the database lease expires
+      block:
+        - name: Request the expiry-probe credential
+          ansible.builtin.uri:
+            url: https://openbao.dev.apadanalab.de:8200/v1/database/creds/rpr-p203-read
+            method: GET
+            headers:
+              X-Vault-Token: "{{ postgresql_expiry_login.json.auth.client_token }}"
+            ca_path: /etc/rpr-machine-auth/ca.crt
+            return_content: true
+            status_code: 200
+          register: postgresql_expiry_credential
+          no_log: true
+          diff: false
+
+        - name: Require the configured thirty-second lease
+          ansible.builtin.assert:
+            that:
+              - postgresql_expiry_credential.json.lease_duration > 0
+              - postgresql_expiry_credential.json.lease_duration <= 30
+          no_log: true
+          diff: false
+
+        - name: Wait for the database lease expiry and OpenBao revocation
+          ansible.builtin.pause:
+            seconds: 35
+
+        - name: Require the expired credential to stop authenticating
+          ansible.builtin.command:
+            argv:
+              - psql
+              - -X
+              - -Atc
+              - "{{ postgresql_probe_query }}"
+          environment:
+            PGHOST: pg-01.dev.apadanalab.de
+            PGPORT: '5432'
+            PGDATABASE: rpr_p203
+            PGUSER: "{{ postgresql_expiry_credential.json.data.username }}"
+            PGPASSWORD: "{{ postgresql_expiry_credential.json.data.password }}"
+            PGSSLMODE: verify-full
+            PGSSLROOTCERT: /etc/rpr-machine-auth/ca.crt
+          register: postgresql_expired_query
+          changed_when: false
+          failed_when: >-
+            postgresql_expired_query.rc == 0 or
+            'FATAL:' not in postgresql_expired_query.stderr
+          no_log: true
+          diff: false
+
+      always:
+        - name: Revoke the expiry-probe machine token
+          ansible.builtin.uri:
+            url: https://openbao.dev.apadanalab.de:8200/v1/auth/token/revoke-self
+            method: POST
+            headers:
+              X-Vault-Token: "{{ postgresql_expiry_login.json.auth.client_token }}"
+            ca_path: /etc/rpr-machine-auth/ca.crt
+            body_format: json
+            body: {}
+            status_code: 204
+          no_log: true
+          diff: false
+
+    - name: Report the redacted dynamic database result
+      ansible.builtin.debug:
+        msg:
+          machine_identity: rpr-p203-machine
+          database_role: rpr-p203-read
+          verified_tls_read: true
+          revoked_token_credential_rejected: true
+          expired_credential_rejected: true
+          max_default_lease_seconds: 30

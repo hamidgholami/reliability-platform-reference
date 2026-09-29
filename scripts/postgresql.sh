@@ -5,6 +5,7 @@
 set -eu
 umask 077
 
+action=${1:-configure}
 profile=${PROFILE:-}
 config_dir=${INCUS_CONFIG_DIR:-}
 remote=${INCUS_REMOTE:-}
@@ -29,7 +30,11 @@ case "$remote" in
   *[!A-Za-z0-9_.-]*|'') fail "set INCUS_REMOTE to the pre-enrolled remote name" ;;
 esac
 
-expected="configure-postgresql-$profile-$remote"
+case "$action" in
+  configure) expected="configure-postgresql-$profile-$remote" ;;
+  accept) expected="accept-postgresql-dynamic-$profile-$remote" ;;
+  *) fail "usage: $0 {configure|accept}" ;;
+esac
 [ "${CONFIRM:-}" = "$expected" ] || fail "set CONFIRM=$expected"
 [ -r "$inventory" ] || fail "generated inventory is missing; run make validate"
 [ -r "$substrate_inventory" ] || fail "substrate inventory is missing; run make validate"
@@ -54,7 +59,13 @@ jq -e --arg profile "$profile" --arg remote "$remote" --arg client_ipv4 "$client
   and $pg.vars.postgresql_client_address == $client_ipv4
 ' "$inventory" >/dev/null || fail "PostgreSQL inventory violates the reviewed boundary"
 
-echo "Configuring local PostgreSQL 17: profile=$profile remote=$remote target=pg-01"
+if [ "$action" = "configure" ]; then
+  echo "Configuring local PostgreSQL 17: profile=$profile remote=$remote target=pg-01"
+  playbook=ansible/playbooks/configure-postgresql.yml
+else
+  echo "Accepting dynamic PostgreSQL credentials: profile=$profile remote=$remote client=smoke-01"
+  playbook=ansible/playbooks/accept-postgresql-dynamic.yml
+fi
 INCUS_CONF="$config_dir" \
 ANSIBLE_CONFIG="$PWD/ansible.cfg" \
 ANSIBLE_HOME="$PWD/.cache/ansible" \
@@ -63,4 +74,4 @@ ANSIBLE_LOCAL_TEMP="$PWD/.cache/ansible/tmp" \
 .venv/bin/ansible-playbook \
   --diff \
   --inventory "$inventory" \
-  ansible/playbooks/configure-postgresql.yml
+  "$playbook"
